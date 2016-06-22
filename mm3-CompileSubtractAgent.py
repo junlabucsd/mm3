@@ -877,10 +877,10 @@ def subtract_backlog(fov_id):
         warning(sys.exc_info()[1])
         warning(traceback.print_tb(sys.exc_info()[2]))
         return_value = 1
-        
+
     # release lock
     hdf5_locks[fov_id].release()
-    
+
     return return_value
 
 # worker function for doing subtraction
@@ -913,7 +913,7 @@ def subtract_phase(dataset):
         empty_channel = rescale_intensity(empty_channel,
                                           out_range=(np.amin(cropped_channel[:,:,0]),
                                                      np.amax(cropped_channel[:,:,0])))
-                                                             
+
         ### Pad empty channel.
         # Rough padding amount for empty to become template in match_template
         start_padding = (25, 25, 25, 25) # (top, bottom, left, right)
@@ -936,11 +936,11 @@ def subtract_phase(dataset):
         empty_subpart = padded_empty[:matching_length+start_padding[0]+start_padding[1]]
         # get a vertical chunk of the channel to be subtracted from
         chan_subpart = cropped_channel[:matching_length,:,0] # phase data = 0
-        
+
         # equalize histograms for alignment
         empty_subpart = equalize_hist(empty_subpart)
         chan_subpart = equalize_hist(chan_subpart)
-        
+
         # use match template to get a correlation array and find the position of maximum overlap
         match_result = match_template(empty_subpart, chan_subpart)
         # get row and colum of max correlation value in correlation array
@@ -960,7 +960,7 @@ def subtract_phase(dataset):
 
         # the difference of padding on different sides relocates the channel to same
         # relative location as the empty channel (in the padded version.)
-        shifted_padded_channel = np.pad(cropped_channel.astype('int32'), 
+        shifted_padded_channel = np.pad(cropped_channel.astype('int32'),
                                         channel_paddings,
                                         mode="edge")
 
@@ -1181,7 +1181,7 @@ def data_writer(image_data, channel_masks, subtract=False, save_originals=False,
         warning(sys.exc_info()[0])
         warning(sys.exc_info()[1])
         warning(traceback.print_tb(sys.exc_info()[2]))
-        
+
     # release the write lock
     hdf5_locks[fov_id].release()
 
@@ -1345,7 +1345,7 @@ if __name__ == "__main__":
     cp_result_dict = {} # for storing get_params pool results. Removed once moved to image_metadata
     image_metadata = {} # for storing image metadata from get_params. written images are removed
     w_result_dict = {} # for storing write objects set to write. Are removed once written
-    
+
     # check for existing subtracted data and specs, etc. if true, start doing subtraction immediately.
     # this is not to account for starting subtraction as specs & empties get written - just to kick things off.
     '''
@@ -1355,7 +1355,7 @@ if __name__ == "__main__":
         np.all([os.path.exists(experiment_directory + analysis_directory + 'specs/specs_%03d.pkl' % f)  for f in range(num_fovs)]):
         subtract_on_datawrite = {f: True for f in range(num_fovs)} # T/F for each FOV which is passed to datawrite after backlog completes
         subtract_backlog_results = {f: True for f in range(num_fovs)} # stores the result objects of backlog subtraction processes;
-        # subtract_backlog_results per-key value options: 
+        # subtract_backlog_results per-key value options:
         #   None (not started)
         #   True (completed OK)
         #   False (failed to complete)
@@ -1365,7 +1365,7 @@ if __name__ == "__main__":
         subtract_on_datawrite = {f: False for f in range(num_fovs)}
     '''
     # setup subtraction tracking dicts
-    # subtract_backlog_results per-key value options: 
+    # subtract_backlog_results per-key value options:
     #   None (not started)
     #   True (completed OK)
     #   False (failed to complete)
@@ -1510,7 +1510,7 @@ if __name__ == "__main__":
                 # also make channel masks here
                 elif not clusters_created and len(image_metadata) > min_timepoints_for_clusters * num_fovs:
                     # first try to load an existing fitter object
-                    
+
                     # find initial clusters
                     image_metadata, k_means = create_clusters(image_metadata)
                     clusters_created = True
@@ -1523,27 +1523,27 @@ if __name__ == "__main__":
                 # if it was previously launch and has now completed, set it to True
                 if clusters_created and do_subtraction:
                     for fov in subtract_backlog_results.keys():
-                        
+
                         # if the result is True or False, everything is done or there is nothing to do; skip it.
                         if type(subtract_backlog_results[fov]) == type(True):
                             continue
-                            
+
                         # if there is no result object, try to launch one.
                         elif subtract_backlog_results[fov] is None:
                             # only launch if prerequisites exist
                             if os.path.exists(experiment_directory + analysis_directory + 'empties/fov_%03d_emptymean.tif' % fov) and \
                                 os.path.exists(experiment_directory + analysis_directory + 'specs/specs_%03d.pkl' % fov) and \
                                 os.path.exists(experiment_directory + analysis_directory + 'originals/original_%03d.hdf5' % fov):
-                                
+
                                 # make subtracted folder if it does not exists
                                 if not os.path.exists(experiment_directory + analysis_directory + 'subtracted/'):
                                     os.makedirs(os.path.abspath(experiment_directory + analysis_directory + "subtracted/"))
-                                    
+
                                 # subtract those backgrounds!
                                 information('Started background subtraction for FOV %03d.' % fov)
                                 subtract_backlog_results[fov] = subtract_backlog_pool.apply_async(subtract_backlog, [fov,])
                                 subtract_on_datawrite[fov] = True
-                                
+
                         # if the result was not True or None, it should be a result object or False.
                         # if the result is ready, process it.
                         elif subtract_backlog_results[fov].ready():
@@ -1570,7 +1570,7 @@ if __name__ == "__main__":
                             information('subtraction backlog for FOV %d not yet ready.' % fov)
                         else:
                             raise ValueError('subtract_backlog_results[%d] in unknown state (%s).' % (fov, str(subtract_backlog_results[fov])))
-                
+
                 # check write results and set the success flag as appropriate in the metadata.
                 # this makes sure things don't get written twice. writing happens next.
                 # print('dummy')
@@ -1618,11 +1618,11 @@ if __name__ == "__main__":
                 t_e_inner = time.time() - t_s_inner
 
                 # if the loop takes more than a second to run, give it a break
-                if event.is_set() and t_e_inner > 1:
-                    information('Metadata list analysis exceeded 1 second, pausing metadata extraction.')
+                if event.is_set() and t_e_inner > 0.5:
+                    information('Metadata list analysis exceeded 0.5 second, pausing metadata extraction.')
                     event.clear()
-                if not event.is_set() and t_e_inner < 0.75:
-                    information('Metadata list analysis dropped below 0.75 seconds, resuming metadata extraction.')
+                if not event.is_set() and t_e_inner < 0.1:
+                    information('Metadata list analysis dropped below 0.1 seconds, resuming metadata extraction.')
                     event.set()
 
                 # get new file creation events
