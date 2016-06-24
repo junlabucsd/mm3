@@ -815,7 +815,7 @@ def subtract_backlog(fov_id):
                 pool_result = spool.map_async(subtract_phase, images_with_empties,
                                               chunksize = 10)
                 spool.close()
-                information('Subtraction started for peak %04d.' % peak)
+                information('Subtraction started for FOV %d, peak %04d.' % (fov_id, peak))
 
                 # just loop around waiting for the peak to be done.
                 try:
@@ -910,9 +910,9 @@ def subtract_phase(dataset):
         # get out data and pad
         cropped_channel, empty_channel = dataset # [channel slice, empty slice]
         # rescale empty to levels of channel image
-        empty_channel = rescale_intensity(empty_channel,
-                                          out_range=(np.amin(cropped_channel[:,:,0]),
-                                                     np.amax(cropped_channel[:,:,0])))
+        #empty_channel = rescale_intensity(empty_channel,
+        #                                  out_range=(np.amin(cropped_channel[:,:,0]),
+        #                                             np.amax(cropped_channel[:,:,0])))
 
         ### Pad empty channel.
         # Rough padding amount for empty to become template in match_template
@@ -969,6 +969,17 @@ def subtract_phase(dataset):
                                                  start_padding[2]:-1*start_padding[3]]
         empty_for_sub = padded_empty[start_padding[0]:-1*start_padding[1],
                                      start_padding[2]:-1*start_padding[3]]
+
+        ### rescale the empty image intensity based on the pixel intensity ratios
+        # calculate the ratio of pixel intensities
+        pxratios = channel_for_sub[:,:,0].astype('float')/empty_for_sub.astype('float')
+        # calculate the rough peak of intensity values
+        pxrdist = np.histogram(pxratios, range=(0.5,1.5), bins=100)
+        # get the peak value for rescaling the empty image
+        distcenters = pxrdist[1][:-1]+np.diff(pxrdist[1])/2
+        pxrpeak = distcenters[np.argmax(pxrdist[0])]
+        # rescale the empty image
+        empty_for_sub = (empty_for_sub.astype('float')/pxrpeak).astype('uint16')
 
         # add dimension to empty channel to give it Z=1 size
         if len(empty_for_sub.shape) < 3:
@@ -1249,7 +1260,7 @@ if __name__ == "__main__":
     external_master_file = ""
     multiple_sources = False
     source_directory = '.'
-    min_timepoints_for_clusters = 90
+    min_timepoints_for_clusters = 180
     Goddard = True # flag for if goddard is scope. Extra check in extract_metadata
     save_originals = False # flag for if orignals should be saved to hdf5
     compress_hdf5 = True # flag for if images should be gzip compressed in hdf5
@@ -1619,10 +1630,10 @@ if __name__ == "__main__":
 
                 # if the loop takes more than a second to run, give it a break
                 if event.is_set() and t_e_inner > 0.5:
-                    information('Metadata list analysis exceeded 0.5 second, pausing metadata extraction.')
+                    information('Metadata list (%d) analysis exceeded 0.5 second, pausing metadata extraction.' % len(image_metadata))
                     event.clear()
                 if not event.is_set() and t_e_inner < 0.1:
-                    information('Metadata list analysis dropped below 0.1 seconds, resuming metadata extraction.')
+                    information('Metadata list (%d) analysis dropped below 0.1 seconds, resuming metadata extraction.' % len(image_metadata))
                     event.set()
 
                 # get new file creation events

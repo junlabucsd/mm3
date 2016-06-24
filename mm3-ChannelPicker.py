@@ -125,7 +125,7 @@ def fov_choose_channels_UI(fov_file, fov_xcorrs):
         information(str(bgrd_peaks[-1]))
 
     # set up figure for user assited choosing
-    fig = plt.figure(figsize=(20,15))
+    fig = plt.figure(figsize=(20,13))
     ax = [] # for axis handles
 
     # plot the peaks column by column
@@ -145,7 +145,7 @@ def fov_choose_channels_UI(fov_file, fov_xcorrs):
         # plot a middle image of each channel with highlighting for empty/full
         ax.append(fig.add_subplot(3, len(crosscorr_peaks), i_peak+1+len(crosscorr_peaks)))
         # use the most recent image for second row
-        show_index = len(h5f[u'channel_%04d' % peak[0]]) - 1
+        show_index = min(500, len(h5f[u'channel_%04d' % peak[0]]) - 1)
         if peak_labels[i_peak] == empty_label:
             is_empty = True
         else:
@@ -253,7 +253,7 @@ def average_picked_empties(args):
         # declare variables
         empty_composite = [] # list of empty channel images alligned to overlap
         paddings = [] # paddings is a list of the paddings used to allign the images
-        reference_image = None # stores the index 0 image with edge padding 
+        reference_image = None # stores the index 0 image with edge padding
                                # instead of nan padding; edge padding improves the
                                # alignment by eliminating the cliff of "normal values"
                                # into np.nan values; this image is still stored as a nan-padded
@@ -284,28 +284,28 @@ def average_picked_empties(args):
             for image in images_random_subset:
                 if reference_image is None:
                     h_im, w_im = image.shape # get the shape of the current image
-                    
+
                     # increase the frame size
                     h_full = h_im + 50
                     w_full = w_im + 50
-                    
+
                     # calculate the padding size needed to fit the orignial into the full frame
                     h_diff = h_full - h_im
                     w_diff = w_full - w_im
-                    
+
                     # pad the image with NaNs for stacking
-                    im_padded = np.pad(image, 
-                                       ((h_diff/2, h_diff-(h_diff/2)), 
-                                        (w_diff/2, w_diff-(w_diff/2))), 
+                    im_padded = np.pad(image,
+                                       ((h_diff/2, h_diff-(h_diff/2)),
+                                        (w_diff/2, w_diff-(w_diff/2))),
                                        mode='constant',
                                        constant_values=np.nan)
-                                       
+
                     # pad the image with edge values for alignment for the reference image
                     reference_image = np.pad(image,
                                              ((h_diff/2, h_diff-(h_diff/2)),
                                               (w_diff/2, w_diff-(w_diff/2))),
                                              mode='edge')
-                    
+
                     empty_composite.append(im_padded) # add this image to the list empty_composite
                 else:
                     # use the match template function to find the overlap position of maximum corr
@@ -314,47 +314,47 @@ def average_picked_empties(args):
                                                   np.nan_to_num(image[:175]))
                     # find the best correlation
                     y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
-                    
+
                     # pad the image with np.nan
-                    im_padded = np.pad(image, 
-                                       ((y, empty_composite[0].shape[0] - (y + image.shape[0])), 
-                                        (x, empty_composite[0].shape[1] - (x + image.shape[1]))), 
-                                       mode='constant', 
+                    im_padded = np.pad(image,
+                                       ((y, empty_composite[0].shape[0] - (y + image.shape[0])),
+                                        (x, empty_composite[0].shape[1] - (x + image.shape[1]))),
+                                       mode='constant',
                                        constant_values=np.nan)
-                    
+
                     empty_composite.append(im_padded)
 
         # stack the aligned data along axis 2
         empty_composite = np.dstack(empty_composite)
-        
+
         # get a boolean mask of non-NaN positions
         nanmap = ~np.isnan(empty_composite)
-        
+
         # sum up the total non-NaN values along the depth
         counts = nanmap.sum(2).astype(np.float16)
-        
+
         # divide counts by it highest value
         counts /= np.amax(counts)
-        
-        # get a rectangle of the region where at least half the images have real data 
+
+        # get a rectangle of the region where at least half the images have real data
         binary_core = counts > 0.5
-        
+
         # get all rows/columns in the common region that are True
         poscols = np.any(binary_core, axis = 1) # column positions where true (any)
         posrows = np.any(binary_core, axis = 0) # row positions where true (any)
-        
+
         # get the mix/max row/column for the binary_core
         min_row = np.amin(np.where(posrows)[0])
         max_row = np.amax(np.where(posrows)[0])
         min_col = np.amin(np.where(poscols)[0])
         max_col = np.amax(np.where(poscols)[0])
-        
+
         # crop the composite to the common core
         empty_composite = empty_composite[min_col:max_col, min_row:max_row]
-        
+
         # get a mean image along axis 2
         empty_mean = np.nanmean(empty_composite, axis = 2)
-        
+
         # old version
         '''
         # strip out the rows and or columns of all false
@@ -367,7 +367,7 @@ def average_picked_empties(args):
         empty_mean = np.reshape(empty_mean[overlap], overlap_shape)
         # empty_mean is the mean of the empty channels
         '''
-        
+
         # if the empties subdirectory doesn't exist, create it
         if not os.path.exists(os.path.abspath(experiment_directory + analysis_directory + "empties/")):
             os.makedirs(os.path.abspath(experiment_directory + analysis_directory + "empties/"))
@@ -422,7 +422,7 @@ if __name__ == "__main__":
             parameters_file = open(param_file, 'r')
             globals().update(yaml.load(parameters_file))
             information('Parameters loaded from %s' % param_file)
-            
+
     cpu_count = multiprocessing.cpu_count()
     if cpu_count == 32:
         num_procs = 16

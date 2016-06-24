@@ -8,7 +8,7 @@ def information(*objs):
     sys.stdout.flush()
     # add writing to text file
     #print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
-    
+
 import sys
 sys.path.insert(1, '/usr/local/lib/python2.7/site-packages')
 import getopt, yaml, traceback, random, os, math, gc, time, fnmatch, h5py, copy, hashlib, marshal
@@ -67,7 +67,7 @@ remove_blurry_percent = 15.0
 
 cpu_count = multiprocessing.cpu_count()
 if cpu_count == 32:
-    num_procs = 15
+    num_procs = 24
 elif cpu_count == 8:
     num_procs = 7
 else:
@@ -135,7 +135,7 @@ def segment_cells_ac6(idata, forced_splits = []):
     # 6 / feature_data: foci/blob data lists for the image
     # 7 / otsu_threshold: Otsu threshold used for the image
     # 8 / daughter_map: labels of daughter cell(s) in the subsequent image
-    
+
     try:
         if len(idata['source_data'].shape) > 2:
             image = idata['source_data'][:,:,0][:]
@@ -149,9 +149,9 @@ def segment_cells_ac6(idata, forced_splits = []):
             idata['lowest_cell_label'] = -1
             warning("Subtracted image is blank!")
             return idata
-        
+
         phase = idata['source_data'][:,:,-1]
-        
+
         # switch for leveling the length-wise brightness of the phase image
         if False:
             bg = np.expand_dims(image[:,(0,1,-2,-1)].min(axis = 1), axis = 1)
@@ -160,36 +160,42 @@ def segment_cells_ac6(idata, forced_splits = []):
             bg = np.expand_dims(phase.max(axis = 1), axis = 1)
             bg = np.pad(bg, ((0, 0), (0, phase.shape[0] - bg.shape[0])), mode = 'edge')
             phase = phase.astype('float64') / bg.astype('float64')
-            
+
             #bg = np.expand_dims(phase[:,(0,-1)].mean(axis = 1), axis = 1)
             #bg = np.pad(bg, ((0, 0), (0, phase.shape[0] - bg.shape[0])), mode = 'edge')
             #phase = phase.astype('int32') - bg.astype('int32')
             #idata[5] = phase[:]
-        
+
         # normalize subtracted image to the image minimum
-        s_image = image.astype('int32')
+        analysis_length = 300
+        s_image = image[:analysis_length].astype('int32')
+        #s_image = image.astype('int32')
         s_image -= np.min(image)
-                
+
         idata['otsu_threshold'] = skif.threshold_otsu(s_image)
 
-        gI = morphsnakes.gborders(s_image, alpha=0.1, sigma=1.) 
+        gI = morphsnakes.gborders(s_image, alpha=0.1, sigma=1.)
         macwe = morphsnakes.MorphGAC(gI, smoothing=2, threshold=0.5, balloon=-1)
-        macwe.levelset = binary_dilation(remove_small_objects(s_image > (idata['otsu_threshold'] + (0.2 * float(np.amax(s_image) - idata['otsu_threshold'])))))
+        #macwe.levelset = binary_dilation(remove_small_objects(s_image > (idata['otsu_threshold'] + (0.2 * float(np.percentile(s_image, 99) - idata['otsu_threshold'])))))
+        macwe.levelset = binary_dilation(remove_small_objects(s_image > (idata['otsu_threshold'])))
         macwe.run(30)
         end_set = macwe.levelset[:].astype('bool')
 
         r_image = exposure.rescale_intensity(s_image.astype('float64'))
-                
+
         # set to True to enable more aggressive image denoising
-        if True:
+        v = 'v2'
+        if v == 'v2':
+            r_image = skir.denoise_bilateral(r_image)
+        elif v == 'v1':
             r_image = skir.denoise_bilateral(r_image, win_size = 7, sigma_range = 0.9, sigma_spatial = 3.00)
         else:
             r_image = skir.denoise_bilateral(r_image, win_size = 7)
-        
+
         v2d = np.diff(np.diff(r_image, axis = 0), axis = 0)
         v2d = remove_small_objects(v2d > np.percentile(v2d, 90))
         v2d = np.pad(v2d, ((1, 1), (0, 0)), mode = 'constant', constant_values = False)
-        
+
         rgl = ndimage.filters.gaussian_laplace(r_image, sigma = 1.5, mode = 'nearest')
         rglp = (rgl < 0).astype('int8')
         rglp[~end_set] = 0
@@ -197,37 +203,38 @@ def segment_cells_ac6(idata, forced_splits = []):
         seed[1:-1, 1:-1] = rglp.max()
         mask = rglp
         rglp = reconstruction(seed, mask, method='erosion')
-        # old method
-        #rglp = binary_erosion(rglp, selem = disk(3))
-        left_diag = np.zeros((6,6))
+
         # new method, using the union of two diagonal erosions
-        for i in range(6):
+        d_size = 7
+        left_diag = np.zeros((d_size,d_size))
+        for i in range(d_size):
             left_diag[i,i] = 1
         rglp_l = binary_erosion(rglp, selem = left_diag)
         rglp_r = binary_erosion(rglp, selem = np.fliplr(left_diag))
         rglp = rglp_l * rglp_r
+        #rglp = rglp_l
 
         rglp = ndimage.filters.median_filter(rglp, footprint = rectangle(3,3))
         rglp[v2d] = 0
-        
+
         markers = remove_small_objects(rglp)
         markers = ndimage.measurements.label(markers)[0]
         #markers = clear_border(markers)
-                
+
         for s_label, s_centroid in forced_splits:
             # hack version
             markers[s_centroid[0]-5:s_centroid[0]+5] = 0
-        
+
         segmentation = watershed((s_image.astype('int32') * -1), markers, mask = end_set)
-        
-        idata['phase_segments'] = segmentation
-        
+
+        idata['phase_segments'] = np.pad(segmentation, ((0,idata['source_data'].shape[0]-analysis_length),(0,0)), mode='constant', constant_values=0)
+
         # eliminate any regions whose bounding box is wider than 2px less than the image width or which touch the border
         seglabels_for_del = []
         # find unique labels on the border: top, bottom, left, right edge
-        border_values = np.unique(np.concatenate((idata['phase_segments'][0], 
-                                                  idata['phase_segments'][-1], 
-                                                  idata['phase_segments'][:,0], 
+        border_values = np.unique(np.concatenate((idata['phase_segments'][0],
+                                                  idata['phase_segments'][-1],
+                                                  idata['phase_segments'][:,0],
                                                   idata['phase_segments'][:,-1])))
         for rp in regionprops(idata['phase_segments']):
             if rp.bbox[3] - rp.bbox[1] >= s_image.shape[1] - 2:
@@ -235,17 +242,17 @@ def segment_cells_ac6(idata, forced_splits = []):
                 continue # no need to check if it touches
             if rp.label in border_values:
                 pass
-        
+
         idata['phase_segments'] = merge_labeled_segments(idata['phase_segments'], seglabels_for_del, 0)
-        '''
+        
         # write fluorescence intensity maps
         rp_fl = []
-        rp_fl.append(regionprops(label_image = idata['phase_segments']))        
+        rp_fl.append(regionprops(label_image = idata['phase_segments']))
         for i_layer in range(1, idata['source_data'].shape[2]):
             rp_fl.append(regionprops(label_image = idata['phase_segments'], intensity_image = idata['source_data'][:,:,i_layer]))
 
         idata['regionprops'] = rp_fl
-        '''
+        
         return idata
     except:
         warning("Exception in cell segmentation:")
@@ -322,9 +329,9 @@ def find_blobs(datalist):
                 segmentation = ndimage.measurements.label(found_contours)[0]
                 segmentation[idata['phase_segments'] == 0] = 0
                 idata['blob_segments'][plane_name] = segmentation
-                
+
             blobs = regionprops(label_image = idata['blob_segments'][plane_name], intensity_image = flimage)
-            
+
             blob_assignments = []
             for blob in blobs:
                 segval = spstats.mstats.mode(idata['phase_segments'][segmentation == blob.label])[0][0]
@@ -336,6 +343,7 @@ def find_blobs(datalist):
             return idata
     except:
         warning("Exception in find_blobs:")
+        warning(str(idata['phase_segments'].shape) + " " + str(segmentation.shape))
         warning(sys.exc_info()[1])
         warning(traceback.print_tb(sys.exc_info()[2]))
 
@@ -343,7 +351,7 @@ def find_blobs(datalist):
 def find_profiles(datalist):
     warning('profiles not adapted to mm3 format!')
     raise Error
-    
+
     idata, plane_name = datalist
     try:
         flindex = plane_names.tolist().index(plane_name)
@@ -355,7 +363,7 @@ def find_profiles(datalist):
             # get the profile lines for all cells
             all_rp_profiles = {}
             for rps in idata[2][0]: # for each rp in the no-fluorescence rp set
-            
+
                 y0, x0 = rps.centroid
                 cosorient = math.cos(rps.orientation)
                 sinorient = math.sin(rps.orientation)
@@ -376,7 +384,7 @@ def find_profiles(datalist):
                 # next compute the fluorescence profile line and use the b_profile to mask it to relevant values
                 l_profile = np.array(profile_line(flimage, (y1, x1), (y2, x2), linewidth = 2, order = 0)).astype('float32')
                 all_rp_profiles[rps.label] = l_profile[b_profile]
-            
+
             idata[6]['profiles'][plane_name] = all_rp_profiles
             return idata
         else:
@@ -471,7 +479,7 @@ if __name__ == "__main__":
 
     # Make the channel_otsu value a global
     channel_otsu = 0
-    
+
     # get a list of all FOVs to process
     # Load the images into a list for processing
     fov_file_list = fnmatch.filter(os.listdir(experiment_directory + analysis_directory + 'subtracted/'), 'subtracted_*.hdf5')
@@ -480,18 +488,18 @@ if __name__ == "__main__":
     information("Found %d FOVs to process." % len(fov_file_list))
 
     for fov_file in fov_file_list:
-    
+
         fov = int(fov_file.split("_")[1].split(".")[0])
-    
+
         if specify_fovs and not (fov in user_spec_fovs):
             continue
         if start_with_fov > 0 and fov < start_with_fov:
             continue
         if end_with_fov > 0 and fov > end_with_fov:
             continue
-    
+
         information("*** Starting FOV %d" % fov)
-    
+
         with h5py.File(experiment_directory + analysis_directory + 'subtracted/' + fov_file, 'r', libver='latest', swmr=True) as h5f:
             # load channel peaks into a list for processing & clear out pre-existing segment arrays
             peaks = []
@@ -501,7 +509,7 @@ if __name__ == "__main__":
 
         fov_mother_map = []
         fov_otsu_data = []
-            
+
         # Collect a list of all channels with cells from the first t_index from the FOV in question
         peaks_with_cells = []
 
@@ -513,11 +521,11 @@ if __name__ == "__main__":
             original_n_peak = n_peak
             start_analysis_index = 0
             prior_flat_cells = None
-                        
+
             try:
                 if one_peak > -1 and original_n_peak != one_peak:
                     continue
-                    
+
                 ##### reload the previous analysis to know where to restart
                 # first try to load data from a previously saved cell chain
                 # prior_flat_iterator loops down the cell chain;
@@ -539,15 +547,15 @@ if __name__ == "__main__":
                         continue
                     images = h5f[u'subtracted_%04d' % n_peak][start_segmentation:]
                     information("subtracted image array shape:", images.shape)
-                
+
                     global plane_names
                     if 'plane_names' in h5f[u'subtracted_%04d' % n_peak].attrs:
                         plane_names = h5f[u'subtracted_%04d' % n_peak].attrs['plane_names']
                     else:
                         plane_names = global_plane_names
-                
+
                     i_times = h5f[u'metadata'][:,2]
-                
+
                 '''
                 # reload segmentation data if possible, otherwise set
                 # some variables to None
@@ -570,7 +578,7 @@ if __name__ == "__main__":
                         warning('segmentation data file not found.')
                         reuse_segmentations = False
                 '''
-                            
+
                 # set up image_data
                 information("populating main data structure...")
                 image_data = []
@@ -583,28 +591,28 @@ if __name__ == "__main__":
                             if blobsegs[bplane] is not None:
                                 blobsegsn[bplane] = blobsegs[bplane][n]
 
-                    image_data.append({'source_data': images[n], 
-                                       'phase_segments': segments, 
-                                       'regionprops': None, 
-                                       'lowest_cell_label': None, 
-                                       'image_time': i_times[n], 
+                    image_data.append({'source_data': images[n],
+                                       'phase_segments': segments,
+                                       'regionprops': None,
+                                       'lowest_cell_label': None,
+                                       'image_time': i_times[n],
                                        'acquisition_index': n + start_analysis_index,
-                                       'blob_segments': blobsegsn, 
-                                       'feature_data': {'blobs': {}, 'foci': {}, 'profiles': {}}, 
-                                       'otsu_threshold': -1, 
+                                       'blob_segments': blobsegsn,
+                                       'feature_data': {'blobs': {}, 'foci': {}, 'profiles': {}},
+                                       'otsu_threshold': -1,
                                        'daughter_map': None,
                                        'fov': fov,
                                        'peak': original_n_peak,
                                        'warnings': [],
                                        'flag_next': []})
-            
+
                 # First-pass segmentation
                 information('First-pass image segmentation...')
                 pool = Pool(num_procs)
                 image_data = pool.map(eval(use_algorithm), image_data)
                 pool.close()
                 pool.join()
-                    
+
                 ## fluorescent foci/blob/profile detection
                 for foci_plane in foci_planes:
                     information("running foci detection...")
@@ -625,7 +633,7 @@ if __name__ == "__main__":
                     pool.close()
                     pool.join()
                 ## end fluorescence analysis
-                    
+
                 ### write out labeled segments
                 information('saving phase contrast segmentations...')
                 ## build an array containing segmented data
@@ -637,7 +645,7 @@ if __name__ == "__main__":
                 assert(max_y > 0)
                 for i in range(0,len(image_data)):
                     if image_data[i]['phase_segments'].shape[0] < max_y or image_data[i]['phase_segments'].shape[1] < max_x:
-                        seg_images[i] = np.pad(image_data[i]['phase_segments'], 
+                        seg_images[i] = np.pad(image_data[i]['phase_segments'],
                                                ((0, max_y - image_data[i]['phase_segments'].shape[0]), (0, max_y - image_data[i]['phase_segments'].shape[0])),
                                                mode = 'constant', constant_values = 0)
                     else:
@@ -654,7 +662,7 @@ if __name__ == "__main__":
                             h5phsegs.resize(new_ax0_size, axis = 0)
                             h5phsegs[prior_ax0_size:] = np.array(seg_images)
                         else:
-                            h5phsegs = h5segs.create_dataset("segments_%04d" % original_n_peak, 
+                            h5phsegs = h5segs.create_dataset("segments_%04d" % original_n_peak,
                                                              data=np.array(seg_images),
                                                              maxshape = (None, max_y, max_x),
                                                              compression="gzip", shuffle = True, fletcher32 = True)
@@ -663,7 +671,7 @@ if __name__ == "__main__":
                     print(sys.exc_info()[0])
                     print(sys.exc_info()[1])
                     print(traceback.print_tb(sys.exc_info()[2]))
-                    
+
                 ### write out the segmented blobs to disk
                 # build an array of blob segments for each plane which was blobbed
                 for bplane in blob_planes:
@@ -676,11 +684,11 @@ if __name__ == "__main__":
                     # get the maps and resize them to be uniform
                     blobsegs = [idata['blob_segments'][bplane] if bplane in idata['blob_segments'].keys() else np.zeros((max_y, max_x)) for idata in image_data]
                     for i in range(len(blobsegs)):
-                        if blobsegs[i].shape[0] < max_y or blobsegs[i].shape[1] < max_x:                                
-                            blobsegs[i] = np.pad(blobsegs[i], 
+                        if blobsegs[i].shape[0] < max_y or blobsegs[i].shape[1] < max_x:
+                            blobsegs[i] = np.pad(blobsegs[i],
                                                  ((0, max_y - blobsegs[i].shape[0]), (0, max_y - blobsegs[i].shape[0])),
                                                  mode = 'constant', constant_values = 0)
-                        
+
                     try:
                         if not os.path.exists(experiment_directory + analysis_directory + 'segmentations/'):
                             os.makedirs(experiment_directory + analysis_directory + 'segmentations/')
@@ -692,7 +700,7 @@ if __name__ == "__main__":
                                 h5blobsegs.resize(new_ax0_size, axis = 0)
                                 h5blobsegs[prior_ax0_size:] = np.array(blobsegs[prior_ax0_size:])
                             else:
-                                segset = h5segs.create_dataset("blobs_%s_%04d" % (bplane, original_n_peak), 
+                                segset = h5segs.create_dataset("blobs_%s_%04d" % (bplane, original_n_peak),
                                                             data=np.asarray(blobsegs),
                                                             maxshape = (None, max_y, max_x),
                                                             compression="gzip", shuffle = True, fletcher32 = True)
@@ -701,7 +709,7 @@ if __name__ == "__main__":
                         print(sys.exc_info()[0])
                         print(sys.exc_info()[1])
                         print(traceback.print_tb(sys.exc_info()[2]))
-                                                                    
+
             except KeyboardInterrupt:
                 warning("******** Keyboard Interrupt ********")
                 raise KeyboardInterrupt
@@ -711,7 +719,7 @@ if __name__ == "__main__":
                 print(sys.exc_info()[1])
                 print(traceback.print_tb(sys.exc_info()[2]))
                 raise
-    
+
         # Write out the accumulated fov_mother_map for the FOV
         information("Writing mother map file for FOV %02d..." % fov)
         if not os.path.exists(experiment_directory + analysis_directory + "mothermaps/"):
