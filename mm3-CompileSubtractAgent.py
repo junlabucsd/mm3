@@ -6,8 +6,19 @@ def information(*objs):
     print(time.strftime("%H:%M:%S CompileAgent:", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
-import sys, getopt, yaml, traceback, os, time
-import h5py, struct, re, glob, gevent, marshal
+import sys
+import os
+import time
+import inspect
+import getopt
+import yaml
+import traceback
+import h5py
+import struct
+import re
+import glob
+import gevent
+import marshal
 import fnmatch
 try:
     import cPickle as pickle
@@ -42,6 +53,17 @@ elif platform == "darwin":
     use_watchdog = True
 
 # user modules
+# realpath() will make your script run, even if you symlink it
+cmd_folder = os.path.realpath(os.path.abspath(
+                              os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+# use this if you want to include modules from a subfolder
+cmd_subfolder = os.path.realpath(os.path.abspath(os.path.join(os.path.split(inspect.getfile( inspect.currentframe() ))[0],"subfolder")))
+if cmd_subfolder not in sys.path:
+    sys.path.insert(0, cmd_subfolder)
+
 import tifffile as tiff
 from subtraction_helpers import *
 import mm3_helpers as mm3
