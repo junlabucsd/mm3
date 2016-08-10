@@ -52,7 +52,8 @@ import tifffile as tiff
 def get_crosscorrs(peak):
     try:
         # load a sample of the initial images in the experiment for calculating xcorrs
-        h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True)
+        # h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True)
+        h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest')
         stack_shape = h5f[u'channel_%04d' % peak].shape
         # if the dataset is short, start at 1/3 of the way into the experiment through
         # the end of the experiment, otherwise start at index 100 and go through 300
@@ -116,7 +117,8 @@ def fov_choose_channels_UI(fov_file, fov_xcorrs):
     drop_peaks = [] # not used but could be helpful, not gonna mess with format
 
     # open the h5f file "original_%02d.hdf5" for the current fov
-    h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True)
+    # h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True)
+    h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest')
 
     # calculate histogram of cross correlations down length of channel
     hmaxvals = np.array([get_hist_peak(p[1]) for p in crosscorr_peaks])
@@ -285,7 +287,8 @@ def average_picked_empties(args):
         # go over the list of background peaks
         for peak in bgrd_peaks:
             # load the images from the given fov_file
-            with h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True) as h5f:
+            # with h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True) as h5f:
+            with h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest') as h5f:
                 start_i = len(h5f[u'channel_%04d' % peak]) / 4 # same as start in cross corr function
                 final_i = len(h5f[u'channel_%04d' % peak]) - 1 # last image
                 ch_ds = h5f[u'channel_%04d' % peak]
@@ -490,7 +493,8 @@ if __name__ == "__main__":
 
             # find all channel IDs in the current FOV
             peaks = []
-            h5f = h5py.File(experiment_directory + analysis_directory + "originals/" + fov_file, 'r', libver='latest', swmr=True)
+            # h5f = h5py.File(experiment_directory + analysis_directory + "originals/" + fov_file, 'r', libver='latest', swmr=True)
+            h5f = h5py.File(experiment_directory + analysis_directory + "originals/" + fov_file, 'r', libver='earliest')
             for item in h5f.keys():
                 if item.split("el_")[0] == "chann": # just a check to make sure we got the channels
                     peaks.append(int(item.split("channel_")[1])) # get peak (should maybe come from att)

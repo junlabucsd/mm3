@@ -6,13 +6,31 @@ def information(*objs):
     print(time.strftime("%H:%M:%S mm3_helpers:", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
+import sys
+import os
+import time
+import inspect
 import yaml
-import os, sys, time
 try:
     import cPickle as pickle
 except:
     import pickle
 import numpy as np
+
+# user modules
+# realpath() will make your script run, even if you symlink it
+cmd_folder = os.path.realpath(os.path.abspath(
+                              os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+# This makes python look for modules in ./external_lib
+cmd_subfolder = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], "external_lib")))
+if cmd_subfolder not in sys.path:
+    sys.path.insert(0, cmd_subfolder)
+
 import tifffile as tiff
 
 

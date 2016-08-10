@@ -1381,8 +1381,8 @@ if __name__ == "__main__":
     image_metadata = {} # for storing image metadata from get_params. written images are removed
     w_result_dict = {} # for storing write objects set to write. Are removed once written
 
-    # check for existing subtracted data and specs, etc. if true, start doing subtraction immediately.
-    # this is not to account for starting subtraction as specs & empties get written - just to kick things off.
+    # check for existing subtracted data and specs, etc. if true, do subtraction immediately.
+    # this is for starting subtraction as specs & empties get written - just to kick things off.
     '''
     if clusters_created and do_subtraction and \
         np.all([os.path.exists(experiment_directory + analysis_directory + 'empties/fov_%03d_emptymean.tif' % f)  for f in range(num_fovs)]) and \
@@ -1432,7 +1432,7 @@ if __name__ == "__main__":
             fdsd = {sd: inotify.init() for sd in image_subdirs}
             for k in fdsd.keys():
                 inotify.add_watch(fdsd[k], source_directory + k + "/", inotify.IN_ATTRIB)
-                information('added subdirectory %s to monitor rotation.' % k)
+                information('Added subdirectory %s to monitor rotation.' % k)
         elif use_watchdog:
             # tiff_sentinal looks for tifs in path and
             event_handler = tif_sentinal()
@@ -1602,9 +1602,10 @@ if __name__ == "__main__":
                                     subtract_backlog_results[fov] = False
                                     raise ValueError('No idea what happened in backlog subtraction for FOV %d. Good luck!' % fov)
                         elif not subtract_backlog_results[fov].ready():
-                            information('subtraction backlog for FOV %d not yet ready.' % fov)
+                            pass
+                            #information('Subtraction backlog for FOV %d not yet ready.' % fov)
                         else:
-                            raise ValueError('subtract_backlog_results[%d] in unknown state (%s).' % (fov, str(subtract_backlog_results[fov])))
+                            raise ValueError('Subtract_backlog_results[%d] in unknown state (%s).' % (fov, str(subtract_backlog_results[fov])))
 
                 # check write results and set the success flag as appropriate in the metadata.
                 # this makes sure things don't get written twice. writing happens next.
