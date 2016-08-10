@@ -1,9 +1,9 @@
 #!/usr/bin/python
 from __future__ import print_function
 def warning(*objs):
-    print(time.strftime("%H:%M:%S CompileAgent WARNING:", time.localtime()), *objs, file=sys.stderr)
+    print(time.strftime("%H:%M:%S WARNING:", time.localtime()), *objs, file=sys.stderr)
 def information(*objs):
-    print(time.strftime("%H:%M:%S CompileAgent:", time.localtime()), *objs, file=sys.stdout)
+    print(time.strftime("%H:%M:%S ", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -808,13 +808,13 @@ def process_tif(image_data):
 def subtract_backlog(fov_id):
     return_value = -1
     try:
-        information('Subtracting backlog of images fov_id %03d.' % fov_id)
+        information('subtract_backlog: Subtracting backlog of images FOV %03d.' % fov_id)
 
         # load cell peaks and empty mean
         cell_peaks = mm3.load_cell_peaks(fov_id) # load list of cell peaks from spec file
         empty_mean = mm3.load_empty_tif(fov_id) # load empty mean image
         empty_mean = mm3.trim_zeros_2d(empty_mean) # trim any zero data from the image
-        information('There are %d cell peaks for fov_id %03d.' % (len(cell_peaks), fov_id))
+        information('subtract_backlog: There are %d cell peaks for FOV %03d.' % (len(cell_peaks), fov_id))
 
         # aquire lock, giving other threads which may be blocking a chance to clear
         lock_acquired = hdf5_locks[fov_id].acquire(block = True)
@@ -839,7 +839,7 @@ def subtract_backlog(fov_id):
                 pool_result = spool.map_async(subtract_phase, images_with_empties,
                                               chunksize = 10)
                 spool.close()
-                information('Subtraction started for FOV %d, peak %04d.' % (fov_id, peak))
+                information('subtract_backlog: Subtraction started for FOV %d, peak %04d.' % (fov_id, peak))
 
                 # just loop around waiting for the peak to be done.
                 try:
@@ -848,13 +848,13 @@ def subtract_backlog(fov_id):
                         if pool_result.ready():
                             break
                     # inform user once this is done
-                    information("Completed peak %d in FOV %03d (%d timepoints)" %
+                    information("subtract_backlog: Completed peak %d in FOV %03d (%d timepoints)" %
                                 (peak, fov_id, len(images_with_empties)))
                 except KeyboardInterrupt:
                     raise
 
                 if not pool_result.successful():
-                    warning('Processing pool not successful for peak %d.' % peak)
+                    warning('subtract_backlog: Processing pool not successful for peak %d.' % peak)
                     raise AttributeError
 
                 # get the results and clean up memory
@@ -875,7 +875,7 @@ def subtract_backlog(fov_id):
                                                       subtracted_images[0].shape[1], 1),
                                               maxshape=(None, subtracted_images[0].shape[0],
                                                         subtracted_images[0].shape[1], None),
-                                              fletcher32=True, compression='lzf')
+                                              compression="gzip", shuffle=True)
 
                     # rearrange plane names
                     plane_names = plane_names.tolist()
@@ -887,7 +887,7 @@ def subtract_backlog(fov_id):
                     # create and write first metadata
                     h5os = h5s.create_dataset(u'offsets_%04d' % peak,
                                               data=np.array(offsets),
-                                              maxshape = (None, 2))
+                                              maxshape=(None, 2))
 
             # move over metadata once peaks have all peaks have been written
             with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5s:
@@ -897,7 +897,7 @@ def subtract_backlog(fov_id):
         # return 0 to the parent loop if everything was OK
         return_value = 0
     except:
-        warning("Failed for fov_id: %03d" % fov_id)
+        warning("subtract_backlog: Failed for FOV: %03d" % fov_id)
         warning(sys.exc_info()[1])
         warning(traceback.print_tb(sys.exc_info()[2]))
         return_value = 1
@@ -1095,10 +1095,10 @@ def data_writer(image_data, channel_masks, subtract=False, save_originals=False,
                 # create and write first original
                 if save_originals:
                     h5ds = h5f.create_dataset(u'originals',
-                                              data = np.expand_dims(image_pixeldata, 0),
-                                              chunks = (1, image_pixeldata.shape[0], 30, 1),
-                                              maxshape = (None, image_pixeldata.shape[0], image_pixeldata.shape[1], None),
-                                              shuffle = True, compression = "gzip")
+                                              data=np.expand_dims(image_pixeldata, 0),
+                                              chunks=(1, image_pixeldata.shape[0], 30, 1),
+                                              maxshape=(None, image_pixeldata.shape[0], image_pixeldata.shape[1], None),
+                                              compression="gzip", shuffle=True)
                     h5ds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
 
                 # find the channel locations for this fov. slice out channels and save
@@ -1112,15 +1112,14 @@ def data_writer(image_data, channel_masks, subtract=False, save_originals=False,
                                                            channel_slice.shape[1], 1),
                                                    maxshape=(None, channel_slice.shape[0],
                                                              channel_slice.shape[1], None),
-                                                   shuffle=True, compression="gzip")
+                                                   compression="gzip", shuffle=True)
                     else:
                         h5nds = h5f.create_dataset(u'channel_%04d' % channel_id,
                                                    data=np.expand_dims(channel_slice, 0),
                                                    chunks=(1, channel_slice.shape[0],
                                                            channel_slice.shape[1], 1),
                                                    maxshape=(None, channel_slice.shape[0],
-                                                             channel_slice.shape[1], None),
-                                                   shuffle=True)
+                                                             channel_slice.shape[1], None))
                     h5nds.attrs['channel_id'] = channel_loc[0]
                     h5nds.attrs['channel_loc'] = channel_loc[1]
                     h5nds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
@@ -1329,8 +1328,7 @@ if __name__ == "__main__":
         if opt == '-x':
             multiple_sources = True
         if opt == '-u':
-            # if subtraction should not done if possible
-            do_subtraction = False
+            do_subtraction = False # don't do subtraction.
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
