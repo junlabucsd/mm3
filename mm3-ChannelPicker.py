@@ -6,7 +6,16 @@ def information(*objs):
     print(time.strftime("%H:%M:%S ChannelPicker:", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
-import sys, getopt, yaml, traceback, os, time, fnmatch, h5py, gc, random
+import sys
+import getopt
+import yaml
+import traceback
+import os
+import time
+import fnmatch
+import h5py
+import gc
+import random
 try:
     import cPickle as pickle
 except:
@@ -21,6 +30,19 @@ from skimage.exposure import rescale_intensity
 from sklearn.cluster import KMeans
 
 # user modules
+# realpath() will make your script run, even if you symlink it
+cmd_folder = os.path.realpath(os.path.abspath(
+                              os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+# This makes python look for modules in ./external_lib
+cmd_subfolder = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], "external_lib")))
+if cmd_subfolder not in sys.path:
+    sys.path.insert(0, cmd_subfolder)
+
 from subtraction_helpers import *
 import tifffile as tiff
 
