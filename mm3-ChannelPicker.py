@@ -7,13 +7,14 @@ def information(*objs):
 
 # import modules
 import sys
+import os
+import time
+import inspect
 import getopt
 import yaml
 import traceback
-import os
-import time
-import fnmatch
 import h5py
+import fnmatch
 import gc
 import random
 try:

@@ -14,12 +14,12 @@ import getopt
 import yaml
 import traceback
 import h5py
+import fnmatch
 import struct
 import re
 import glob
 import gevent
 import marshal
-import fnmatch
 try:
     import cPickle as pickle
 except:
