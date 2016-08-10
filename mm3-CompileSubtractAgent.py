@@ -59,8 +59,10 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# use this if you want to include modules from a subfolder
-cmd_subfolder = os.path.realpath(os.path.abspath(os.path.join(os.path.split(inspect.getfile( inspect.currentframe() ))[0],"subfolder")))
+# This makes python look for modules in ./external_lib
+cmd_subfolder = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
@@ -819,7 +821,7 @@ def subtract_backlog(fov_id):
 
         # peaks_images will be a list of [fov_id, peak, images, empty_mean]
         with h5py.File(experiment_directory + analysis_directory +
-                       'originals/' + 'original_%03d.hdf5' % fov_id, 'r', libver='latest') as h5f:
+                       'originals/' + 'original_%03d.hdf5' % fov_id, 'r', libver='earliest') as h5f:
 
             for peak in sorted(cell_peaks):
                 images = h5f[u'channel_%04d' % peak][:] # get all the images (and whole stack)
@@ -865,7 +867,7 @@ def subtract_backlog(fov_id):
                 del images_with_empties
 
                 # write the subtracted data to disk
-                with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='latest') as h5s:
+                with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5s:
                     # create data set, use first image to set chunk and max size
                     h5si = h5s.create_dataset("subtracted_%04d" % peak,
                                               data=np.asarray(subtracted_images, dtype=np.uint16),
@@ -888,7 +890,7 @@ def subtract_backlog(fov_id):
                                               maxshape = (None, 2))
 
             # move over metadata once peaks have all peaks have been written
-            with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='latest') as h5s:
+            with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5s:
                 sub_mds = h5s.create_dataset("metadata", data=h5f[u'metadata'],
                                              maxshape=(None, 3))
 
@@ -1077,12 +1079,12 @@ def data_writer(image_data, channel_masks, subtract=False, save_originals=False,
                 empty_mean = mm3.load_empty_tif(fov_id) # load empty mean image
                 empty_mean = mm3.trim_zeros_2d(empty_mean) # trim any zero data from the image
                 h5s = h5py.File(experiment_directory + analysis_directory +
-                                'subtracted/subtracted_%03d.hdf5' % fov_id, 'r+', libver='latest')
-                h5s.swmr_mode = True
+                                'subtracted/subtracted_%03d.hdf5' % fov_id, 'r+', libver='earliest')
+                #h5s.swmr_mode = False
             except:
                 subtract = False
 
-        with h5py.File(experiment_directory + analysis_directory + 'originals/original_%03d.hdf5' % fov_id, 'a', libver='latest') as h5f:
+        with h5py.File(experiment_directory + analysis_directory + 'originals/original_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5f:
             if not 'metadata' in h5f.keys(): # make datasets if this is first time
                 # create and write first metadata
                 h5mdds = h5f.create_dataset(u'metadata',
@@ -1125,7 +1127,7 @@ def data_writer(image_data, channel_masks, subtract=False, save_originals=False,
 
                 returnvalue = True
             else: # append to current datasets
-                h5f.swmr_mode = True
+                #h5f.swmr_mode = False
                 # write additional metadata
                 h5mdds = h5f[u'metadata']
                 h5mdds.resize(h5mdds.shape[0] + 1, axis = 0)
@@ -1282,8 +1284,8 @@ if __name__ == "__main__":
     external_master_file = ""
     multiple_sources = False
     source_directory = '.'
-    min_timepoints_for_clusters = 180
-    Goddard = True # flag for if goddard is scope. Extra check in extract_metadata
+    min_timepoints_for_clusters = 30
+    Goddard = False # flag for if goddard is scope. Extra check in extract_metadata
     save_originals = False # flag for if orignals should be saved to hdf5
     compress_hdf5 = True # flag for if images should be gzip compressed in hdf5
     clusters_created = False # flag for if clusters and channels masks should be made
@@ -1507,12 +1509,12 @@ if __name__ == "__main__":
                                             phase_plane = pn
                                             break
                                     if phase_plane == "":
-                                        raise ValueError("no plane name containing Ph or PH found: " + str(plane_order))
+                                        raise ValueError("No plane name containing Ph or PH found: " + str(plane_order))
                                     # move the phase plane to index 0 in the list
                                     plane_order.insert(0, plane_order.pop(plane_order.index(phase_plane)))
                                     information("Planes ordered:", plane_order)
                                 except:
-                                    raise ValueError('did not find phase plane information')
+                                    raise ValueError('Did not find phase plane information.')
 
                             # put in the plane name for everybody
                             image_metadata[cp_result['filename']]['write_plane_order'] = plane_order
@@ -1690,7 +1692,8 @@ if __name__ == "__main__":
                         known_files.append(source_directory + newfname)
 
                 # write the list of known files to disk
-                # marshal is 10x faster and 50% more space efficient than cPickle here, but dtypes are all python primitives
+                # marshal is 10x faster and 50% more space efficient than cPickle here, but dtypes
+                # are all python primitives
                 if len(known_files) >= known_files_last_save_size * 1.1 or time.time() - known_files_last_save_time > 900:
                     with open(experiment_directory + analysis_directory + 'known_files.mrshl', 'w') as outfile:
                         marshal.dump(known_files, outfile)
@@ -1718,7 +1721,7 @@ if __name__ == "__main__":
                         time.sleep(5)
 
         except KeyboardInterrupt:
-                warning("caught KeyboardInterrupt, terminating workers...")
+                warning("Caught KeyboardInterrupt, terminating workers...")
                 wpool.close()
                 pool.close()
                 subtract_backlog_pool.close()
