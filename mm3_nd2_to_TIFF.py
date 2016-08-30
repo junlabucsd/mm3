@@ -8,29 +8,28 @@ def information(*objs):
 # import modules
 import sys
 import os
-import time
+#import time
 import inspect
 import getopt
 import yaml
 import traceback
-import h5py
+#import h5py
 import fnmatch
-import struct
-import re
-import glob
-import gevent
+#import struct
+#import re
+#import glob
+#import gevent
 import math
 import copy
-import struct
-import datetime
-import jdcal
+#import datetime
+#import jdcal
 #import marshal
 try:
     import cPickle as pickle
 except:
     import pickle
 #import marshal
-from multiprocessing import Pool, Manager
+#from multiprocessing import Pool, Manager
 import numpy as np
 import pims_nd2
 
