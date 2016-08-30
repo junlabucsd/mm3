@@ -74,6 +74,22 @@ def load_empty_tif(fov_id):
 
 ### functions about converting dates and times
 ### Functions
+def days_to_hmsm(days):
+    hours = days * 24.
+    hours, hour = math.modf(hours)
+    mins = hours * 60.
+    mins, min = math.modf(mins)
+    secs = mins * 60.
+    secs, sec = math.modf(secs)
+    micro = round(secs * 1.e6)
+    return int(hour), int(min), int(sec), int(micro)
+
+def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
+    days = sec + (micro / 1.e6)
+    days = min + (days / 60.)
+    days = hour + (days / 60.)
+    return days / 24.
+
 def date_to_jd(year,month,day):
     if month == 1 or month == 2:
         yearp = year - 1
@@ -100,15 +116,10 @@ def date_to_jd(year,month,day):
     jd = B + C + D + day + 1720994.5
     return jd
 
-def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-    days = sec + (micro / 1.e6)
-    days = min + (days / 60.)
-    days = hour + (days / 60.)
-    return days / 24.
-
 def datetime_to_jd(date):
     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
     return date_to_jd(date.year, date.month, days)
+
 
 ### functions about trimming and padding images
 # cuts out a channel from an tiff image (that has been processed)
