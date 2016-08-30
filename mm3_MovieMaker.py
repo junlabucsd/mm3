@@ -35,14 +35,6 @@ import numpy as np
 import pims_nd2
 #from freetype import *
 from PIL import Image, ImageFont, ImageDraw, ImageMath
-import matplotlib as mpl
-mpl.rcParams['figure.figsize'] = 15, 15
-mpl.rcParams['pdf.fonttype'] = 42
-mpl.rcParams['xtick.direction'] = 'out'
-mpl.rcParams['ytick.direction'] = 'out'
-import matplotlib.pyplot as plt
-import matplotlib.mlab as mlab
-import matplotlib.cm as cm
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -60,36 +52,6 @@ if cmd_subfolder not in sys.path:
 
 import tifffile as tiff
 
-
-
-# hard coded variables
-debug = False # debug mode
-FFMPEG_BIN = "/usr/local/bin/ffmpeg"
-
-# soft defaults, can be overridden by parameters .yaml file loading
-fps = 24
-seconds_per_time_index = 60
-
-# soft defaults, overridden by command line parameters if specified
-specify_fovs = False
-user_spec_fovs = []
-
-tifdir = '/Volumes/Latour/MMExperiments/20151223_BEC8_streptomycin/tiff/'
-
-# switches
-try:
-    opts, args = getopt.getopt(sys.argv[1:],"o:")
-except getopt.GetoptError:
-    print('No arguments detected (-o <fov(s)>).')
-for opt, arg in opts:
-    if opt == '-o':
-        try:
-            specify_fovs = True
-            for fov_to_proc in arg.replace(" ", "").split(","):
-                user_spec_fovs.append(int(fov_to_proc))
-        except:
-            print("Couldn't convert argument to an integer:",arg)
-            raise ValueError
 
 ### functions ##################################################################
 def make_label(text, face, size=12, angle=0):
@@ -178,6 +140,7 @@ def makeColorTransparent(image, color, thresh2=0):
 def find_img_min_max(image_names):
     '''find_img_max_min returns the average minimum and average maximum
     intensity for a set of tiff images.
+
     Parameters
     ----------
     image_names : list
@@ -191,16 +154,13 @@ def find_img_min_max(image_names):
     '''
     min_list = []
     max_list = []
-    for i, image_name in enumerate(image_names):
-        print(image_name)
-        print("loading prescan %d" % i)
-        image = tiff.imread(experiment_directory + image_directory + image_name)
+    for i, image_name in enumerate(image_names, tifdir):
+        image = tiff.imread(tifdir + image_name)
         min_list.append(np.min(image))
         max_list.append(np.max(image))
     avg_min = np.mean(min_list)
     avg_max = np.min(max_list)
     return avg_min, avg_max
-
 
 ### main #######################################################################
 if __name__ == "__main__":
@@ -212,23 +172,46 @@ if __name__ == "__main__":
     Edited 20151128 jt
     Edited 20160830 jt
     '''
-    seconds_per_time_index = 60
-    if not specify_fovs:
-        raise
 
-    fov = user_spec_fovs[0]
+    # soft defaults, overridden by command line parameters if specified
+    param_file = ""
+    specify_fovs = []
 
-    # grab the images
-    images = fnmatch.filter(os.listdir(tifdir), "*Point%04d*.tif" % fov)
+    # switches
+    try:
+        opts, args = getopt.getopt(sys.argv[1:],"o:")
+    except getopt.GetoptError:
+        print('No arguments detected (-f -o).')
+    for opt, arg in opts:
+        if opt == '-f':
+            param_file = arg
+        if opt == '-o':
+            arg.replace(" ", "")
+            [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
+
+    # Load the project parameters file into a dictionary named p
+    if len(param_file) == 0:
+        raise ValueError("A parameter file must be specified (-f <filename>).")
+    information('Loading experiment parameters...')
+    with open(param_file) as pfile:
+        p = yaml.load(pfile)
+
+    # path to tiff files as a string.
+    tifdir = p['experiment_directory'] + p['image_directory']
+
+    # This needs to be in a big loop.
+    fov = 1
+
+    # grab the images for this fov
+    images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%03dc*.tif" % (fov))
     if len(images) == 0:
         raise ValueError("No images found to export for fov %d." % fov)
-    print("-------------------------------------------------")
-    print("Found %d files to export." % len(images))
+    information("Found %d files to export." % len(images))
 
-    # get a rough range for scaling the data, phase then fluorescence
-    ph_min, ph_max = 5000, 40000
-    fl_min, fl_max = 65, 170
-    print 'phase min/max:', ph_min, ph_max
+    # get a rough range for scaling the data
+    imin = {}
+    imax = {}
+    imin['phase'], imax['phase'] = find_img_min_max(images[::100], tifdir)
 
     # use first image to set size of frame
     image = tiff.imread(tifdir + images[0])
@@ -236,13 +219,13 @@ if __name__ == "__main__":
     fontface = Face("/Library/Fonts/Andale Mono.ttf")
 
     # set command to give to ffmpeg
-    command = [ FFMPEG_BIN,
+    command = [FFMPEG_BIN,
             '-y', # (optional) overwrite output file if it exists
             '-f', 'rawvideo',
             '-vcodec','rawvideo',
             '-s', '%dx%d' % (size_x, size_y), # size of one frame
             '-pix_fmt', 'rgb48le',
-            '-r', '%d' % fps, # frames per second
+            '-r', '%d' % p['fps'], # frames per second
             '-i', '-', # The imput comes from a pipe
             '-an', # Tells FFMPEG not to expect any audio
             # options for the h264 codec
@@ -257,68 +240,47 @@ if __name__ == "__main__":
             #'-bufsize', '300k',
 
             # set the movie name
-            '/Users/sdbrown/Dropbox/20151223_xy%02d_late.mp4' % fov ]
+            p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov ]
+
     pipe = sp.Popen(command, stdin=sp.PIPE)
 
     # display a frame
     for n, i in enumerate(images):
-        if n < 750:
+        if n > p['mmm_image_start'] or n > p['mmm_image_end']:
             continue
         statinfo = os.stat(tifdir + i)
         if statinfo.st_size < 3500000:
             continue
 
-        image = tiff.imread(tifdir + i)
-        phase = image[0].astype('float64')
+        image = tiff.imread(tifdir + i) # get the image
+
+        phase = image[0].astype('float64') # pick phase image
         # normalize
-        phase -= ph_min
+        phase -= imin['phase']
         phase[phase < 0] = 0
-        phase /= ph_max
+        phase /= (imax['phase'] - imin['phase'])
         phase[phase > 1] = 1
         # three color stack
         phase = np.dstack((phase, phase, phase))
 
-        fl561 = image[1].astype('float64')
-        # normalize
-        fl561 -= fl_min
-        fl561[fl561 < 0] = 0
-        fl561 /= fl_max
-        fl561[fl561 > 1] = 1
-        # three color stack
-        fl561 = np.dstack((fl561, np.zeros_like(fl561), np.zeros_like(fl561)))
-
-        image = 1 - ((1 - fl561) * (1 - phase))
-
-        image = np.flipud(image)
-
         # put in time stamp
-        #seconds = copy.deepcopy(nd2n2[i].metadata['t_ms']) / 1000.
-        #minutes = seconds / 60.
-        seconds = float(int(i.split("ime")[1].split("_Poin")[0]) * seconds_per_time_index)
+        seconds = float(int(i.split("ime")[1].split("_Poin")[0]) * p['seconds_per_time_index'])
         mins = seconds / 60
         hours = mins / 60
-        #days = hours / 24.
-        #acq_time = datetime_to_jd(datetime.datetime.strptime(starttime, "%m/%d/%Y %I:%M:%S %p")) + days
-        #ayear, amonth, aday, afraction = jdcal.jd2gcal(acq_time, 0.0)
-        #ahour, aminute, asecond, amicro = days_to_hmsm(afraction)
-        #timedata = "%04d/%02d/%02d %02d:%02d:%02d" % (ayear, amonth, aday, ahour, aminute, asecond)
+
         timedata = "%dhrs %02dmin" % (hours, mins % 60)
-        r_timestamp = np.fliplr(make_label(timedata, fontface, size = 48, angle = 180)).astype('float64')
-        r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10), (size_x - 10 - r_timestamp.shape[1], 10)), mode = 'constant')
-        r_timestamp /= 255.
-        #r_timestamp = 1 - r_timestamp
+        r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                                           angle=180)).astype('float64')
+        r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
+                                           (size_x - 10 - r_timestamp.shape[1], 10)),
+                                           mode = 'constant')
+        r_timestamp /= 255.0
         r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
         image = 1 - ((1 - image) * (1 - r_timestamp))
-        #plt.imshow(pix)
-
-        # fig = plt.figure(figsize = (10,5))
-        # ax = fig.add_subplot(1,1,1)
-        # ax.imshow((image * 65535).astype('uint16'))
-        # plt.show()
 
         # shoot the image to the ffmpeg subprocess
         pipe.stdin.write((image * 65535).astype('uint16').tostring())
-        if n % 10 == 0:
-            print n
+        if n % 100 == 0:
+            information('Sending %s to write' % i)
     pipe.stdin.close()

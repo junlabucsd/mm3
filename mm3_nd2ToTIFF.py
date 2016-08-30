@@ -64,7 +64,7 @@ if __name__ == "__main__":
     try:
         opts, args = getopt.getopt(sys.argv[1:],"f:o:s:x:n:")
     except getopt.GetoptError:
-        warning('No arguments detected (-f -o -s).')
+        warning('No arguments detected (-f -o -s -x -n).')
     for opt, arg in opts:
         if opt == '-f':
             param_file = arg
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     # Load the project parameters file into a dictionary named p
     if len(param_file) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
-    information ('Loading experiment parameters...')
+    information('Loading experiment parameters...')
     with open(param_file) as pfile:
         p = yaml.load(pfile)
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
 
                         if u'c' in nd2f.sizes.keys():
                             for c_id in range(0, nd2f.sizes[u'c']):
-                                new_filename = file_prefix + filename.split(".nd")[0].split("/")[-1] + "_t%04dxy%02dc%01d.tif" % (t_id+1, fov+1 + fov_num_offset, c_id+1)
+                                new_filename = file_prefix + filename.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc%01d.tif" % (t_id+1, fov+1 + fov_num_offset, c_id+1)
                                 if len(np.unique(nd2f[t_id][c_id])) > 1:
                                     tiff.imsave(p['experiment_directory'] + p['image_directory'] +
                                                 new_filename, nd2f[t_id][c_id])
@@ -165,7 +165,7 @@ if __name__ == "__main__":
                                                   nd2f[t_id].metadata['x_um'],
                                                   nd2f[t_id].metadata['y_um']))
                         else:
-                            new_filename = file_prefix + nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%02dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
+                            new_filename = file_prefix + nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
                             tiff.imsave(p['experiment_directory'] + p['image_directory'] +
                                         new_filename, nd2f[t_id])
                             information('Saving %s.' % new_filename)
