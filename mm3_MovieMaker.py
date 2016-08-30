@@ -1,16 +1,41 @@
-'''movie_from_tiffs does what the title says. You must have ffmpeg installed,
-which you can get using homebrew:
-https://trac.ffmpeg.org/wiki/CompilationGuide/MacOSX
+#!/usr/bin/python
+from __future__ import print_function
+def warning(*objs):
+    print(time.strftime("%H:%M:%S Error:", time.localtime()), *objs, file=sys.stderr)
+def information(*objs):
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
-By Steven
-Edited 20151128 jt
-'''
-
+# import modules
+import sys
+import os
+#import time
+import inspect
+import getopt
+import yaml
+import traceback
+#import h5py
+import fnmatch
+#import struct
+#import re
+#import glob
+#import gevent
+import math
+import copy
+#import datetime
+#import jdcal
+#import marshal
 import subprocess as sp
-import jdcal, datetime, math, copy, gc, getopt, fnmatch, yaml, os
-from freetype import *
+try:
+    import cPickle as pickle
+except:
+    import pickle
+#import marshal
+#from multiprocessing import Pool, Manager
+import numpy as np
+import pims_nd2
+#from freetype import *
+from PIL import Image, ImageFont, ImageDraw, ImageMath
 import matplotlib as mpl
-import tifffile as tiff
 mpl.rcParams['figure.figsize'] = 15, 15
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['xtick.direction'] = 'out'
@@ -18,9 +43,24 @@ mpl.rcParams['ytick.direction'] = 'out'
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 import matplotlib.cm as cm
-#%matplotlib inline
-import numpy as np
-from PIL import Image, ImageFont, ImageDraw, ImageMath
+
+# user modules
+# realpath() will make your script run, even if you symlink it
+cmd_folder = os.path.realpath(os.path.abspath(
+                              os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+# This makes python look for modules in ./external_lib
+cmd_subfolder = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], "external_lib")))
+if cmd_subfolder not in sys.path:
+    sys.path.insert(0, cmd_subfolder)
+
+import tifffile as tiff
+
+
 
 # hard coded variables
 debug = False # debug mode
@@ -135,16 +175,6 @@ def makeColorTransparent(image, color, thresh2=0):
         t=thresh2, d=distance2, c=color, r=red, g=green, b=blue, a=alpha))
     return image
 
-def days_to_hmsm(days):
-    hours = days * 24.
-    hours, hour = math.modf(hours)
-    mins = hours * 60.
-    mins, min = math.modf(mins)
-    secs = mins * 60.
-    secs, sec = math.modf(secs)
-    micro = round(secs * 1.e6)
-    return int(hour), int(min), int(sec), int(micro)
-
 def find_img_min_max(image_names):
     '''find_img_max_min returns the average minimum and average maximum
     intensity for a set of tiff images.
@@ -174,6 +204,14 @@ def find_img_min_max(image_names):
 
 ### main #######################################################################
 if __name__ == "__main__":
+    '''movie_from_tiffs does what the title says. You must have ffmpeg installed,
+    which you can get using homebrew:
+    https://trac.ffmpeg.org/wiki/CompilationGuide/MacOSX
+
+    By Steven
+    Edited 20151128 jt
+    Edited 20160830 jt
+    '''
     seconds_per_time_index = 60
     if not specify_fovs:
         raise
