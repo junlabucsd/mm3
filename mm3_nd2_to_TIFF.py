@@ -180,10 +180,8 @@ if __name__ == "__main__":
 
                         # skip FOVs as specified above
                         if len(specify_fovs) > 0 and not (fov + 1) in specify_fovs:
-                            information("Skipping FOV %d" % (fov + 1))
                             continue
                         if start_fov > -1 and fov + 1 < start_fov:
-                            information("Skipping FOV %d" % (fov + 1))
                             continue
 
                         # set the FOV we are working on in the nd2 file object
@@ -198,10 +196,7 @@ if __name__ == "__main__":
 
                         if u'c' in nd2f.sizes.keys():
                             for c_id in range(0, nd2f.sizes[u'c']):
-                                new_filename = file_prefix +
-                                               filename.split(".nd")[0].split("/")[-1] +
-                                               "_t%04dxy%02dc%01d.tif" % (t_id+1, fov+1 +
-                                                                          fov_num_offset, c_id+1)
+                                new_filename = file_prefix + filename.split(".nd")[0].split("/")[-1] + "_t%04dxy%02dc%01d.tif" % (t_id+1, fov+1 + fov_num_offset, c_id+1)
                                 if len(np.unique(nd2f[t_id][c_id])) > 1:
                                     tiff.imsave(p['experiment_directory'] + p['image_directory'] +
                                                 new_filename, nd2f[t_id][c_id])
@@ -210,8 +205,7 @@ if __name__ == "__main__":
                                                   nd2f[t_id].metadata['x_um'],
                                                   nd2f[t_id].metadata['y_um']))
                         else:
-                            new_filename = file_prefix + nd2_file.split(".nd")[0].split("/")[-1] +
-                                           "_t%04dxy%02dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
+                            new_filename = file_prefix + nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%02dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
                             tiff.imsave(p['experiment_directory'] + p['image_directory'] +
                                         new_filename, nd2f[t_id])
                             information('Saving %s.' % new_filename)
