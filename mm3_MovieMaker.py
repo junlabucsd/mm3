@@ -8,7 +8,7 @@ def information(*objs):
 # import modules
 import sys
 import os
-#import time
+import time
 import inspect
 import getopt
 import yaml
@@ -33,7 +33,7 @@ except:
 #from multiprocessing import Pool, Manager
 import numpy as np
 import pims_nd2
-#from freetype import *
+from freetype import *
 from PIL import Image, ImageFont, ImageDraw, ImageMath
 
 # user modules
@@ -52,7 +52,6 @@ if cmd_subfolder not in sys.path:
 
 import tifffile as tiff
 
-
 ### functions ##################################################################
 def make_label(text, face, size=12, angle=0):
     '''
@@ -67,7 +66,6 @@ def make_label(text, face, size=12, angle=0):
     angle : float
         Text angle in degrees
     '''
-    #face = Face(filename)
     face.set_char_size( size*64 )
     angle = (angle/180.0)*math.pi
     matrix  = FT_Matrix( (int)( math.cos( angle ) * 0x10000 ),
@@ -127,24 +125,17 @@ def make_label(text, face, size=12, angle=0):
 
     return L
 
-def distance2(a, b):
-    return (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])
-
-def makeColorTransparent(image, color, thresh2=0):
-    image = image.convert("RGBA")
-    red, green, blue, alpha = image.split()
-    image.putalpha(ImageMath.eval("""convert(((((t - d(c, (r, g, b))) >> 31) + 1) ^ 1) * a, 'L')""",
-        t=thresh2, d=distance2, c=color, r=red, g=green, b=blue, a=alpha))
-    return image
-
-def find_img_min_max(image_names):
+def find_img_min_max(image_names, tifdir):
     '''find_img_max_min returns the average minimum and average maximum
     intensity for a set of tiff images.
 
     Parameters
     ----------
     image_names : list
-        list of image names
+        list of image names (string)
+    tifdir : string
+        path prefix to where the tiff images are
+
     Returns
     -------
     avg_min : float
@@ -154,7 +145,7 @@ def find_img_min_max(image_names):
     '''
     min_list = []
     max_list = []
-    for i, image_name in enumerate(image_names, tifdir):
+    for image_name in image_names:
         image = tiff.imread(tifdir + image_name)
         min_list.append(np.min(image))
         max_list.append(np.max(image))
@@ -164,8 +155,7 @@ def find_img_min_max(image_names):
 
 ### main #######################################################################
 if __name__ == "__main__":
-    '''movie_from_tiffs does what the title says. You must have ffmpeg installed,
-    which you can get using homebrew:
+    '''You must have ffmpeg installed, which you can get using homebrew:
     https://trac.ffmpeg.org/wiki/CompilationGuide/MacOSX
 
     By Steven
@@ -173,13 +163,17 @@ if __name__ == "__main__":
     Edited 20160830 jt
     '''
 
+    # hard parameters
+    FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+    fontface = Face("/Library/Fonts/Andale Mono.ttf")
+
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
     specify_fovs = []
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"o:")
+        opts, args = getopt.getopt(sys.argv[1:], "f:o:")
     except getopt.GetoptError:
         print('No arguments detected (-f -o).')
     for opt, arg in opts:
@@ -203,7 +197,7 @@ if __name__ == "__main__":
     fov = 1
 
     # grab the images for this fov
-    images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%03dc*.tif" % (fov))
+    images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%02dc*.tif" % (fov))
     if len(images) == 0:
         raise ValueError("No images found to export for fov %d." % fov)
     information("Found %d files to export." % len(images))
@@ -215,8 +209,9 @@ if __name__ == "__main__":
 
     # use first image to set size of frame
     image = tiff.imread(tifdir + images[0])
-    size_x, size_y = image[1].shape[1], image[1].shape[0]
-    fontface = Face("/Library/Fonts/Andale Mono.ttf")
+    if image.shape[0] < 10:
+        image = image[0] # get phase plane
+    size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
 
     # set command to give to ffmpeg
     command = [FFMPEG_BIN,
@@ -240,34 +235,35 @@ if __name__ == "__main__":
             #'-bufsize', '300k',
 
             # set the movie name
-            p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov ]
+            p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov]
 
     pipe = sp.Popen(command, stdin=sp.PIPE)
 
     # display a frame
     for n, i in enumerate(images):
-        if n > p['mmm_image_start'] or n > p['mmm_image_end']:
-            continue
-        statinfo = os.stat(tifdir + i)
-        if statinfo.st_size < 3500000:
+        if n < p['mmm_image_start'] or n > p['mmm_image_end']:
             continue
 
         image = tiff.imread(tifdir + i) # get the image
 
-        phase = image[0].astype('float64') # pick phase image
+        if image.shape[0] < 10:
+            image = image[0] # get phase plane
+
+        # process phase image
+        phase = image.astype('float64')
         # normalize
         phase -= imin['phase']
         phase[phase < 0] = 0
         phase /= (imax['phase'] - imin['phase'])
         phase[phase > 1] = 1
         # three color stack
-        phase = np.dstack((phase, phase, phase))
+        image = np.dstack((phase, phase, phase))
 
         # put in time stamp
-        seconds = float(int(i.split("ime")[1].split("_Poin")[0]) * p['seconds_per_time_index'])
+        seconds = float(int(i.split(p['file_prefix'] + "t")[1].split("xy")[0]) *
+                        p['seconds_per_time_index'])
         mins = seconds / 60
         hours = mins / 60
-
         timedata = "%dhrs %02dmin" % (hours, mins % 60)
         r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
                                            angle=180)).astype('float64')
@@ -281,6 +277,4 @@ if __name__ == "__main__":
 
         # shoot the image to the ffmpeg subprocess
         pipe.stdin.write((image * 65535).astype('uint16').tostring())
-        if n % 100 == 0:
-            information('Sending %s to write' % i)
     pipe.stdin.close()

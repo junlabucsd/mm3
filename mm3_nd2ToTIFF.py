@@ -8,7 +8,7 @@ def information(*objs):
 # import modules
 import sys
 import os
-#import time
+import time
 import inspect
 import getopt
 import yaml
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:s:x:n:")
+        opts, args = getopt.getopt(sys.argv[1:], "f:o:s:x:n:")
     except getopt.GetoptError:
         warning('No arguments detected (-f -o -s -x -n).')
     for opt, arg in opts:
