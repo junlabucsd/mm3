@@ -170,9 +170,9 @@ if __name__ == "__main__":
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:o:")
+        opts, args = getopt.getopt(sys.argv[1:], "f:o:s:")
     except getopt.GetoptError:
-        print('No arguments detected (-f -o).')
+        print('No or wrong arguments detected (-f -o -s).')
     for opt, arg in opts:
         if opt == '-f':
             param_file = arg
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         # skip FOVs as specified above
         if len(specify_fovs) > 0 and not (fov) in specify_fovs:
             continue
-        if start_fov > -1 and fov + 1 < start_fov:
+        if start_fov > -1 and fov < start_fov:
             continue
 
         # grab the images for this fov
