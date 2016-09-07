@@ -166,6 +166,7 @@ if __name__ == "__main__":
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
     specify_fovs = []
+    start_fov = -1
 
     # switches
     try:
@@ -178,12 +179,12 @@ if __name__ == "__main__":
         if opt == '-o':
             arg.replace(" ", "")
             [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
-    if opt == '-s':
-        try:
-            start_fov = int(arg)
-        except:
-            warning("Could not convert start parameter (%s) to an integer." % arg)
-            raise ValueError
+        if opt == '-s':
+            try:
+                start_fov = int(arg)
+            except:
+                warning("Could not convert start parameter (%s) to an integer." % arg)
+                raise ValueError
 
     # Load the project parameters file into a dictionary named p
     if len(param_file) == 0:
@@ -205,6 +206,8 @@ if __name__ == "__main__":
 
         # skip FOVs as specified above
         if len(specify_fovs) > 0 and not (fov) in specify_fovs:
+            continue
+        if start_fov > -1 and fov + 1 < start_fov:
             continue
 
         # grab the images for this fov

@@ -58,7 +58,6 @@ if __name__ == "__main__":
     start_fov = -1
     external_file = ""
     fov_num_offset = 0
-    file_prefix = ""
 
     # switches
     try:
