@@ -36,6 +36,17 @@ if cmd_subfolder not in sys.path:
 
 import tifffile as tiff
 
+# debug
+import matplotlib as mpl
+mpl.rcParams['figure.figsize'] = 15, 15
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['xtick.direction'] = 'out'
+mpl.rcParams['ytick.direction'] = 'out'
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+import matplotlib.cm as cm
+
+
 ### functions ##################################################################
 def make_label(text, face, size=12, angle=0):
     '''Uses freetype to make a time label.
@@ -167,6 +178,12 @@ if __name__ == "__main__":
         if opt == '-o':
             arg.replace(" ", "")
             [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
+    if opt == '-s':
+        try:
+            start_fov = int(arg)
+        except:
+            warning("Could not convert start parameter (%s) to an integer." % arg)
+            raise ValueError
 
     # Load the project parameters file into a dictionary named p
     if len(param_file) == 0:
@@ -175,104 +192,112 @@ if __name__ == "__main__":
     with open(param_file) as pfile:
         p = yaml.load(pfile)
 
+    # set up movie folder if it does not already exist
+    if not os.path.exists(os.path.abspath(p['experiment_directory'] + p['movie_directory'])):
+        os.makedirs(os.path.abspath(p['experiment_directory'] + p['movie_directory']))
+
     # path to tiff files as a string.
     tifdir = p['experiment_directory'] + p['image_directory']
 
     # start the movie making
-    try:
-        for fov in range(1, p['num_fovs']+1): # for every FOV
+    # try:
+    for fov in range(1, p['num_fovs']+1): # for every FOV
 
-            # skip FOVs as specified above
-            if len(specify_fovs) > 0 and not (fov + 1) in specify_fovs:
+        # skip FOVs as specified above
+        if len(specify_fovs) > 0 and not (fov) in specify_fovs:
+            continue
+
+        # grab the images for this fov
+        images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%03dc*.tif" % (fov))
+        if len(images) == 0:
+            raise ValueError("No images found to export for fov %d." % fov)
+        information("Found %d files to export." % len(images))
+
+        # get min max pixel intensity for scaling the data
+        imin = {}
+        imax = {}
+        imin['phase'], imax['phase'] = find_img_min_max(images[::100], tifdir)
+
+        # use first image to set size of frame
+        image = tiff.imread(tifdir + images[0])
+        if image.shape[0] < 10:
+            image = image[0] # get phase plane
+        size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
+
+        # set command to give to ffmpeg
+        command = [FFMPEG_BIN,
+                '-y', # (optional) overwrite output file if it exists
+                '-f', 'rawvideo',
+                '-vcodec','rawvideo',
+                '-s', '%dx%d' % (size_x, size_y), # size of one frame
+                '-pix_fmt', 'rgb48le',
+                '-r', '%d' % p['fps'], # frames per second
+                '-i', '-', # The imput comes from a pipe
+                '-an', # Tells FFMPEG not to expect any audio
+                # options for the h264 codec
+                '-vcodec', 'h264',
+                '-pix_fmt', 'yuv420p',
+
+                # options for mpeg4 codec
+                #'-vcodec', 'mpeg4',
+                #'-qscale:v', '4', # set quality scale from 1 (high) to 31 (low)
+                #'-b:v', '1024k', # set output bitrate
+                #'-vf', 'scale=iw*0.5:ih*0.5', # rescale output
+                #'-bufsize', '300k',
+
+                # set the movie name
+                p['experiment_directory'] + p['movie_directory'] + p['file_prefix'] + 'xy%03d.mp4' % fov]
+
+        pipe = sp.Popen(command, stdin=sp.PIPE)
+
+        # display a frame and send it to write
+        for n, i in enumerate(images):
+            # skip images not specified by param file.
+            if n < p['image_start'] or n > p['image_end']:
                 continue
-            if start_fov > -1 and fov + 1 < start_fov:
-                continue
 
-            # grab the images for this fov
-            images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%03dc*.tif" % (fov))
-            if len(images) == 0:
-                raise ValueError("No images found to export for fov %d." % fov)
-            information("Found %d files to export." % len(images))
+            image = tiff.imread(tifdir + i) # get the image
 
-            # get min max pixel intensity for scaling the data
-            imin = {}
-            imax = {}
-            imin['phase'], imax['phase'] = find_img_min_max(images[::100], tifdir)
-
-            # use first image to set size of frame
-            image = tiff.imread(tifdir + images[0])
             if image.shape[0] < 10:
                 image = image[0] # get phase plane
-            size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
 
-            # set command to give to ffmpeg
-            command = [FFMPEG_BIN,
-                    '-y', # (optional) overwrite output file if it exists
-                    '-f', 'rawvideo',
-                    '-vcodec','rawvideo',
-                    '-s', '%dx%d' % (size_x, size_y), # size of one frame
-                    '-pix_fmt', 'rgb48le',
-                    '-r', '%d' % p['fps'], # frames per second
-                    '-i', '-', # The imput comes from a pipe
-                    '-an', # Tells FFMPEG not to expect any audio
-                    # options for the h264 codec
-                    '-vcodec', 'h264',
-                    '-pix_fmt', 'yuv420p',
+            # process phase image
+            phase = image.astype('float64')
+            # normalize
+            phase -= imin['phase']
+            phase[phase < 0] = 0
+            phase /= (imax['phase'] - imin['phase'])
+            phase[phase > 1] = 1
+            # three color stack
+            image = np.dstack((phase, phase, phase))
 
-                    # options for mpeg4 codec
-                    #'-vcodec', 'mpeg4',
-                    #'-qscale:v', '4', # set quality scale from 1 (high) to 31 (low)
-                    #'-b:v', '1024k', # set output bitrate
-                    #'-vf', 'scale=iw*0.5:ih*0.5', # rescale output
-                    #'-bufsize', '300k',
+            # put in time stamp
+            seconds = float(int(i.split(p['file_prefix'] + "t")[-1].split("xy")[0]) *
+                            p['seconds_per_time_index'])
+            mins = seconds / 60
+            hours = mins / 60
+            timedata = "%dhrs %02dmin" % (hours, mins % 60)
+            r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                                               angle=180)).astype('float64')
+            r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
+                                               (size_x - 10 - r_timestamp.shape[1], 10)),
+                                               mode = 'constant')
+            r_timestamp /= 255.0
+            r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
-                    # set the movie name
-                    p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov]
+            image = 1 - ((1 - image) * (1 - r_timestamp))
 
-            pipe = sp.Popen(command, stdin=sp.PIPE)
+            # Plot image for debug
+            # fig = plt.figure(figsize = (10,5))
+            # ax = fig.add_subplot(1,1,1)
+            # ax.imshow((image * 65535).astype('uint16'))
+            # plt.show()
 
-            # display a frame and send it to write
-            for n, i in enumerate(images):
-                # skip images not specified by param file.
-                if n < p['image_start'] or n > p['image_end']:
-                    continue
-
-                image = tiff.imread(tifdir + i) # get the image
-
-                if image.shape[0] < 10:
-                    image = image[0] # get phase plane
-
-                # process phase image
-                phase = image.astype('float64')
-                # normalize
-                phase -= imin['phase']
-                phase[phase < 0] = 0
-                phase /= (imax['phase'] - imin['phase'])
-                phase[phase > 1] = 1
-                # three color stack
-                image = np.dstack((phase, phase, phase))
-
-                # put in time stamp
-                seconds = float(int(i.split(p['file_prefix'] + "t")[1].split("xy")[0]) *
-                                p['seconds_per_time_index'])
-                mins = seconds / 60
-                hours = mins / 60
-                timedata = "%dhrs %02dmin" % (hours, mins % 60)
-                r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
-                                                   angle=180)).astype('float64')
-                r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
-                                                   (size_x - 10 - r_timestamp.shape[1], 10)),
-                                                   mode = 'constant')
-                r_timestamp /= 255.0
-                r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
-
-                image = 1 - ((1 - image) * (1 - r_timestamp))
-
-                # shoot the image to the ffmpeg subprocess
-                pipe.stdin.write((image * 65535).astype('uint16').tostring())
-            pipe.stdin.close()
-        except:
-            warning("Error making .mp4 for %d." %fov)
-            print(sys.exc_info()[0])
-            print(sys.exc_info()[1])
-            print(traceback.print_tb(sys.exc_info()[2]))
+            # shoot the image to the ffmpeg subprocess
+            pipe.stdin.write((image * 65535).astype('uint16').tostring())
+        pipe.stdin.close()
+    # except:
+    #     warning("Error making .mp4 for %d." %fov)
+    #     print(sys.exc_info()[0])
+    #     print(sys.exc_info()[1])
+    #     print(traceback.print_tb(sys.exc_info()[2]))
