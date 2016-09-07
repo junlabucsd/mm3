@@ -13,28 +13,12 @@ import inspect
 import getopt
 import yaml
 import traceback
-#import h5py
 import fnmatch
-#import struct
-#import re
-#import glob
-#import gevent
 import math
-import copy
-#import datetime
-#import jdcal
-#import marshal
 import subprocess as sp
-try:
-    import cPickle as pickle
-except:
-    import pickle
-#import marshal
-#from multiprocessing import Pool, Manager
 import numpy as np
-import pims_nd2
 from freetype import *
-from PIL import Image, ImageFont, ImageDraw, ImageMath
+#from PIL import Image, ImageFont, ImageDraw, ImageMath
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -54,7 +38,8 @@ import tifffile as tiff
 
 ### functions ##################################################################
 def make_label(text, face, size=12, angle=0):
-    '''
+    '''Uses freetype to make a time label.
+
     Parameters:
     -----------
     text : string
@@ -68,7 +53,7 @@ def make_label(text, face, size=12, angle=0):
     '''
     face.set_char_size( size*64 )
     angle = (angle/180.0)*math.pi
-    matrix  = FT_Matrix( (int)( math.cos( angle ) * 0x10000 ),
+    matrix = FT_Matrix( (int)( math.cos( angle ) * 0x10000 ),
                          (int)(-math.sin( angle ) * 0x10000 ),
                          (int)( math.sin( angle ) * 0x10000 ),
                          (int)( math.cos( angle ) * 0x10000 ))
@@ -193,88 +178,101 @@ if __name__ == "__main__":
     # path to tiff files as a string.
     tifdir = p['experiment_directory'] + p['image_directory']
 
-    # This needs to be in a big loop.
-    fov = 1
+    # start the movie making
+    try:
+        for fov in range(1, p['num_fovs']+1): # for every FOV
 
-    # grab the images for this fov
-    images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%02dc*.tif" % (fov))
-    if len(images) == 0:
-        raise ValueError("No images found to export for fov %d." % fov)
-    information("Found %d files to export." % len(images))
+            # skip FOVs as specified above
+            if len(specify_fovs) > 0 and not (fov + 1) in specify_fovs:
+                continue
+            if start_fov > -1 and fov + 1 < start_fov:
+                continue
 
-    # get a rough range for scaling the data
-    imin = {}
-    imax = {}
-    imin['phase'], imax['phase'] = find_img_min_max(images[::100], tifdir)
+            # grab the images for this fov
+            images = fnmatch.filter(os.listdir(tifdir), p['file_prefix'] + "t*xy%03dc*.tif" % (fov))
+            if len(images) == 0:
+                raise ValueError("No images found to export for fov %d." % fov)
+            information("Found %d files to export." % len(images))
 
-    # use first image to set size of frame
-    image = tiff.imread(tifdir + images[0])
-    if image.shape[0] < 10:
-        image = image[0] # get phase plane
-    size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
+            # get min max pixel intensity for scaling the data
+            imin = {}
+            imax = {}
+            imin['phase'], imax['phase'] = find_img_min_max(images[::100], tifdir)
 
-    # set command to give to ffmpeg
-    command = [FFMPEG_BIN,
-            '-y', # (optional) overwrite output file if it exists
-            '-f', 'rawvideo',
-            '-vcodec','rawvideo',
-            '-s', '%dx%d' % (size_x, size_y), # size of one frame
-            '-pix_fmt', 'rgb48le',
-            '-r', '%d' % p['fps'], # frames per second
-            '-i', '-', # The imput comes from a pipe
-            '-an', # Tells FFMPEG not to expect any audio
-            # options for the h264 codec
-            '-vcodec', 'h264',
-            '-pix_fmt', 'yuv420p',
+            # use first image to set size of frame
+            image = tiff.imread(tifdir + images[0])
+            if image.shape[0] < 10:
+                image = image[0] # get phase plane
+            size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
 
-            # options for mpeg4 codec
-            #'-vcodec', 'mpeg4',
-            #'-qscale:v', '4', # set quality scale from 1 (high) to 31 (low)
-            #'-b:v', '1024k', # set output bitrate
-            #'-vf', 'scale=iw*0.5:ih*0.5', # rescale output
-            #'-bufsize', '300k',
+            # set command to give to ffmpeg
+            command = [FFMPEG_BIN,
+                    '-y', # (optional) overwrite output file if it exists
+                    '-f', 'rawvideo',
+                    '-vcodec','rawvideo',
+                    '-s', '%dx%d' % (size_x, size_y), # size of one frame
+                    '-pix_fmt', 'rgb48le',
+                    '-r', '%d' % p['fps'], # frames per second
+                    '-i', '-', # The imput comes from a pipe
+                    '-an', # Tells FFMPEG not to expect any audio
+                    # options for the h264 codec
+                    '-vcodec', 'h264',
+                    '-pix_fmt', 'yuv420p',
 
-            # set the movie name
-            p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov]
+                    # options for mpeg4 codec
+                    #'-vcodec', 'mpeg4',
+                    #'-qscale:v', '4', # set quality scale from 1 (high) to 31 (low)
+                    #'-b:v', '1024k', # set output bitrate
+                    #'-vf', 'scale=iw*0.5:ih*0.5', # rescale output
+                    #'-bufsize', '300k',
 
-    pipe = sp.Popen(command, stdin=sp.PIPE)
+                    # set the movie name
+                    p['movie_directory'] + p['file_prefix'] + '%03d.mp4' % fov]
 
-    # display a frame
-    for n, i in enumerate(images):
-        if n < p['mmm_image_start'] or n > p['mmm_image_end']:
-            continue
+            pipe = sp.Popen(command, stdin=sp.PIPE)
 
-        image = tiff.imread(tifdir + i) # get the image
+            # display a frame and send it to write
+            for n, i in enumerate(images):
+                # skip images not specified by param file.
+                if n < p['image_start'] or n > p['image_end']:
+                    continue
 
-        if image.shape[0] < 10:
-            image = image[0] # get phase plane
+                image = tiff.imread(tifdir + i) # get the image
 
-        # process phase image
-        phase = image.astype('float64')
-        # normalize
-        phase -= imin['phase']
-        phase[phase < 0] = 0
-        phase /= (imax['phase'] - imin['phase'])
-        phase[phase > 1] = 1
-        # three color stack
-        image = np.dstack((phase, phase, phase))
+                if image.shape[0] < 10:
+                    image = image[0] # get phase plane
 
-        # put in time stamp
-        seconds = float(int(i.split(p['file_prefix'] + "t")[1].split("xy")[0]) *
-                        p['seconds_per_time_index'])
-        mins = seconds / 60
-        hours = mins / 60
-        timedata = "%dhrs %02dmin" % (hours, mins % 60)
-        r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
-                                           angle=180)).astype('float64')
-        r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
-                                           (size_x - 10 - r_timestamp.shape[1], 10)),
-                                           mode = 'constant')
-        r_timestamp /= 255.0
-        r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
+                # process phase image
+                phase = image.astype('float64')
+                # normalize
+                phase -= imin['phase']
+                phase[phase < 0] = 0
+                phase /= (imax['phase'] - imin['phase'])
+                phase[phase > 1] = 1
+                # three color stack
+                image = np.dstack((phase, phase, phase))
 
-        image = 1 - ((1 - image) * (1 - r_timestamp))
+                # put in time stamp
+                seconds = float(int(i.split(p['file_prefix'] + "t")[1].split("xy")[0]) *
+                                p['seconds_per_time_index'])
+                mins = seconds / 60
+                hours = mins / 60
+                timedata = "%dhrs %02dmin" % (hours, mins % 60)
+                r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                                                   angle=180)).astype('float64')
+                r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
+                                                   (size_x - 10 - r_timestamp.shape[1], 10)),
+                                                   mode = 'constant')
+                r_timestamp /= 255.0
+                r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
-        # shoot the image to the ffmpeg subprocess
-        pipe.stdin.write((image * 65535).astype('uint16').tostring())
-    pipe.stdin.close()
+                image = 1 - ((1 - image) * (1 - r_timestamp))
+
+                # shoot the image to the ffmpeg subprocess
+                pipe.stdin.write((image * 65535).astype('uint16').tostring())
+            pipe.stdin.close()
+        except:
+            warning("Error making .mp4 for %d." %fov)
+            print(sys.exc_info()[0])
+            print(sys.exc_info()[1])
+            print(traceback.print_tb(sys.exc_info()[2]))

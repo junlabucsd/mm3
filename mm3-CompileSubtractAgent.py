@@ -1474,7 +1474,7 @@ if __name__ == "__main__":
                 if count-1 % 1000 == 0:
                     t_s_loop = time.time() # timer for loop time
 
-                # get that information from all the new images and move them from cp_result_dict to image_metadata dictionary
+                # get that information from all the new images and move them from cp_result_dict to image_metadata dictionary. # reskey = result key.
                 for reskey in cp_result_dict.keys():
                     if cp_result_dict[reskey].ready():
                         collected += 1

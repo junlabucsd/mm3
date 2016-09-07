@@ -169,26 +169,24 @@ if __name__ == "__main__":
                         #             information('Saving %s.' % tif_filename)
                         #
                         #             # Pull out the metadata
-                        #             i_mdata[tif_filename] = ndf2[t_id][c_id].metadata
+                        #             i_mdata[tif_filename] = nd2f[t_id][c_id].metadata
                         #             # Put in the calcultate absolute acquisition time
                         #             i_mdata[tif_filename]['acq_time'] = acq_time
 
                         # save a single phase image if no colors
                         # else:
-                        tif_filename = nd2_file.split(".nd")[0] +
-                                       "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
-                        tiff.imsave(p['experiment_directory'] + p['image_directory'] +
-                                    tif_filename, nd2f[t_id])
+                        tif_filename = nd2_file.split(".nd")[0] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
+                        tiff.imsave(p['experiment_directory'] + p['image_directory'] + tif_filename, nd2f[t_id])
                         information('Saving %s.' % tif_filename)
 
                         # Save image metadata
-                        i_mdata[tif_filename] = ndf2[t_id][c_id].metadata
+                        i_mdata[tif_filename] = nd2f[t_id].metadata
                         # Put in the calcultated absolute acquisition time
                         i_mdata[tif_filename]['acq_time'] = acq_time
 
             with open(p['experiment_directory'] + p['analysis_directory'] +
-                filename.split(".nd")[0].split("/")[-1] + "_acqtimes.pkl", 'wb') as jdates_file:
-                pickle.dump(idata, jdates_file, protocol=2)
+                nd2_file.split(".nd")[0] + "_image_metadata.pkl", 'wb') as metadata_file:
+                pickle.dump(i_mdata, metadata_file, protocol=2)
 
         except:
             warning("Error extracting data from " + nd2_file)
