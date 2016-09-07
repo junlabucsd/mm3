@@ -112,7 +112,8 @@ if __name__ == "__main__":
     for nd2_file in nd2files:
         information('Extracting %s ...' % nd2_file)
 
-        idata = [] # saves metadata for all files.
+        i_mdata = {} # saves image metadata
+
         try:
             # get this specific file name
             if len(external_file) > 0:
@@ -123,9 +124,12 @@ if __name__ == "__main__":
             # load the nd2. the nd2f file object has lots of information thanks to pims
             with pims_nd2.ND2_Reader(filename) as nd2f:
                 starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
-                # set planar bundling if necessary & get color names
-                if u'c' in nd2f.sizes.keys():
-                    nd2f.bundle_axes = [u'c', u'y', u'x']
+
+                # # set bundle colors together if there are multiple colors
+                # if u'c' in nd2f.sizes.keys():
+                #     nd2f.bundle_axes = [u'c', u'y', u'x']
+
+                # get the color names out. Kinda roundabout way.
                 file_colors = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
 
                 # get timepoints for extraction. Check is for multiple FOVs or not
@@ -154,25 +158,36 @@ if __name__ == "__main__":
                         days = hours / 24.
                         acq_time = starttime + days
 
-                        if u'c' in nd2f.sizes.keys():
-                            for c_id in range(0, nd2f.sizes[u'c']):
-                                new_filename = file_prefix + filename.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc%01d.tif" % (t_id+1, fov+1 + fov_num_offset, c_id+1)
-                                if len(np.unique(nd2f[t_id][c_id])) > 1:
-                                    tiff.imsave(p['experiment_directory'] + p['image_directory'] +
-                                                new_filename, nd2f[t_id][c_id])
-                                    information('Saving %s.' % new_filename)
-                                    idata.append((new_filename, 0, acq_time,
-                                                  nd2f[t_id].metadata['x_um'],
-                                                  nd2f[t_id].metadata['y_um']))
-                        else:
-                            new_filename = file_prefix + nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
-                            tiff.imsave(p['experiment_directory'] + p['image_directory'] +
-                                        new_filename, nd2f[t_id])
-                            information('Saving %s.' % new_filename)
-                            idata.append((new_filename, 0, acq_time, nd2f[t_id].metadata['x_um'], nd2f[t_id].metadata['y_um']))
+                        # # save stack of colors if there are colors
+                        # if u'c' in nd2f.sizes.keys():
+                        #     for c_id in range(0, nd2f.sizes[u'c']):
+                        #         tif_filename = nd2_file.split(".nd") + "_t%04dxy%03dc%01d.tif" %
+                        #                        (t_id+1, fov+1 + fov_num_offset, c_id+1)
+                        #         if len(np.unique(nd2f[t_id][c_id])) > 1:
+                        #             tiff.imsave(p['experiment_directory'] + p['image_directory'] +
+                        #                         tif_filename, nd2f[t_id][c_id])
+                        #             information('Saving %s.' % tif_filename)
+                        #
+                        #             # Pull out the metadata
+                        #             i_mdata[tif_filename] = ndf2[t_id][c_id].metadata
+                        #             # Put in the calcultate absolute acquisition time
+                        #             i_mdata[tif_filename]['acq_time'] = acq_time
 
-            with open(p['experiment_directory'] + p['analysis_directory'] + file_prefix +
-                    filename.split(".nd")[0].split("/")[-1] + "_acqtimes.pkl", 'wb') as jdates_file:
+                        # save a single phase image if no colors
+                        # else:
+                        tif_filename = nd2_file.split(".nd")[0] +
+                                       "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
+                        tiff.imsave(p['experiment_directory'] + p['image_directory'] +
+                                    tif_filename, nd2f[t_id])
+                        information('Saving %s.' % tif_filename)
+
+                        # Save image metadata
+                        i_mdata[tif_filename] = ndf2[t_id][c_id].metadata
+                        # Put in the calcultated absolute acquisition time
+                        i_mdata[tif_filename]['acq_time'] = acq_time
+
+            with open(p['experiment_directory'] + p['analysis_directory'] +
+                filename.split(".nd")[0].split("/")[-1] + "_acqtimes.pkl", 'wb') as jdates_file:
                 pickle.dump(idata, jdates_file, protocol=2)
 
         except:
