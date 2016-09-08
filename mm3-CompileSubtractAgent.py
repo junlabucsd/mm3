@@ -91,47 +91,6 @@ def setup(event):
     global unpaused
     unpaused = event
 
-# make initial clusters using K-means
-def create_clusters(image_metadata):
-    '''
-    Takes your image metadata which has x and y locations, and groups the fovs by their location
-
-    Parameters
-    image_metadata
-    num_fovs : int
-        Number of fovs, this is a global.
-
-    Returns
-    image_metadata
-        But the fov has been edited.
-    k_means
-        k_mean fitting object
-    '''
-    information("Starting initial cluster formation...")
-    # extract XY positions
-    fns = [k for k in image_metadata.keys()]
-    x = [image_metadata[fn]['metadata']['x'] for fn in fns]
-    y = [image_metadata[fn]['metadata']['y'] for fn in fns]
-
-    # cluster FOVs by k-means
-    positions = np.array(list(zip(x, y)))
-    k_means = KMeans(init = 'k-means++', n_clusters = num_fovs, n_init = 50) # creates the cluster object
-    k_means.fit(positions) # does the clutering on the positions
-    labels = k_means.labels_ # pulls out the labels
-
-    information("Number of clusters: %d." % len(k_means.cluster_centers_))
-    #information(np.unique(labels, return_counts = True))
-
-    # write the k_means object to disk in case of script failure
-    with open(experiment_directory + analysis_directory + 'kmeans_fitter.pkl', 'w') as km_fh:
-        pickle.dump(k_means, km_fh)
-
-    # set the FOV IDs in the image metadata
-    for lindex in range(len(fns)):
-        image_metadata[fns[lindex]]['fov'] = labels[lindex]
-
-    return image_metadata, k_means
-
 # make masks from initial set of images (same images as clusters)
 def make_masks(image_metadata):
     '''
@@ -280,9 +239,7 @@ def make_masks(image_metadata):
             # channel_masks[fov][n][1][1][0]:channel_masks[fov][n][1][1][1]] = True
 
     #save the channel mask dictionary
-    if not os.path.exists(os.path.abspath(experiment_directory + analysis_directory + 'channel_masks/')):
-        os.makedirs(os.path.abspath(experiment_directory + analysis_directory + 'channel_masks/'))
-    with open(experiment_directory + analysis_directory + 'channel_masks/channel_masks.pkl' % fov, 'w') as cmask_file:
+    with open(experiment_directory + analysis_directory + 'channel_masks.pkl', 'w') as cmask_file:
         pickle.dump(channel_masks, cmask_file)
 
     information("Channel masks saved.")
@@ -400,7 +357,8 @@ def extract_metadata(tif):
 # Worker function for getting image parameters and information
 def get_params(image_filename, find_channels=True):
     '''This is a damn important function for getting the information
-    out of an image
+    out of an image. It loads a tiff file, pulls out the image data, and the metadata,
+    including the location of the channels if flagged. 
 
     it returns a dictionary like this for each image:
 
@@ -409,7 +367,7 @@ def get_params(image_filename, find_channels=True):
              'image_size' : image_size, # [image.shape[0], image.shape[1]]
              'channels': cp_dict,
              'analyze_success': True,
-             'fov': -1, # fov is found later with kmeans clustering
+             'fov': -1, # fov (zero indexed)
              'sent_to_write': False,
              'write_success': False}
 
@@ -625,7 +583,7 @@ def get_params(image_filename, find_channels=True):
 
         # return the file name, the data for the channels in that image, and the metadata
         return { 'filename': image_filename,
-                 'metadata': image_metadata,
+                 'metadata': image_metadata, # image metadata is a dictionary.
                  'image_size' : image_size,
                  'channels': cp_dict,
                  'analyze_success': True,
@@ -634,7 +592,7 @@ def get_params(image_filename, find_channels=True):
                  'write_success': False,
                  'write_plane_order' : False} # this is found after get_params
     except:
-        warning('failed get_params for ' + image_filename.split("/")[-1])
+        warning('Failed get_params for ' + image_filename.split("/")[-1])
         print(sys.exc_info()[0])
         print(sys.exc_info()[1])
         print(traceback.print_tb(sys.exc_info()[2]))
@@ -643,7 +601,9 @@ def get_params(image_filename, find_channels=True):
 # define function for flipping the images on an FOV by FOV basis
 def fix_orientation_perfov(image_d, filename_d):
     '''
-    called by data_writer
+    called by
+    process_tif
+    get_params
     '''
 
     # double is for FOVs with channels pointed up and down
@@ -762,7 +722,6 @@ def process_tif(image_data):
 
     Called By
     data_writer
-    find_channels_init
 
     Calls
     tiff.imread
@@ -1283,12 +1242,12 @@ if __name__ == "__main__":
     external_master_file = ""
     multiple_sources = False
     source_directory = '.'
-    min_timepoints_for_clusters = 30
+    min_tpoints_makemask = 30
     Goddard = False # flag for if goddard is scope. Extra check in extract_metadata
     save_originals = False # flag for if orignals should be saved to hdf5
     compress_hdf5 = True # flag for if images should be gzip compressed in hdf5
-    clusters_created = False # flag for if clusters and channels masks should be made
-    do_subtraction = True # flag for if subtraction should be performed if possible
+    mask_created = False # flag for if clusters and channels masks should be made
+    do_subtraction = False # flag for if subtraction should be performed if possible
 
     # the number of subprocesses is a balance between CPU and disk throughputs.
     # on an 8 core system, the IO overhead leaves the CPUs idle too much, so multiple
@@ -1328,7 +1287,7 @@ if __name__ == "__main__":
         if opt == '-x':
             multiple_sources = True
         if opt == '-u':
-            do_subtraction = False # don't do subtraction.
+            do_subtraction = True # do subtraction concurrently.
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
@@ -1340,23 +1299,18 @@ if __name__ == "__main__":
     source_directory = experiment_directory + image_directory # source of images
 
     # create the analysis folder if it doesn't exist
-    if not os.path.exists(experiment_directory):
-        os.makedirs(experiment_directory)
     if not os.path.exists(experiment_directory + analysis_directory):
         os.makedirs(experiment_directory + analysis_directory)
     if not os.path.exists(experiment_directory + analysis_directory + 'originals/'):
         os.makedirs(experiment_directory + analysis_directory + 'originals/')
 
     # if a kmeans fitter and channel_mask was previously saved to disk, load them
-    if os.path.exists(experiment_directory + analysis_directory + 'kmeans_fitter.pkl') and \
-        os.path.exists(experiment_directory + analysis_directory + 'channel_masks/channel_masks.pkl'):
-        with open(experiment_directory + analysis_directory + 'kmeans_fitter.pkl', 'r') as kmp_fh:
-            k_means = pickle.load(kmp_fh)
+    if os.path.exists(experiment_directory + analysis_directory + 'channel_masks/channel_masks.pkl'):
         with open(experiment_directory + analysis_directory +
                   'channel_masks/channel_masks.pkl', 'r') as kmp_fh:
             channel_masks = pickle.load(kmp_fh)
         clusters_created = True
-        information('Loaded prior FOV clustering and channel masks.')
+        information('Loaded prior channel masks.')
 
     # set up a dictionary of locks to prevent HDF5 disk collisions
     global hdf5_locks
@@ -1409,6 +1363,7 @@ if __name__ == "__main__":
 
     known_files_last_save_size = 100 # counter for deciding when to save image metadata
     known_files_last_save_time = time.time() # timer for deciding when to save image metadata
+
     # counters
     successful_analysis_count = 0 # counter for number of successful image reads
     loop_analysis_count = 0 # for the last loop
@@ -1474,7 +1429,7 @@ if __name__ == "__main__":
                 if count-1 % 1000 == 0:
                     t_s_loop = time.time() # timer for loop time
 
-                # get that information from all the new images and move them from cp_result_dict to image_metadata dictionary. # reskey = result key.
+                # get that information from all the new images and move them from cp_result_dict to image_metadata dictionary. reskey = result key.
                 for reskey in cp_result_dict.keys():
                     if cp_result_dict[reskey].ready():
                         collected += 1
@@ -1509,7 +1464,8 @@ if __name__ == "__main__":
                                     if phase_plane == "":
                                         raise ValueError("No plane name containing Ph or PH found: " + str(plane_order))
                                     # move the phase plane to index 0 in the list
-                                    plane_order.insert(0, plane_order.pop(plane_order.index(phase_plane)))
+                                    plane_order.insert(0,
+                                        plane_order.pop(plane_order.index(phase_plane)))
                                     information("Planes ordered:", plane_order)
                                 except:
                                     raise ValueError('Did not find phase plane information.')
@@ -1520,41 +1476,19 @@ if __name__ == "__main__":
                         else:
                             warning('Failed image analysis for ' + cp_result['filename'])
                             failed_files.append(cp_result['filename'])
-                        # no need to do more than 100 here at the start
-                        if collected > 100: break
+                        # Just do 100 at a time
+                        if collected == 100:
+                            break
 
-                # run k-means clustering to start assigning FOV IDs
-                if clusters_created:
-                    # extract x, y, fn, and t for images that have not been assigned to an FOV
-                    fns = [k for k, v in image_metadata.items() if v['fov'] < 0]
-                    if len(fns) > 0:
-                        x = [image_metadata[fn]['metadata']['x'] for fn in fns]
-                        y = [image_metadata[fn]['metadata']['y'] for fn in fns]
-
-                        positions = np.array(list(zip(x, y)))
-                        #raw_input('wat')
-                        labels = k_means.predict(positions) # finds k means positions after the original clusters have been determined
-
-                        # put the fov into image_metadata for each image
-                        for lindex in range(len(fns)):
-                            image_metadata[fns[lindex]]['fov'] = labels[lindex]
-
-                # make the k means cluster data if not made, need 30 per fov.
-                # also make channel masks here
-                elif not clusters_created and len(image_metadata) > min_timepoints_for_clusters * num_fovs:
-                    # first try to load an existing fitter object
-
-                    # find initial clusters
-                    image_metadata, k_means = create_clusters(image_metadata)
-                    clusters_created = True
-
-                    # now find the channels and make the mask for slicing
+                # make channel masks
+                if not mask_created and successful_analysis_count > min_tpoints_makemask * num_fovs:
+                    # Uses channel information from the already processed image data
                     channel_masks = make_masks(image_metadata)
 
                 # if clusters have been created, subtraction is indicated, and an FOV has the
                 # prerequisite files but has not started backlogged subtraction, start it.
                 # if it was previously launch and has now completed, set it to True
-                if clusters_created and do_subtraction:
+                if do_subtraction:
                     for fov in subtract_backlog_results.keys():
 
                         # if the result is True or False, everything is done or there is nothing to do; skip it.
@@ -1624,9 +1558,9 @@ if __name__ == "__main__":
 
                 t_s_inner = time.time()
 
-                # send writes to the pool based on the lowest jdn not yet written after queued writes clear
+                # send writes to the pool based on lowest jdn not written after queued writes clear
                 # for big existing file lists, this is slow like molasses
-                if clusters_created: # only write if cluster FOVs have been assigned
+                if mask_created: # only slice and write if channel mask is made
                     # get a list of lists of all the fovs not yet written, jdn is the julian date time (exact time)
                     def get_not_written_for_fov(fov):
                         return [[k, v['metadata']['jdn']] for k, v in image_metadata.items() if v['fov'] == fov and not v['write_success'] and v['write_plane_order']]
@@ -1681,8 +1615,8 @@ if __name__ == "__main__":
                 # start metadata analysis for new files
                 for newfname in file_events:
                     if newfname.split(".")[-1] == "tif" and not source_directory + newfname in known_files:
-                        information("discovered " + newfname)
-                        if clusters_created:
+                        information("Discovered " + newfname)
+                        if mask_created:
                             # don't look for channels
                             cp_result_dict[newfname] = pool.apply_async(get_params, [source_directory + newfname, False])
                         else:

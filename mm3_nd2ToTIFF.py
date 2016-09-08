@@ -13,23 +13,14 @@ import inspect
 import getopt
 import yaml
 import traceback
-#import h5py
 import fnmatch
-#import struct
-#import re
-#import glob
-#import gevent
 import math
 import copy
-#import datetime
-#import jdcal
-#import marshal
+import json
 try:
     import cPickle as pickle
 except:
     import pickle
-#import marshal
-#from multiprocessing import Pool, Manager
 import numpy as np
 import pims_nd2
 
@@ -157,6 +148,13 @@ if __name__ == "__main__":
                         days = hours / 24.
                         acq_time = starttime + days
 
+                        # Put in the calcultated absolute acquisition time to the existing meta
+                        nd2f[t_id].metadata['acq_time'] = acq_time
+                        # Save image metadata to dictionary to be saved separately.
+                        i_mdata[tif_filename] = nd2f[t_id].metadata
+                        # This json of the metadata will be put in the tiff directly
+                        metadata_json = json.dumps(nd2f[t_id].metadata)
+
                         # # save stack of colors if there are colors
                         # if u'c' in nd2f.sizes.keys():
                         #     for c_id in range(0, nd2f.sizes[u'c']):
@@ -175,14 +173,11 @@ if __name__ == "__main__":
                         # save a single phase image if no colors
                         # else:
                         tif_filename = nd2_file.split(".nd")[0] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
-                        tiff.imsave(p['experiment_directory'] + p['image_directory'] + tif_filename, nd2f[t_id])
+                        tiff.imsave(p['experiment_directory'] + p['image_directory'] +
+                                    tif_filename, nd2f[t_id], description=metadata_json)
                         information('Saving %s.' % tif_filename)
 
-                        # Save image metadata
-                        i_mdata[tif_filename] = nd2f[t_id].metadata
-                        # Put in the calcultated absolute acquisition time
-                        i_mdata[tif_filename]['acq_time'] = acq_time
-
+            # Save the metadata.
             with open(p['experiment_directory'] + p['analysis_directory'] +
                 nd2_file.split(".nd")[0] + "_image_metadata.pkl", 'wb') as metadata_file:
                 pickle.dump(i_mdata, metadata_file, protocol=2)
