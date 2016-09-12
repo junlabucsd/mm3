@@ -150,8 +150,6 @@ if __name__ == "__main__":
 
                         # Put in the calcultated absolute acquisition time to the existing meta
                         nd2f[t_id].metadata['acq_time'] = acq_time
-                        # Save image metadata to dictionary to be saved separately.
-                        i_mdata[tif_filename] = nd2f[t_id].metadata
                         # This json of the metadata will be put in the tiff directly
                         metadata_json = json.dumps(nd2f[t_id].metadata)
 
@@ -173,9 +171,12 @@ if __name__ == "__main__":
                         # save a single phase image if no colors
                         # else:
                         tif_filename = nd2_file.split(".nd")[0] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
+                        information('Saving %s.' % tif_filename)
                         tiff.imsave(p['experiment_directory'] + p['image_directory'] +
                                     tif_filename, nd2f[t_id], description=metadata_json)
-                        information('Saving %s.' % tif_filename)
+                        # Save image metadata to dictionary to be saved separately.
+                        i_mdata[tif_filename] = nd2f[t_id].metadata
+
 
             # Save the metadata.
             with open(p['experiment_directory'] + p['analysis_directory'] +

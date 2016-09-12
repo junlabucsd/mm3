@@ -358,7 +358,7 @@ def extract_metadata(tif):
 def get_params(image_filename, find_channels=True):
     '''This is a damn important function for getting the information
     out of an image. It loads a tiff file, pulls out the image data, and the metadata,
-    including the location of the channels if flagged. 
+    including the location of the channels if flagged.
 
     it returns a dictionary like this for each image:
 

@@ -61,7 +61,7 @@ def load_cell_peaks(fov_id):
     cell_peaks = np.array(cell_peaks) # it is currently just a list of ints
     return cell_peaks
 
-# load empty tif for an fov_id
+# load empty tif for an fov_id (empty for background subtraction)
 def load_empty_tif(fov_id):
     exp_dir = params['experiment_directory']
     ana_dir = params['analysis_directory']
@@ -71,6 +71,12 @@ def load_empty_tif(fov_id):
     else:
         empty_mean = tiff.imread(exp_dir + ana_dir + "empties/fov_%03d_emptymean.tif" % fov_id)
     return empty_mean
+
+def extract_tiff_metadata(tif, source='mm3_nd2ToTIFF'):
+    '''This function pulls out the metadata from a tif file and returns it as a dictionary'''
+
+
+    return
 
 ### functions about converting dates and times
 ### Functions
