@@ -52,6 +52,7 @@ import tifffile as tiff
 def get_crosscorrs(peak):
     try:
         # load a sample of the initial images in the experiment for calculating xcorrs
+        # it bothers me here that fov_file is not passed but inferred from __main__
         # h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='latest', swmr=True)
         h5f = h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest')
         stack_shape = h5f[u'channel_%04d' % peak].shape
