@@ -74,9 +74,9 @@ import mm3_helpers as mm3
 #import matplotlib.pyplot as plt
 
 # make masks from initial set of images (same images as clusters)
-def make_masks(image_metadata):
+def make_masks(analyzed_imgs):
     '''
-    Make masks goes through the images given in image_metadata and builds a consensus
+    Make masks goes through the channel locations in the image metadata and builds a consensus
     Mask for each image per fov, which it returns as dictionary named channel_masks.
     The keys in this dictionary are fov id, and the values is a another dictionary. This dict's keys are channel locations (peaks) and the values is a [2][2] array:
     [[minrow, maxrow],[mincol, maxcol]] of pixel locations designating the corner of each mask
@@ -106,14 +106,14 @@ def make_masks(image_metadata):
     channel_masks = {}
 
     # get the size of the images (hope they are the same)
-    for img_k, img_v in image_metadata.iteritems():
+    for img_k, img_v in analyzed_imgs.iteritems():
         image_rows = img_v['image_size'][0]
         image_cols = img_v['image_size'][1]
         break # just need one. using iteritems mean the whole dict doesn't load
 
     # get the fov ids
     fovs = []
-    for img_k, img_v in image_metadata.iteritems():
+    for img_k, img_v in analyzed_imgs.iteritems():
         if img_v['fov'] not in fovs:
             fovs.append(img_v['fov'])
 
@@ -129,7 +129,7 @@ def make_masks(image_metadata):
         consensus_mask = np.zeros([image_rows, image_cols]) # mask for labeling
 
         # bring up information for each image
-        for img_k, img_v in image_metadata.iteritems():
+        for img_k, img_v in analyzed_imgs.iteritems():
             # skip this one if it is not of the current fov
             if img_v['fov'] != fov:
                 continue
@@ -219,12 +219,6 @@ def make_masks(image_metadata):
             # saving_mask[channel_masks[fov][n][1][0][0]:
             # channel_masks[fov][n][1][0][1],
             # channel_masks[fov][n][1][1][0]:channel_masks[fov][n][1][1][1]] = True
-
-    #save the channel mask dictionary
-    with open(experiment_directory + analysis_directory + 'channel_masks.pkl', 'w') as cmask_file:
-        pickle.dump(channel_masks, cmask_file)
-
-    information("Channel masks saved.")
 
     return channel_masks
 
@@ -476,14 +470,17 @@ def process_tif(image_data):
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
 
-    # switches
+    # get switches and parameters
     try:
         opts, args = getopt.getopt(sys.argv[1:],"f:")
     except getopt.GetoptError:
-        print('no arguments detected (-f).')
+        print('No arguments detected (-f).')
+
+    # set parameters
     for opt, arg in opts:
         if opt == '-f':
             param_file_path = arg # parameter file path
+
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
@@ -492,19 +489,13 @@ if __name__ == "__main__":
     information ('Loading experiment parameters...')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
+
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
-    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
+
 
     # hardcoded variables and flags
-    p['compress_hdf5'] = True # flag for if images should be gzip compressed in hdf5
-    p['tif_creator'] = 'elements' # what is the source of the TIFFs?
-
-    # create the analysis folder if it doesn't exist
-    if not os.path.exists(p['experiment_directory'] + p['analysis_directory']):
-        os.makedirs(p['experiment_directory'] + p['analysis_directory'])
-    # create folder for sliced data.
-    if not os.path.exists(p['experiment_directory'] + p['analysis_directory'] + 'originals/'):
-        os.makedirs(p['experiment_directory'] + p['analysis_directory'] + 'originals/')
+    # p['compress_hdf5'] = True # flag for if images should be gzip compressed in hdf5
+    # p['tif_creator'] = 'elements' # what is the source of the TIFFs?
 
     ### multiprocessing variables and set up.
     # set up a dictionary of locks to prevent HDF5 disk collisions
@@ -520,26 +511,20 @@ if __name__ == "__main__":
     else:
         num_analyzers = cpu_count*2 - 2
 
-    # multiprocessing system for analyzing & stacking newly uploaded image files
-    # m = Manager()
-    # q = m.Queue()
+    # create the analysis folder if it doesn't exist
+    if not os.path.exists(p['experiment_directory'] + p['analysis_directory']):
+        os.makedirs(p['experiment_directory'] + p['analysis_directory'])
+    # create folder for sliced data.
+    if not os.path.exists(p['experiment_directory'] + p['analysis_directory'] + 'originals/'):
+        os.makedirs(p['experiment_directory'] + p['analysis_directory'] + 'originals/')
 
+    # assign shorthand directory names
+    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
+    ana_dir = p['experiment_directory'] + p['analysis_directory']
 
     # declare information variables
-    plane_order = [] # set up the plane ordering schema
-
     analyzed_imgs = {} # for storing get_params pool results.
     written_imgs = {} # for storing write objects set to write. Are removed once written
-
-    known_files_last_save_size = 100 # counter for deciding when to save image metadata
-    known_files_last_save_time = time.time() # timer for deciding when to save image metadata
-
-    # counters
-    successful_analysis_count = 0 # counter for number of successful image reads
-    loop_analysis_count = 0 # for the last loop
-    successful_write_count = 0 # counter for number of successful image writes
-    loop_write_count = 0 # just for the loop
-
 
     # process TIFFs for metadata
     try:
@@ -552,7 +537,8 @@ if __name__ == "__main__":
         else:
             warning('No TIFF files found')
 
-        pool = Pool(num_analyzers) # pool for analyzing image metadata
+        # initialize pool for analyzing image metadata
+        pool = Pool(num_analyzers)
 
         # loop over images and get information
         for fn in found_files:
@@ -581,13 +567,37 @@ if __name__ == "__main__":
 
         information('Got results from analyzed images.')
 
-        #
-        # # make channel masks
-        # if not mask_created and successful_analysis_count > min_tpoints_makemask * num_fovs:
-        #     # Uses channel information from the already processed image data
-        #     channel_masks = make_masks(image_metadata)
-        #
-        #
+        with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
+                pickle.dump(analyzed_imgs, tiff_metadata)
+
+        information('Saved metadata from analyzed images')
+
+    except:
+        warning("Image parameter analysis try block failed.")
+        print(sys.exc_info()[0])
+        print(sys.exc_info()[1])
+        print(traceback.print_tb(sys.exc_info()[2]))
+
+    # Make consensus channel masks and get other shared metadata
+    try:
+        # Uses channel information from the already processed image data
+        channel_masks = make_masks(analyzed_imgs)
+
+        #save the channel mask dictionary
+        with open(ana_dir + 'channel_masks.pkl', 'w') as cmask_file:
+            pickle.dump(channel_masks, cmask_file)
+
+        information("Channel masks saved.")
+
+    except:
+        warning("Mask creation try block failed.")
+        print(sys.exc_info()[0])
+        print(sys.exc_info()[1])
+        print(traceback.print_tb(sys.exc_info()[2]))
+
+    # Slice and write TIFF files into channel
+    try:
+        pass
         # # check write results and set the success flag as appropriate in the metadata.
         # # this makes sure things don't get written twice. writing happens next.
         # # print('dummy')
@@ -663,12 +673,8 @@ if __name__ == "__main__":
 
         # except KeyboardInterrupt:
         #         warning("Caught KeyboardInterrupt, terminating workers...")
-
     except:
-        warning("Compile Try block failed.")
+        warning("Channel slicing try block failed.")
         print(sys.exc_info()[0])
         print(sys.exc_info()[1])
         print(traceback.print_tb(sys.exc_info()[2]))
-
-    finally:
-        information('Finished.')
