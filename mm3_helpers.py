@@ -1,9 +1,9 @@
 #!/usr/bin/python
 from __future__ import print_function
 def warning(*objs):
-    print(time.strftime("%H:%M:%S mm3_helpers:", time.localtime()), *objs, file=sys.stderr)
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stderr)
 def information(*objs):
-    print(time.strftime("%H:%M:%S mm3_helpers:", time.localtime()), *objs, file=sys.stdout)
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -12,10 +12,15 @@ import time
 import inspect
 import yaml
 try:
-    import cPickle as pickle
+    import cPickle as pickle # pickle
 except:
     import pickle
 import numpy as np
+import scipy.signal as spsig
+import scipy.stats as spstats
+import struct # for interpretting strings as binary data
+import re # regular expressions
+import traceback
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -72,7 +77,6 @@ def load_empty_tif(fov_id):
         empty_mean = tiff.imread(exp_dir + ana_dir + "empties/fov_%03d_emptymean.tif" % fov_id)
     return empty_mean
 
-
 # get params is the major function which processes raw TIFF images
 def get_tif_params(image_filename, find_channels=True):
     '''This is a damn important function for getting the information
@@ -97,30 +101,30 @@ def get_tif_params(image_filename, find_channels=True):
     mm3.extract_metadata
     mm3.find_channels
     '''
-    unpaused.wait()
     try:
         # open up file and get metadata
         try:
             with tiff.TiffFile(image_filename) as tif:
                 image_data = tif.asarray()
-                image_metadata = extract_metadata(tif)
+                image_metadata = get_tif_metadata(tif)
         except:
             time.sleep(2)
             with tiff.TiffFile(image_filename) as tif:
                 image_data = tif.asarray()
-                image_metadata = extract_metadata(tif)
+                image_metadata = get_tif_metadata(tif)
 
-        # make the image 3d and crop the top & bottom per the image_vertical_crop parameter
+        # make the image 3d and crop the top & bottom per the params['image_vertical_crop'] parameter
         if len(image_data.shape) == 2:
             image_data = np.expand_dims(image_data, 0)
-        if image_vertical_crop >= 0:
-            image_data = image_data[:,image_vertical_crop:image_data.shape[1]-image_vertical_crop,:]
+        if params['image_vertical_crop'] >= 0:
+            image_data = image_data[:,params['image_vertical_crop']:image_data.shape[1] -
+                                      params['image_vertical_crop'],:]
         else:
-            padsize = abs(image_vertical_crop)
+            padsize = abs(params['image_vertical_crop'])
             image_data = np.pad(image_data, ((0,0), (padsize, padsize), (0,0)), mode='edge')
 
         # fix the image orientation and get the number of planes
-        image_data = fix_orientation_perfov(image_data, image_filename)
+        image_data = fix_orientation(image_data)
         image_planes = image_data.shape[0]
 
         # if the image data has more than 1 plane restrict image_data to just the first
@@ -133,6 +137,12 @@ def get_tif_params(image_filename, find_channels=True):
 
         # find channels if desired
         if find_channels:
+            # declare temp variables from yaml parameter dict.
+            chan_w = params['channel_width']
+            chan_midline_sep = params['channel_midline_separation']
+            crop_hw = params['crop_half_width']
+            chan_snr = params['channel_detection_snr']
+
             # structure for channel dimensions
             channel_params = []
             # Structure of channel_params
@@ -141,21 +151,21 @@ def get_tif_params(image_filename, find_channels=True):
             # 2 = index of min (the open end)
             # 3 = length of the channel (min - max)
 
-            # Detect peaks in the x projection (i.e. find the channels).
+            # Detect peaks in the x projection (i.e. find the channels)
             projection_x = image_data.sum(axis = 0)
             # find_peaks_cwt is a finction which attempts to find the peaks in a 1-D array by
             # convolving it with a wave. here the wave is the default wave used by the algorythm
             # but the minimum signal to noise ratio is specified
-            peaks = spsig.find_peaks_cwt(projection_x, np.arange(channel_width-5,channel_width+5),
-                                         min_snr = channel_detection_snr)
+            peaks = spsig.find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
+                                         min_snr=chan_snr)
 
             # If the left-most peak position is within half of a channel separation,
             # discard the channel from the list.
-            if peaks[0] < (channel_midline_separation / 2):
+            if peaks[0] < (chan_midline_sep / 2):
                 peaks = peaks[1:]
             # If the difference between the right-most peak position and the right edge
             # of the image is less than half of a channel separation, discard the channel.
-            if image_data.shape[0] - peaks[len(peaks)-1] < (channel_midline_separation / 2):
+            if image_data.shape[0] - peaks[len(peaks)-1] < (chan_midline_sep / 2):
                 peaks = peaks[:-1]
 
             # Find the average channel ends for the y-projected image
@@ -174,7 +184,8 @@ def get_tif_params(image_filename, find_channels=True):
             for peak in peaks:
                 # Structure of channel_strips
                 # 0 = peak position, 1 = image of the strip (AKA the channel) itself
-                channel_strips.append([peak, image_data[0:image_data.shape[0], peak-crop_half_width:peak+crop_half_width]])
+                channel_strips.append([peak, image_data[0:image_data.shape[0],
+                                       peak - crop_hw:peak + crop_hw]])
 
             # Find channel starts and ends based on the maximum derivative of the channel profile;
             # min of the first derivative is usually the open end and max is usually the closed end.
@@ -240,7 +251,6 @@ def get_tif_params(image_filename, find_channels=True):
                     raise
             except:
                 warning('%s: error in mode/median analysis; maybe the device is delaminated?' % image_filename.split("/")[-1])
-                print("-")
                 return [image_filename, -1]
 
             # set max_baseline
@@ -302,13 +312,14 @@ def get_tif_params(image_filename, find_channels=True):
         else:
             cp_dict = -1
 
+        information('Analyzed %s' % image_filename)
         # return the file name, the data for the channels in that image, and the metadata
         return { 'filename': image_filename,
                  'metadata': image_metadata, # image metadata is a dictionary.
                  'image_size' : image_size,
                  'channels': cp_dict,
                  'analyze_success': True,
-                 'fov': -1, # fov is found later with kmeans clustering
+                 'fov': -1,
                  'sent_to_write': False,
                  'write_success': False,
                  'write_plane_order' : False} # this is found after get_params
@@ -320,12 +331,11 @@ def get_tif_params(image_filename, find_channels=True):
         return {'filename': image_filename, 'analyze_success': False}
 
 # finds metdata in a tiff image.
-def extract_tif_metadata(tif, source='mm3_nd2ToTIFF'):
+def get_tif_metadata(tif, source='elements'):
     '''This function pulls out the metadata from a tif file and returns it as a dictionary.
     Depending on the source (Nikon Elements or homebrewed script/program), it uses different
     routines as indicated by the parameter source. tif is an opened tif file (using the package
     tifffile)
-
 
 
     arguments:
@@ -418,22 +428,12 @@ def extract_tif_metadata(tif, source='mm3_nd2ToTIFF'):
 
                 words = allchars.split(" ")
 
-                #print(words)
-
                 planes = []
                 for idx in [i for i, x in enumerate(words) if x == "sOpticalConfigName"]:
-                    try: # this try is in case this is just an imported function
-                        if Goddard:
-                            if words[idx-1] == "uiCompCount":
-                                planes.append(words[idx+1])
-                        else:
-                            planes.append(words[idx+1])
-                    except:
-                        planes.append(words[idx+1])
+                    planes.append(words[idx+1])
+
                 idata['plane_names'] = planes
     return idata
-
-
 
 ### functions about converting dates and times
 ### Functions
@@ -484,8 +484,90 @@ def datetime_to_jd(date):
     return date_to_jd(date.year, date.month, days)
 
 
-### functions about trimming and padding images
+### functions about trimming, padding, and manipulating images
 # cuts out a channel from an tiff image (that has been processed)
+# define function for flipping the images on an FOV by FOV basis
+def fix_orientation(image_data):
+    '''
+    called by
+    process_tif
+    get_params
+    '''
+    image_orientation = params['image_orientation']
+
+    # double is for FOVs with channels pointed up and down
+    if image_orientation == "double":
+        # make a projection so the values along the x axis (each row) are summed into one value at each y position
+        # axis = 1 means sum the rows to get one column of data
+        projection_y = image_data.sum(axis = 1)
+        # re zero this array
+        projection_y = np.max(projection_y) - projection_y
+        # get an int? value  two fifths of the hight of the image
+        cut_px = image_data.shape[0] / 2.5
+        # get a whole number value one eith of the height of the image
+        search_cut = image_data.shape[0] / 8
+        # use the function match_template on the vertial stacks of ( (two copies of the projection with a margin cut off at both ends) and (two copies of the projection with a larger margin cut off at both ends) )
+
+        # the match function finds the smaller image in the larger image (OR AT LEAST THINGS LIKT IT) by means of calculating correltation between a smaller image and a larger image at each position in thet matrix
+        # it returns the correlation matrix (which is presumably a reveled one dimensional list of correlations? or maybe 2 dimensioanl?)
+        match_result = match_template(np.vstack((projection_y[search_cut:projection_y.shape[0]-search_cut], projection_y[search_cut:projection_y.shape[0]-search_cut])), np.fliplr(np.vstack((projection_y[cut_px:image_data.shape[0] - cut_px], projection_y[cut_px:image_data.shape[0] - cut_px]))))
+        # we want the position of the correaltin matrix
+        # np.unravel_index is a function which returns the rown and column position for 1 dimensional ravled indexes (indexes where you count as you go along an axis and then loop back when you hit the end and keep counting)
+        # you can feed it an array of these index position valuse and it will return a tuple with an array for the row positions and an array for the column positions for each index given
+        # note that numpy's argmax function returns the "Indices of the maximum values along an axis"
+        ij = np.unravel_index(np.argmax(match_result), match_result.shape)
+        # get the second dimension array into "c_peak" and the first dimension array into "y"
+        # the ::-1 returns the elements starting at the back, this should be the same as "y, c_peak  = ij[::1]"
+        c_peak, y = ij[::-1]
+        # shift the position values represented in c_peak by the margin calculated earlier
+        c_peak += search_cut
+        # make "offset" equal to half of the distance between the peak
+        offset = (c_peak - cut_px) / 2
+        # set cutposiotn to be the offset plus half od the image size
+        cut_position = (image_data.shape[0]/2) + offset
+        # take the image from a position 28 pixels up from the cut_cut position
+        # take that porion and flip it
+        # it is now the top image called "im_top"
+        im_top = np.flipud(image_data[:cut_position-28,:])
+        # keep the portion of the image for im_bottom in a symettrical fashion
+        im_bottom = image_data[cut_position+28:,:]
+
+        # make the tow images have the same size by "padding" them
+        if im_top.shape[0] > im_bottom.shape[0]:
+            im_bottom = np.pad(im_bottom, ((0, abs(im_top.shape[0] - im_bottom.shape[0])),(0,0)), mode = "edge")
+        else:
+            im_top = np.pad(im_top, ((0, abs(im_bottom.shape[0] - im_top.shape[0])),(0,0)), mode = "edge")
+
+        # return the two images "glued together horizauntally" by usning numpy's horizauntal stack function
+        return np.hstack((im_bottom, im_top))
+        #mind you we are now done dealing with the double condition
+    # next we deal with the FOV's to be flipped
+    # setting image_orientation to 'auto' will use autodetection, otherwise
+    # the usual user-defined flipping will ensue
+    if image_orientation == "auto":
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+        # for multichannel images, pick the plane to analyze with the highest mean px value
+        ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+        if np.argmax(image_data[ph_channel].mean(axis = 1)) > image_data[ph_channel].shape[0] / 2:
+            return image_data
+        else:
+            return image_data[:,::-1,:]
+    else:
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+        # flip the images if "up" is the specified image orrientation
+        if image_orientation == "up":
+            return image_data[:,::-1,:]
+        # do not flip the images if "down is the specified image orientation"
+        elif image_orientation == "down":
+            return image_data
+        # this image has not fallen into any of the specified categories then -> "HUSTON WE HAVE A PROBLEM"
+        # you will want to edit your YAML parameters file!
+        else:
+            raise AttributeError
+
+
 def cut_slice(image_pixel_data, channel_loc):
     '''Takes an image and cuts out the channel based on the slice location
     slice location is the list with the peak information, in the form
