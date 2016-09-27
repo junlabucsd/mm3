@@ -106,8 +106,8 @@ def get_tif_params(image_filename, find_channels=True):
         try:
             with tiff.TiffFile(image_filename) as tif:
                 image_data = tif.asarray()
-                image_metadata = get_tif_metadata(tif)
-        except:
+                image_metadata = get_tif_metadata_elements(tif)
+        except: # this is just a timer in case it doesn't open fast enough
             time.sleep(2)
             with tiff.TiffFile(image_filename) as tif:
                 image_data = tif.asarray()
@@ -125,7 +125,6 @@ def get_tif_params(image_filename, find_channels=True):
 
         # fix the image orientation and get the number of planes
         image_data = fix_orientation(image_data)
-        image_planes = image_data.shape[0]
 
         # if the image data has more than 1 plane restrict image_data to just the first
         if len(image_data.shape) > 2:
@@ -133,7 +132,7 @@ def get_tif_params(image_filename, find_channels=True):
             image_data = image_data[ph_index]
 
         # save the shape data
-        image_size = [image_data.shape[0], image_data.shape[1]]
+        image_shape = [image_data.shape[0], image_data.shape[1]]
 
         # find channels if desired
         if find_channels:
@@ -153,7 +152,7 @@ def get_tif_params(image_filename, find_channels=True):
 
             # Detect peaks in the x projection (i.e. find the channels)
             projection_x = image_data.sum(axis = 0)
-            # find_peaks_cwt is a finction which attempts to find the peaks in a 1-D array by
+            # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
             # convolving it with a wave. here the wave is the default wave used by the algorythm
             # but the minimum signal to noise ratio is specified
             peaks = spsig.find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
@@ -315,14 +314,14 @@ def get_tif_params(image_filename, find_channels=True):
         information('Analyzed %s' % image_filename)
         # return the file name, the data for the channels in that image, and the metadata
         return { 'filename': image_filename,
-                 'metadata': image_metadata, # image metadata is a dictionary.
-                 'image_size' : image_size,
-                 'channels': cp_dict,
-                 'analyze_success': True,
-                 'fov': -1,
-                 'sent_to_write': False,
-                 'write_success': False,
-                 'write_plane_order' : False} # this is found after get_params
+                 'fov' : image_metadata['fov'], # fov id
+                 't' : image_metadata['t'], # time point
+                 'jdn' : image_metadata['jdn'], # absolute julian time
+                 'x' : image_metadata['x'], # x position on stage [um]
+                 'y' : image_metadata['y'], # y position on stage [um]
+                 'plane_names' : image_metadata['plane_names'] # list of plane names
+                 'image_shape' : image_shape, # [x,y] size of image in pixels (same for all planes)
+                 'channels': cp_dict, # dictionary of channel locations
     except:
         warning('Failed get_params for ' + image_filename.split("/")[-1])
         print(sys.exc_info()[0])
@@ -331,11 +330,10 @@ def get_tif_params(image_filename, find_channels=True):
         return {'filename': image_filename, 'analyze_success': False}
 
 # finds metdata in a tiff image.
-def get_tif_metadata(tif, source='elements'):
+def get_tif_metadata_elements(tif):
     '''This function pulls out the metadata from a tif file and returns it as a dictionary.
-    Depending on the source (Nikon Elements or homebrewed script/program), it uses different
-    routines as indicated by the parameter source. tif is an opened tif file (using the package
-    tifffile)
+    This if tiff files as exported by Nikon Elements as a stacked tiff, each for one tpoint.
+    tif is an opened tif file (using the package tifffile)
 
 
     arguments:
@@ -352,13 +350,20 @@ def get_tif_metadata(tif, source='elements'):
 
     '''
 
-    idata = { 'jdn': 0.0,
-              'x': 0.0,
-              'y': 0.0,
+    # image metdata
+    idata = { 'fov': -1
+              't' : -1
+              'jdn': -1 * 0.0,
+              'x': -1 * 0.0,
+              'y': -1 * 0.0,
               'plane_names': []}
 
+    # get the fov and t simply from the file name
+    idata['fov'] = int(tif.fname.split('xy')[1].split('.tif')[0])
+    idata['t'] = int(tif.fname.split('xy')[0].split('t')[-1])
+
+    # a page is plane, or stack, in the tiff. The other metdata is hidden down in there.
     for page in tif:
-        #print("Page found.")
         for tag in page.tags.values():
             #print("Checking tag",tag.name,tag.value)
             t = tag.name, tag.value
