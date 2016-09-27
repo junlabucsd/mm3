@@ -51,193 +51,79 @@ import tifffile as tiff
 # from subtraction_helpers import *
 import mm3_helpers as mm3
 
-# # writer function for appending to originals_nnn.hdf5
-# def data_writer(image_data, channel_masks, subtract=False, save_originals=False, compress_hdf5=True):
-#     '''
-#     data_writer saves an hdf5 file for each fov which contains the original images for that fov,
-#     the meta_data about the images (location, time), and the sliced channels based on the
-#     channel_masks.
-#
-#     Called by:
-#     __main__
-#
-#     Calls
-#     mm3.cut_slice
-#     process_tif
-#     mm3.load_cell_peaks
-#     mm3.load_empyt_tif
-#     mm3.trim_zeros_2d
-#     '''
-#     returnvalue = False
-#     h5s = None
-#     try:
-#         # imporant information for saving
-#         fov_id = image_data['fov']
-#         plane_order = image_data['write_plane_order']
-#
-#         # load the image and process it
-#         image_pixeldata = process_tif(image_data)
-#
-#         # acquire the write lock for this FOV; if there is a block longer than 3 seconds,
-#         # acquisition should timeout since backlog subtraction may be running
-#         t_s = time.time()
-#         lock_acquired = hdf5_locks[fov_id].acquire(block = True, timeout = 3.0)
-#         t_e = time.time() - t_s
-#         if t_e > 1 and lock_acquired:
-#             information("data_writer: lock acquisition delay %0.2f s" % t_e)
-#         if not lock_acquired:
-#             # no need to release the lock since we don't have it.
-#             information("data_writer: unable to obtain lock for FOV %d." % fov_id)
-#             return returnvalue
-#
-#         # if doing subtraction, load cell peaks from spec file for fov_id
-#         if subtract:
-#             try:
-#                 cell_peaks = mm3.load_cell_peaks(fov_id) # load list of cell peaks from spec file
-#                 empty_mean = mm3.load_empty_tif(fov_id) # load empty mean image
-#                 empty_mean = mm3.trim_zeros_2d(empty_mean) # trim any zero data from the image
-#                 h5s = h5py.File(experiment_directory + analysis_directory +
-#                                 'subtracted/subtracted_%03d.hdf5' % fov_id, 'r+', libver='earliest')
-#                 #h5s.swmr_mode = False
-#             except:
-#                 subtract = False
-#
-#         with h5py.File(experiment_directory + analysis_directory + 'originals/original_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5f:
-#             if not 'metadata' in h5f.keys(): # make datasets if this is first time
-#                 # create and write first metadata
-#                 h5mdds = h5f.create_dataset(u'metadata',
-#                                     data = np.array([[image_data['metadata']['x'],
-#                                     image_data['metadata']['y'], image_data['metadata']['jdn']],]),
-#                                     maxshape = (None, 3))
-#
-#                 # create and write first original
-#                 if save_originals:
-#                     h5ds = h5f.create_dataset(u'originals',
-#                                               data=np.expand_dims(image_pixeldata, 0),
-#                                               chunks=(1, image_pixeldata.shape[0], 30, 1),
-#                                               maxshape=(None, image_pixeldata.shape[0], image_pixeldata.shape[1], None),
-#                                               compression="gzip", shuffle=True)
-#                     h5ds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
-#
-#                 # find the channel locations for this fov. slice out channels and save
-#                 for channel_loc in channel_masks[fov_id]:
-#                     # get id and slice
-#                     channel_id, channel_slice = mm3.cut_slice(image_pixeldata, channel_loc)
-#                     if compress_hdf5:
-#                         h5nds = h5f.create_dataset(u'channel_%04d' % channel_id,
-#                                                    data=np.expand_dims(channel_slice, 0),
-#                                                    chunks=(1, channel_slice.shape[0],
-#                                                            channel_slice.shape[1], 1),
-#                                                    maxshape=(None, channel_slice.shape[0],
-#                                                              channel_slice.shape[1], None),
-#                                                    compression="gzip", shuffle=True)
-#                     else:
-#                         h5nds = h5f.create_dataset(u'channel_%04d' % channel_id,
-#                                                    data=np.expand_dims(channel_slice, 0),
-#                                                    chunks=(1, channel_slice.shape[0],
-#                                                            channel_slice.shape[1], 1),
-#                                                    maxshape=(None, channel_slice.shape[0],
-#                                                              channel_slice.shape[1], None))
-#                     h5nds.attrs['channel_id'] = channel_loc[0]
-#                     h5nds.attrs['channel_loc'] = channel_loc[1]
-#                     h5nds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
-#
-#                 returnvalue = True
-#             else: # append to current datasets
-#                 #h5f.swmr_mode = False
-#                 # write additional metadata
-#                 h5mdds = h5f[u'metadata']
-#                 h5mdds.resize(h5mdds.shape[0] + 1, axis = 0)
-#                 h5mdds.flush()
-#                 h5mdds[-1] = np.array([image_data['metadata']['x'],
-#                                     image_data['metadata']['y'], image_data['metadata']['jdn']])
-#                 h5mdds.flush()
-#
-#                 # write additional originals
-#                 if save_originals:
-#                     h5ds = h5f[u'originals']
-#                     # adjust plane names if need be
-#                     if len(h5ds.attrs['plane_names']) < len(plane_order):
-#                         h5ds.resize(len(plane_order, axis = 3))
-#                         h5ds.flush()
-#                         h5ds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
-#                     h5ds.resize(h5ds.shape[0] + 1, axis = 0)
-#                     h5ds.flush()
-#                     h5ds[-1] = image_pixeldata
-#                     h5ds.flush()
-#
-#                 # write channels
-#                 for channel_loc in channel_masks[fov_id]:
-#                     channel_id, channel_slice = mm3.cut_slice(image_pixeldata, channel_loc)
-#
-#                     h5nds = h5f[u'channel_%04d' % channel_id]
-#                     # adjust plane names if need be
-#                     if len(h5nds.attrs['plane_names']) < len(plane_order):
-#                         h5nds.resize(len(plane_order), axis = 3)
-#                         h5nds.flush()
-#                         h5nds.attrs['plane_names'] = [p.encode('utf8') for p in plane_order]
-#                     h5nds.resize(h5nds.shape[0] + 1, axis = 0)
-#                     h5nds.flush()
-#                     h5nds[-1] = channel_slice
-#                     h5nds.flush()
-#
-#                     # add to subtraction if it has been initiated and flag is on
-#                     if subtract and channel_id in cell_peaks:
-#                             # do subtraction
-#                             subtracted_data = subtract_phase([channel_slice, empty_mean])
-#                             subtracted_image = subtracted_data[0] # subtracted image
-#                             offset = subtracted_data[1]
-#
-#                             # get the image data set for this channel and append sub image
-#                             h5si = h5s[u'subtracted_%04d' % channel_id]
-#                             h5si.resize(h5si.shape[0] + 1, axis = 0) # add a space fow new s image
-#                             h5si.flush()
-#                             h5si[-1] = subtracted_image
-#                             h5si.flush()
-#
-#                             # adjust plane names if need be
-#                             if len(h5si.attrs['plane_names']) < (len(plane_order)+1):
-#                                 h5si.resize(len(plane_order, axis = 3))
-#                                 h5si.flush()
-#                                 # rearrange plane names
-#                                 plane_names = [p.encode('utf8') for p in plane_order]
-#                                 plane_names.append(plane_names.pop(0)) # move phas to back
-#                                 plane_names.insert(0, 'subtracted_phase') # put sub first
-#                                 h5si.attrs['plane_names'] = plane_names # set new attribute
-#
-#                             # add offset information
-#                             h5os = h5s[u'offsets_%04d' % channel_id]
-#                             h5os.resize(h5os.shape[0] + 1, axis = 0) # add a space fow new s image
-#                             h5os.flush()
-#                             h5os[-1] = offset
-#                             h5os.flush()
-#
-#                 # append metdata for subtraction
-#                 if subtract:
-#                     sub_mds = h5s[u'metadata']
-#                     sub_mds.resize(sub_mds.shape[0] + 1, axis = 0)
-#                     sub_mds.flush()
-#                     sub_mds[-1] = np.array([image_data['metadata']['x'],
-#                                     image_data['metadata']['y'], image_data['metadata']['jdn']])
-#                     sub_mds.flush()
-#
-#                     h5s.close() # close file (can't use `with` context manager here)
-#
-#                 returnvalue = True
-#     except:
-#         try:
-#             if h5s is not None:
-#                 h5s.close()
-#         except:
-#             pass
-#         warning(sys.exc_info()[0])
-#         warning(sys.exc_info()[1])
-#         warning(traceback.print_tb(sys.exc_info()[2]))
-#
-#     # release the write lock
-#     hdf5_locks[fov_id].release()
-#
-#     return returnvalue
+# get params is the major function which processes raw TIFF images
+def get_tif_params(image_filename, find_channels=True):
+    '''This is a damn important function for getting the information
+    out of an image. It loads a tiff file, pulls out the image data, and the metadata,
+    including the location of the channels if flagged.
+
+    it returns a dictionary like this for each image:
+
+    'filename': image_filename,
+    'fov' : image_metadata['fov'], # fov id
+    't' : image_metadata['t'], # time point
+    'jdn' : image_metadata['jdn'], # absolute julian time
+    'x' : image_metadata['x'], # x position on stage [um]
+    'y' : image_metadata['y'], # y position on stage [um]
+    'plane_names' : image_metadata['plane_names'] # list of plane names
+    'channels': cp_dict, # dictionary of channel locations
+
+    Called by
+    mm3_Compile.py __main__
+
+    Calls
+    mm3.extract_metadata
+    mm3.find_channels
+    '''
+
+    try:
+        # open up file and get metadata
+        try:
+            with tiff.TiffFile(image_filename) as tif:
+                image_data = tif.asarray()
+                image_metadata = mm3.get_tif_metadata_elements(tif)
+        except: # this is just a timer in case it doesn't open fast enough
+            time.sleep(1)
+            with tiff.TiffFile(image_filename) as tif:
+                image_data = tif.asarray()
+                image_metadata = mm3.get_tif_metadata(tif)
+
+        # look for channels if flagged
+        if find_channels:
+            # fix the image orientation and get the number of planes
+            image_data = mm3.fix_orientation(image_data)
+
+            # if the image data has more than 1 plane restrict image_data to phase,
+            # which should have highest mean pixel data
+            if len(image_data.shape) > 2:
+                ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                image_data = image_data[ph_index]
+
+            # get shape of single plane
+            img_shape = [image_data.shape[0], image_data.shape[1]]
+
+            # find channels on the processed image
+            chnl_loc_dict = mm3.find_channel_locs(image_data)
+
+        information('Analyzed %s' % image_filename)
+
+        # return the file name, the data for the channels in that image, and the metadata
+        return {'filename': image_filename,
+                'fov' : image_metadata['fov'], # fov id
+                't' : image_metadata['t'], # time point
+                'jd' : image_metadata['jd'], # absolute julian time
+                'x' : image_metadata['x'], # x position on stage [um]
+                'y' : image_metadata['y'], # y position on stage [um]
+                'planes' : image_metadata['planes'], # list of plane names
+                'shape' : img_shape, # image shape x y in pixels
+                'channels' : chnl_loc_dict} # dictionary of channel locations
+
+    except:
+        warning('Failed get_params for ' + image_filename.split("/")[-1])
+        print(sys.exc_info()[0])
+        print(sys.exc_info()[1])
+        print(traceback.print_tb(sys.exc_info()[2]))
+        return {'filename': image_filename, 'analyze_success': False}
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
