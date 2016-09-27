@@ -85,14 +85,14 @@ def get_tif_params(image_filename, find_channels=True):
 
     it returns a dictionary like this for each image:
 
-    { 'filename': image_filename,
-             'metadata': image_metadata,
-             'image_size' : image_size, # [image.shape[0], image.shape[1]]
-             'channels': cp_dict,
-             'analyze_success': True,
-             'fov': -1, # fov (zero indexed)
-             'sent_to_write': False,
-             'write_success': False}
+    'filename': image_filename,
+    'fov' : image_metadata['fov'], # fov id
+    't' : image_metadata['t'], # time point
+    'jdn' : image_metadata['jdn'], # absolute julian time
+    'x' : image_metadata['x'], # x position on stage [um]
+    'y' : image_metadata['y'], # y position on stage [um]
+    'plane_names' : image_metadata['plane_names'] # list of plane names
+    'channels': cp_dict, # dictionary of channel locations
 
     Called by
     mm3_Compile.py __main__
@@ -130,9 +130,6 @@ def get_tif_params(image_filename, find_channels=True):
         if len(image_data.shape) > 2:
             ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
             image_data = image_data[ph_index]
-
-        # save the shape data
-        image_shape = [image_data.shape[0], image_data.shape[1]]
 
         # find channels if desired
         if find_channels:
@@ -320,7 +317,6 @@ def get_tif_params(image_filename, find_channels=True):
                  'x' : image_metadata['x'], # x position on stage [um]
                  'y' : image_metadata['y'], # y position on stage [um]
                  'plane_names' : image_metadata['plane_names'] # list of plane names
-                 'image_shape' : image_shape, # [x,y] size of image in pixels (same for all planes)
                  'channels': cp_dict, # dictionary of channel locations
     except:
         warning('Failed get_params for ' + image_filename.split("/")[-1])
