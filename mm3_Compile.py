@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from __future__ import print_function
 def warning(*objs):
-    print(time.strftime("%H:%M:%S WARNING:", time.localtime()), *objs, file=sys.stderr)
+    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
@@ -533,7 +533,7 @@ if __name__ == "__main__":
             # for each file name. True means look for channels
 
             # This is the non-parallelized version (useful for debug)
-            #analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
+            # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
 
             # Parallelized
             analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
@@ -557,7 +557,7 @@ if __name__ == "__main__":
         # save metadata to a .pkl and a human readable json file
         with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata)
-        with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
+        with open(ana_dir + '/TIFF_metadata.txt', 'w') as tiff_metadata:
             json.dump(analyzed_imgs, tiff_metadata)
 
         information('Saved metadata from analyzed images')

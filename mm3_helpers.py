@@ -116,25 +116,17 @@ def get_tif_params(image_filename, find_channels=True):
 
         # look for channels if flagged
         if find_channels:
-            # make the image 3d and crop the top & bottom per the params['image_vertical_crop'] parameter. This is needed for fix_orientation but should be changed
-            if len(image_data.shape) == 2:
-                image_data = np.expand_dims(image_data, 0)
-
-            # crop or pad image
-            if params['image_vertical_crop'] >= 0:
-                image_data = image_data[:,params['image_vertical_crop']:image_data.shape[1] -
-                                          params['image_vertical_crop'],:]
-            else:
-                padsize = abs(params['image_vertical_crop'])
-                image_data = np.pad(image_data, ((0,0), (padsize, padsize), (0,0)), mode='edge')
-
             # fix the image orientation and get the number of planes
             image_data = fix_orientation(image_data)
 
-            # if the image data has more than 1 plane restrict image_data to just the first
+            # if the image data has more than 1 plane restrict image_data to phase,
+            # which should have highest mean pixel data
             if len(image_data.shape) > 2:
                 ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
                 image_data = image_data[ph_index]
+
+            # get shape of single plane
+            img_shape = [image_data.shape[0], image_data.shape[1]]
 
             # find channels on the processed image
             chnl_loc_dict = find_channel_locs(image_data)
@@ -145,11 +137,13 @@ def get_tif_params(image_filename, find_channels=True):
         return {'filename': image_filename,
                 'fov' : image_metadata['fov'], # fov id
                 't' : image_metadata['t'], # time point
-                'jd' : image_metadata['jdn'], # absolute julian time
+                'jd' : image_metadata['jd'], # absolute julian time
                 'x' : image_metadata['x'], # x position on stage [um]
                 'y' : image_metadata['y'], # y position on stage [um]
-                'planes' : image_metadata['planes'] # list of plane names
-                'channels': chnl_loc_dict, # dictionary of channel locations
+                'planes' : image_metadata['planes'], # list of plane names
+                'shape' : img_shape # image shape x y in pixels
+                'channels' : chnl_loc_dict} # dictionary of channel locations
+
     except:
         warning('Failed get_params for ' + image_filename.split("/")[-1])
         print(sys.exc_info()[0])
@@ -179,8 +173,8 @@ def get_tif_metadata_elements(tif):
     '''
 
     # image Metadata
-    idata = { 'fov': -1
-              't' : -1
+    idata = { 'fov': -1,
+              't' : -1,
               'jd': -1 * 0.0,
               'x': -1 * 0.0,
               'y': -1 * 0.0,
@@ -266,10 +260,11 @@ def get_tif_metadata_elements(tif):
                     planes.append(words[idx+1])
 
                 idata['planes'] = planes
+
     return idata
 
 # finds the location of channels in a tif
-def find_channel_locs(tif):
+def find_channel_locs(image_data):
     '''Finds the location of channels from a phase contrast image. The channels are returned in
     a dictionary where the key is the x position of the channel in pixel and the value is a
     dicionary with the open and closed end in pixels in y.
@@ -457,6 +452,9 @@ def find_channel_locs(tif):
 
     except:
         warning('Channel locating failed.')
+        print(sys.exc_info()[0])
+        print(sys.exc_info()[1])
+        print(traceback.print_tb(sys.exc_info()[2]))
         return -1
 
 ### functions about converting dates and times
@@ -512,84 +510,52 @@ def datetime_to_jd(date):
 # define function for flipping the images on an FOV by FOV basis
 def fix_orientation(image_data):
     '''
+    Fix the orientation. The standard direction for channels to open to is down.
+
     called by
     process_tif
     get_params
     '''
+
+    # user parameter indicates how things should be flipped
     image_orientation = params['image_orientation']
 
-    # double is for FOVs with channels pointed up and down
-    if image_orientation == "double":
-        # make a projection so the values along the x axis (each row) are summed into one value at each y position
-        # axis = 1 means sum the rows to get one column of data
-        projection_y = image_data.sum(axis = 1)
-        # re zero this array
-        projection_y = np.max(projection_y) - projection_y
-        # get an int? value  two fifths of the hight of the image
-        cut_px = image_data.shape[0] / 2.5
-        # get a whole number value one eith of the height of the image
-        search_cut = image_data.shape[0] / 8
-        # use the function match_template on the vertial stacks of ( (two copies of the projection with a margin cut off at both ends) and (two copies of the projection with a larger margin cut off at both ends) )
+    # if this is just a phase image give in an extra layer so rest of code is fine
+    flat = False # flag for if the image is flat or multiple levels
+    if len(image_data.shape) == 2:
+        image_data = np.expand_dims(image_data, 0)
+        flat = True
 
-        # the match function finds the smaller image in the larger image (OR AT LEAST THINGS LIKT IT) by means of calculating correltation between a smaller image and a larger image at each position in thet matrix
-        # it returns the correlation matrix (which is presumably a reveled one dimensional list of correlations? or maybe 2 dimensioanl?)
-        match_result = match_template(np.vstack((projection_y[search_cut:projection_y.shape[0]-search_cut], projection_y[search_cut:projection_y.shape[0]-search_cut])), np.fliplr(np.vstack((projection_y[cut_px:image_data.shape[0] - cut_px], projection_y[cut_px:image_data.shape[0] - cut_px]))))
-        # we want the position of the correaltin matrix
-        # np.unravel_index is a function which returns the rown and column position for 1 dimensional ravled indexes (indexes where you count as you go along an axis and then loop back when you hit the end and keep counting)
-        # you can feed it an array of these index position valuse and it will return a tuple with an array for the row positions and an array for the column positions for each index given
-        # note that numpy's argmax function returns the "Indices of the maximum values along an axis"
-        ij = np.unravel_index(np.argmax(match_result), match_result.shape)
-        # get the second dimension array into "c_peak" and the first dimension array into "y"
-        # the ::-1 returns the elements starting at the back, this should be the same as "y, c_peak  = ij[::1]"
-        c_peak, y = ij[::-1]
-        # shift the position values represented in c_peak by the margin calculated earlier
-        c_peak += search_cut
-        # make "offset" equal to half of the distance between the peak
-        offset = (c_peak - cut_px) / 2
-        # set cutposiotn to be the offset plus half od the image size
-        cut_position = (image_data.shape[0]/2) + offset
-        # take the image from a position 28 pixels up from the cut_cut position
-        # take that porion and flip it
-        # it is now the top image called "im_top"
-        im_top = np.flipud(image_data[:cut_position-28,:])
-        # keep the portion of the image for im_bottom in a symettrical fashion
-        im_bottom = image_data[cut_position+28:,:]
-
-        # make the tow images have the same size by "padding" them
-        if im_top.shape[0] > im_bottom.shape[0]:
-            im_bottom = np.pad(im_bottom, ((0, abs(im_top.shape[0] - im_bottom.shape[0])),(0,0)), mode = "edge")
-        else:
-            im_top = np.pad(im_top, ((0, abs(im_bottom.shape[0] - im_top.shape[0])),(0,0)), mode = "edge")
-
-        # return the two images "glued together horizauntally" by usning numpy's horizauntal stack function
-        return np.hstack((im_bottom, im_top))
-        #mind you we are now done dealing with the double condition
-    # next we deal with the FOV's to be flipped
-    # setting image_orientation to 'auto' will use autodetection, otherwise
-    # the usual user-defined flipping will ensue
+    # setting image_orientation to 'auto' will use autodetection
     if image_orientation == "auto":
-        if len(image_data.shape) == 2:
-            image_data = np.expand_dims(image_data, 0)
-        # for multichannel images, pick the plane to analyze with the highest mean px value
-        ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
-        if np.argmax(image_data[ph_channel].mean(axis = 1)) > image_data[ph_channel].shape[0] / 2:
-            return image_data
-        else:
-            return image_data[:,::-1,:]
-    else:
-        if len(image_data.shape) == 2:
-            image_data = np.expand_dims(image_data, 0)
-        # flip the images if "up" is the specified image orrientation
-        if image_orientation == "up":
-            return image_data[:,::-1,:]
-        # do not flip the images if "down is the specified image orientation"
-        elif image_orientation == "down":
-            return image_data
-        # this image has not fallen into any of the specified categories then -> "HUSTON WE HAVE A PROBLEM"
-        # you will want to edit your YAML parameters file!
-        else:
-            raise AttributeError
+        # crop image to just the area of the channels
+        if params['image_vertical_crop'] >= 0:
+            image_data = image_data[:,params['image_vertical_crop']:image_data.shape[1] -
+                                      params['image_vertical_crop'],:]
 
+        # Pick the plane to analyze with the highest mean px value (should be phase)
+        ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+
+        # flip based on the index of the higest average row value
+        if np.argmax(image_data[ph_channel].mean(axis = 1)) < image_data[ph_channel].shape[0] / 2:
+            image_data = image_data[:,::-1,:]
+        else:
+            pass # no need to do anything
+
+    # flip if up is chosen
+    elif image_orientation == "up":
+        return image_data[:,::-1,:]
+
+    # do not flip the images if "down is the specified image orientation"
+    elif image_orientation == "down":
+        pass
+
+    if flat
+        image_data = image_data[0] # just return that first layer
+
+    return image_data
+
+# cuts out channels from the image
 def cut_slice(image_pixel_data, channel_loc):
     '''Takes an image and cuts out the channel based on the slice location
     slice location is the list with the peak information, in the form
