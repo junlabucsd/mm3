@@ -21,6 +21,9 @@ import scipy.stats as spstats
 import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
+import copy
+from scipy import ndimage # used in make_masks
+from skimage.segmentation import clear_border # used in make_masks
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -37,8 +40,6 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import tifffile as tiff
-
-
 
 ### functions ###########################################################
 # load the parameters file into a global dictionary for this module
@@ -141,7 +142,7 @@ def get_tif_params(image_filename, find_channels=True):
                 'x' : image_metadata['x'], # x position on stage [um]
                 'y' : image_metadata['y'], # y position on stage [um]
                 'planes' : image_metadata['planes'], # list of plane names
-                'shape' : img_shape # image shape x y in pixels
+                'shape' : img_shape, # image shape x y in pixels
                 'channels' : chnl_loc_dict} # dictionary of channel locations
 
     except:
@@ -457,53 +458,155 @@ def find_channel_locs(image_data):
         print(traceback.print_tb(sys.exc_info()[2]))
         return -1
 
-### functions about converting dates and times
-### Functions
-def days_to_hmsm(days):
-    hours = days * 24.
-    hours, hour = math.modf(hours)
-    mins = hours * 60.
-    mins, min = math.modf(mins)
-    secs = mins * 60.
-    secs, sec = math.modf(secs)
-    micro = round(secs * 1.e6)
-    return int(hour), int(min), int(sec), int(micro)
+# make masks from initial set of images (same images as clusters)
+def make_masks(analyzed_imgs):
+    '''
+    Make masks goes through the channel locations in the image metadata and builds a consensus
+    Mask for each image per fov, which it returns as dictionary named channel_masks.
+    The keys in this dictionary are fov id, and the values is a another dictionary. This dict's keys are channel locations (peaks) and the values is a [2][2] array:
+    [[minrow, maxrow],[mincol, maxcol]] of pixel locations designating the corner of each mask
+    for each channel on the whole image
 
-def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-    days = sec + (micro / 1.e6)
-    days = min + (days / 60.)
-    days = hour + (days / 60.)
-    return days / 24.
+    One important consequence of these function is that the channel ids and the size of the
+    channel slices are decided now. Updates to mask must coordinate with these values.
 
-def date_to_jd(year,month,day):
-    if month == 1 or month == 2:
-        yearp = year - 1
-        monthp = month + 12
-    else:
-        yearp = year
-        monthp = month
-    # this checks where we are in relation to October 15, 1582, the beginning
-    # of the Gregorian calendar.
-    if ((year < 1582) or
-        (year == 1582 and month < 10) or
-        (year == 1582 and month == 10 and day < 15)):
-        # before start of Gregorian calendar
-        B = 0
-    else:
-        # after start of Gregorian calendar
-        A = math.trunc(yearp / 100.)
-        B = 2 - A + math.trunc(A / 4.)
-    if yearp < 0:
-        C = math.trunc((365.25 * yearp) - 0.75)
-    else:
-        C = math.trunc(365.25 * yearp)
-    D = math.trunc(30.6001 * (monthp + 1))
-    jd = B + C + D + day + 1720994.5
-    return jd
+    Parameters
+    analyzed_imgs : dict
+        image information created by get_params
 
-def datetime_to_jd(date):
-    days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
-    return date_to_jd(date.year, date.month, days)
+    Returns
+    channel_masks : dict
+        dictionary of consensus channel masks.
+
+    Called By
+    mm3_Compile.py
+
+    Calls
+    '''
+    information("Determining initial channel masks...")
+
+    # declare temp variables from yaml parameter dict.
+    crop_hw = params['crop_half_width']
+    chan_lp = params['channel_length_pad']
+
+    #intiaize dictionary
+    channel_masks = {}
+
+    # get the size of the images (hope they are the same)
+    for img_k, img_v in analyzed_imgs.iteritems():
+        image_rows = img_v['shape'][0] # x pixels
+        image_cols = img_v['shape'][1] # y pixels
+        break # just need one. using iteritems mean the whole dict doesn't load
+
+    # get the fov ids
+    fovs = []
+    for img_k, img_v in analyzed_imgs.iteritems():
+        if img_v['fov'] not in fovs:
+            fovs.append(img_v['fov'])
+
+        # if you have found as many fovs as params indicates break out
+        if len(fovs) == params['num_fovs']:
+            break
+
+    # max width and length across all fovs. channels will get expanded by these values
+    # this important for later updates to the masks, which should be the same
+    max_chnl_mask_len = 0
+    max_chnl_mask_wid = 0
+
+    # for each fov make a channel_mask dictionary from consensus mask for each fov
+    for fov in fovs:
+        # initialize a the dict and consensus mask
+        channel_masks_1fov = {} # dict which holds channel masks {peak : [[y1, y2],[x1,x2]],...}
+        consensus_mask = np.zeros([image_rows, image_cols]) # mask for labeling
+
+        # bring up information for each image
+        for img_k, img_v in analyzed_imgs.iteritems():
+            # skip this one if it is not of the current fov
+            if img_v['fov'] != fov:
+                continue
+
+            # for each channel in each image make a single mask
+            img_chnl_mask = np.zeros([image_rows, image_cols])
+
+            # and add the channel mask to it
+            for chnl_peak, peak_ends in img_v['channels'].iteritems():
+                # pull out the peak location and top and bottom location
+                # and expand by padding (more padding done later for width)
+                x1 = max(chnl_peak - int(crop_hw), 0)
+                x2 = min(chnl_peak + int(crop_hw), image_cols)
+                y1 = peak_ends['closed_end_px']
+                y2 = peak_ends['open_end_px']
+
+                # add it to the mask for this image
+                img_chnl_mask[y1:y2, x1:x2] = 1
+
+            # add it to the consensus mask
+            consensus_mask += img_chnl_mask
+
+        # average the consensus mask
+        consensus_mask = consensus_mask.astype('float32') / float(np.amax(consensus_mask))
+
+        # threshhold and homogenize each channel mask within the mask, label them
+        # label when value is above 0.1 (so 90% occupancy), transpose.
+        # the [0] is for the array ([1] is the number of regions)
+        # It transposes and then transposes again so regions are labeled left to right
+        # clear border it to make sure the channels are off the edge
+        consensus_mask = ndimage.label(clear_border(consensus_mask.T > 0.1))[0].T
+
+        # go through each label
+        for label in np.unique(consensus_mask):
+            if label == 0: # label zero is the background
+                continue
+            binary_core = consensus_mask == label
+
+            # clean up the rough edges
+            poscols = np.any(binary_core, axis = 0) # column positions where true (any)
+            posrows = np.any(binary_core, axis = 1) # row positions where true (any)
+
+            # channel_id givin by horizontal position
+            # this is important. later updates to the positions will have to check
+            # if their channels contain this median value to match up
+            channel_id = int(np.median(np.where(poscols)[0]))
+
+            # store the edge locations of the channel mask in the dictionary
+            min_row = np.min(np.where(posrows)[0]) - chan_lp # pad length
+            max_row = np.max(np.where(posrows)[0]) + chan_lp
+            min_col = max(np.min(np.where(poscols)[0]) - 5, 0) # pad width
+            max_col = min(np.max(np.where(poscols)[0]) + 5, image_cols)
+
+            # if the min/max cols are within the image bounds,
+            # add the mask, as 4 points, to the dictionary
+            if min_col > 0 and max_col < image_cols:
+                channel_masks_1fov[channel_id] = [[min_row, max_row], [min_col, max_col]]
+
+                # find the largest channel width and height while you go round
+                max_chnl_mask_len = int(max(max_chnl_mask_len, max_row - min_row))
+                max_chnl_mask_wid = int(max(max_chnl_mask_wid, max_col - min_col))
+
+        # add channel_mask dictionary to the fov dictionary, use copy to play it safe
+        channel_masks[fov] = channel_masks_1fov.copy()
+
+    # update all channel masks to be the max size
+    cm_copy = channel_masks.copy()
+
+    for fov, peaks in channel_masks.iteritems():
+        # f_id = int(fov)
+        for peak, chnl_mask in peaks.iteritems():
+            # p_id = int(peak)
+            # just add length to the open end (top of image, low column)
+            if chnl_mask[0][1] - chnl_mask[0][0] !=  max_chnl_mask_len:
+                cm_copy[fov][peak][0][1] = chnl_mask[0][0] + max_chnl_mask_len
+            # enlarge widths around the middle, but make sure you don't get floats
+            if chnl_mask[1][1] - chnl_mask[1][0] != max_chnl_mask_wid:
+                wid_diff = max_chnl_mask_wid - (chnl_mask[1][1] - chnl_mask[1][0])
+                if wid_diff % 2 == 0:
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - wid_diff/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + wid_diff/2, image_cols - 1)
+                else:
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
+
+    return cm_copy
 
 ### functions about trimming, padding, and manipulating images
 # cuts out a channel from an tiff image (that has been processed)
@@ -537,6 +640,7 @@ def fix_orientation(image_data):
         ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
 
         # flip based on the index of the higest average row value
+        # this should be closer to the opening
         if np.argmax(image_data[ph_channel].mean(axis = 1)) < image_data[ph_channel].shape[0] / 2:
             image_data = image_data[:,::-1,:]
         else:
@@ -550,10 +654,67 @@ def fix_orientation(image_data):
     elif image_orientation == "down":
         pass
 
-    if flat
+    if flat:
         image_data = image_data[0] # just return that first layer
 
     return image_data
+
+# extract image and do early processing on tifs before slicing
+def process_tif(image_data):
+    '''
+    Processes tif images, after opening them. fixes the orientation, reorders the planes,
+    and rotates the way the data is stored.
+
+    Parameters
+    image_data : dictionary of image data per image
+        Made by get_params and edited by __main__
+
+    Returns
+    image_edited : numpy array with planes
+        this is the tiff image data
+
+    Called By
+    data_writer
+
+    Calls
+    tiff.imread
+    fix_orientation_perfov
+    '''
+
+    # this gets the original picture again from the folder.
+    image_pixeldata = tiff.imread(image_data['filename'])
+    image_planes = image_data['metadata']['plane_names']
+
+    plane_order = image_data['write_plane_order']
+
+    if len(image_planes) > len(plane_order):
+        warning('image_planes (%d, %s) longer than plane_order (%d)!' % (len(image_planes), str(image_planes), len(plane_order)))
+        return False
+
+    image_pixeldata = fix_orientation_perfov(image_pixeldata, image_data['filename'])
+    assert(len(image_pixeldata.shape) > 2)
+    assert(np.argmin(image_pixeldata.shape) == 0)
+
+    # re-stack planes of the image data by the plane_names order
+    aligned_planes = np.zeros([len(plane_order), image_pixeldata.shape[1], image_pixeldata.shape[2]])
+    for pn_i, pn in enumerate(plane_order):
+        if pn in image_planes:
+            aligned_planes[pn_i] = image_pixeldata[image_planes.index(pn)]
+
+    # rotate image_data such that data is stored per-pixel instead of per-plane;
+    # there is no reason this is required other than it being a common standard
+    # in image data e.g. if you want to get just a section of the image you can
+    # omit the extra :, at the beginning of indexing notation
+    image_pixeldata = np.rollaxis(aligned_planes, 0, 3)
+
+    # pad/crop the image as appropriate
+    if image_vertical_crop >= 0:
+        image_pixeldata = image_pixeldata[image_vertical_crop:image_pixeldata.shape[1]-image_vertical_crop,:,:]
+    else:
+        padsize = abs(image_vertical_crop)
+        image_pixeldata = np.pad(image_pixeldata, ((padsize, padsize), (0,0), (0,0)), mode='edge')
+
+    return image_pixeldata
 
 # cuts out channels from the image
 def cut_slice(image_pixel_data, channel_loc):
@@ -829,3 +990,51 @@ def subtract_backlog(fov_id):
     hdf5_locks[fov_id].release()
 
     return return_value
+
+### functions about converting dates and times
+### Functions
+def days_to_hmsm(days):
+    hours = days * 24.
+    hours, hour = math.modf(hours)
+    mins = hours * 60.
+    mins, min = math.modf(mins)
+    secs = mins * 60.
+    secs, sec = math.modf(secs)
+    micro = round(secs * 1.e6)
+    return int(hour), int(min), int(sec), int(micro)
+
+def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
+    days = sec + (micro / 1.e6)
+    days = min + (days / 60.)
+    days = hour + (days / 60.)
+    return days / 24.
+
+def date_to_jd(year,month,day):
+    if month == 1 or month == 2:
+        yearp = year - 1
+        monthp = month + 12
+    else:
+        yearp = year
+        monthp = month
+    # this checks where we are in relation to October 15, 1582, the beginning
+    # of the Gregorian calendar.
+    if ((year < 1582) or
+        (year == 1582 and month < 10) or
+        (year == 1582 and month == 10 and day < 15)):
+        # before start of Gregorian calendar
+        B = 0
+    else:
+        # after start of Gregorian calendar
+        A = math.trunc(yearp / 100.)
+        B = 2 - A + math.trunc(A / 4.)
+    if yearp < 0:
+        C = math.trunc((365.25 * yearp) - 0.75)
+    else:
+        C = math.trunc(365.25 * yearp)
+    D = math.trunc(30.6001 * (monthp + 1))
+    jd = B + C + D + day + 1720994.5
+    return jd
+
+def datetime_to_jd(date):
+    days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
+    return date_to_jd(date.year, date.month, days)
