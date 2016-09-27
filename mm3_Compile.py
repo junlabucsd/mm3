@@ -20,6 +20,7 @@ import re
 import glob
 import gevent
 import marshal
+import json # used to write data out in human readable format
 try:
     import cPickle as pickle
 except:
@@ -36,20 +37,6 @@ from scipy import ndimage
 # from sklearn.cluster import KMeans
 # from skimage.exposure import rescale_intensity, equalize_hist
 from skimage.segmentation import clear_border
-
-# for watching file events
-use_inotify = False
-use_watchdog = False
-if platform == "linux" or platform == "linux2":
-    # linux
-    import gevent_inotifyx as inotify
-    from gevent.queue import Queue as gQueue
-    use_inotify = True
-elif platform == "darwin":
-    # OS X
-    from watchdog.observers import Observer
-    from watchdog.events import PatternMatchingEventHandler
-    use_watchdog = True
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -558,7 +545,7 @@ if __name__ == "__main__":
 
         information('Image analyses pool finished, getting results.')
 
-        # get results
+        # get results from the pool and put them in a dictionary
         for fn, result in analyzed_imgs.iteritems():
             if result.successful():
                 analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
@@ -567,8 +554,11 @@ if __name__ == "__main__":
 
         information('Got results from analyzed images.')
 
+        # save metadata to a .pkl and a human readable json file
         with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
-                pickle.dump(analyzed_imgs, tiff_metadata)
+            pickle.dump(analyzed_imgs, tiff_metadata)
+        with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
+            json.dump(analyzed_imgs, tiff_metadata)
 
         information('Saved metadata from analyzed images')
 
