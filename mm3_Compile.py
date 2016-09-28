@@ -160,10 +160,13 @@ def tiff_slice_and_write(image_params, channel_masks):
     # cut out the channels as per channel masks for this fov
     for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
 
-        channel_slice = mm3.cut_slice(image_data, channeel_loc)
+        channel_slice = mm3.cut_slice(image_data, channel_loc)
 
-        channel_filename = chnl_dir + params['experiment_name'] + '_xy%03d_p%04d_t%04d.tif' % (fov_id, peak, t_point)
+        # make a filename for the channel
+        # chnl_dir and p will be looked for in the scope above (__main__)
+        channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_t%04d.tif' % (fov_id, peak, t_point)
 
+        # Save channel
         tiff.imsave(channel_filename, channel_slice)
 
         information("Wrote %s" % channel_filename)
@@ -292,21 +295,6 @@ if __name__ == "__main__":
 
         information("Channel masks saved.")
 
-        for fov in channel_masks.iteritems():
-            # get filenames just for this fov along with the julian date of acquistion
-            send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
-
-            # sort the filenames by jdn
-            send_to_write = sorted(send_to_write, key=lambda time: time[1])
-
-            # writing out each time point
-            for image_key, jds in send_to_write:
-                # get the image parameter dictionary from the analyzed image dict.
-                image_params = analyzed_imgs[image_key]
-
-                # send to function which slices and writes channels out
-                tiff_slice_and_write(image_params, channel_masks)
-
     except:
         warning("Mask creation try block failed.")
         print(sys.exc_info()[0])
@@ -316,7 +304,20 @@ if __name__ == "__main__":
     ### Slice and write TIFF files into channels ###################################################
     # try:
         # send writes to the pool based on lowest jdn not written
+    for fov, peaks in channel_masks.iteritems():
+        # get filenames just for this fov along with the julian date of acquistion
+        send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
 
+        # sort the filenames by jdn
+        send_to_write = sorted(send_to_write, key=lambda time: time[1])
+
+        # writing out each time point
+        for fn_jd_pair in send_to_write:
+            # get the image parameter dictionary from the analyzed image dict.
+            image_params = analyzed_imgs[fn_jd_pair[0]]
+
+            # send to function which slices and writes channels out
+            tiff_slice_and_write(image_params, channel_masks)
 
 
             # # data_writer is the major hdf5 writing function.

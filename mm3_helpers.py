@@ -599,16 +599,16 @@ def cut_slice(image_data, channel_loc):
         channel_slice = cut_slice[image_pixel_data, channel_loc]
         # ... do something with the slice
 
-    NOTE: this function is for images that have gone through the
-          rotation in process_tif
+    NOTE: this function is for images that have 3 dimension, and the shape is
+        [x, y, c]
     '''
 
     # make slice object
     channel_slicer = np.s_[channel_loc[0][0]:channel_loc[0][1],
                            channel_loc[1][0]:channel_loc[1][1],:]
-    channel_slice = image_pixel_data[channel_slicer] # cut
+    channel_slice = image_data[channel_slicer] # cut
 
-    return channel_id, channel_slice
+    return channel_slice
 
 # remove margins of zeros from 2d numpy array
 def trim_zeros_2d(array):
