@@ -125,6 +125,51 @@ def get_tif_params(image_filename, find_channels=True):
         print(traceback.print_tb(sys.exc_info()[2]))
         return {'filename': image_filename, 'analyze_success': False}
 
+# slice_and_write cuts up the image files and writes them out to tiff stacks
+def tiff_slice_and_write(image_params, channel_masks):
+    '''Writes out 4D stacks of TIFF images per channel.
+
+
+    Called by
+    __main__
+
+    Calls
+
+    '''
+
+    information("Writing %s" % image_params['filename'])
+
+    # load the tif
+    with tiff.TiffFile(image_params['filename']) as tif:
+        image_data = tif.asarray()
+
+    # declare identification variables
+    fov_id = image_params['fov']
+    t_point = image_params['t']
+
+    # fix orientation channels were found in fixed images
+    image_data = mm3.fix_orientation(image_data)
+
+    # add additional axis if the image is flat
+    if len(image_data.shape) == 2:
+        image_data = np.expand_dims(image_data, 0)
+
+    # rotate image_data such that data is stored per-pixel instead of per-plane
+    image_data = np.rollaxis(image_data, 0, 3)
+
+    # cut out the channels as per channel masks for this fov
+    for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
+
+        channel_slice = mm3.cut_slice(image_data, channeel_loc)
+
+        channel_filename = chnl_dir + params['experiment_name'] + '_xy%03d_p%04d_t%04d.tif' % (fov_id, peak, t_point)
+
+        tiff.imsave(channel_filename, channel_slice)
+
+        information("Wrote %s" % channel_filename)
+
+    return
+
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
 
@@ -149,10 +194,6 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # hardcoded variables and flags
-    # p['compress_hdf5'] = True # flag for if images should be gzip compressed in hdf5
-    # p['tif_creator'] = 'elements' # what is the source of the TIFFs?
-
     ### multiprocessing variables and set up.
     # set up a dictionary of locks to prevent HDF5 disk collisions
     # global hdf5_locks
@@ -167,16 +208,17 @@ if __name__ == "__main__":
     else:
         num_analyzers = cpu_count*2 - 2
 
-    # create the analysis folder if it doesn't exist
-    if not os.path.exists(p['experiment_directory'] + p['analysis_directory']):
-        os.makedirs(p['experiment_directory'] + p['analysis_directory'])
-    # create folder for sliced data.
-    if not os.path.exists(p['experiment_directory'] + p['analysis_directory'] + 'originals/'):
-        os.makedirs(p['experiment_directory'] + p['analysis_directory'] + 'originals/')
-
     # assign shorthand directory names
     TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
     ana_dir = p['experiment_directory'] + p['analysis_directory']
+    chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
+
+    # create the analysis folder if it doesn't exist
+    if not os.path.exists(ana_dir):
+        os.makedirs(ana_dir)
+    # create folder for sliced data.
+    if not os.path.exists(chnl_dir):
+        os.makedirs(chnl_dir)
 
     # declare information variables
     analyzed_imgs = {} # for storing get_params pool results.
@@ -202,10 +244,10 @@ if __name__ == "__main__":
             # for each file name. True means look for channels
 
             # This is the non-parallelized version (useful for debug)
-            # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
+            # analyzed_imgs[fn] = get_tif_params(fn, True)
 
             # Parallelized
-            analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
+            analyzed_imgs[fn] = pool.apply_async(get_tif_params, args=(fn, True))
 
         information('Waiting for image analysis pool to be finished.')
 
@@ -250,6 +292,21 @@ if __name__ == "__main__":
 
         information("Channel masks saved.")
 
+        for fov in channel_masks.iteritems():
+            # get filenames just for this fov along with the julian date of acquistion
+            send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
+
+            # sort the filenames by jdn
+            send_to_write = sorted(send_to_write, key=lambda time: time[1])
+
+            # writing out each time point
+            for image_key, jds in send_to_write:
+                # get the image parameter dictionary from the analyzed image dict.
+                image_params = analyzed_imgs[image_key]
+
+                # send to function which slices and writes channels out
+                tiff_slice_and_write(image_params, channel_masks)
+
     except:
         warning("Mask creation try block failed.")
         print(sys.exc_info()[0])
@@ -257,85 +314,21 @@ if __name__ == "__main__":
         print(traceback.print_tb(sys.exc_info()[2]))
 
     ### Slice and write TIFF files into channels ###################################################
-    try:
-        pass
-        # # check write results and set the success flag as appropriate in the metadata.
-        # # this makes sure things don't get written twice. writing happens next.
-        # # print('dummy')
-        # for wfn in w_result_dict.keys():
-        #     if w_result_dict[wfn].ready():
-        #         w_result = w_result_dict[wfn].get()
-        #         del w_result_dict[wfn]
-        #         if w_result:
-        #             image_metadata[wfn]['write_success'] = True
-        #             successful_write_count += 1 # just add to count
-        #             loop_write_count += 1
-        #             #information("wrote to originals hdf5 %s" % wfn.split("/")[-1])
-        #             del image_metadata[wfn]
-        #         else:
-        #             image_metadata[wfn]['sent_to_write'] = False
-        #             information("Failed to write %s" % wfn.split("/")[-1])
-        #
-        #
-        # # send writes to the pool based on lowest jdn not written after queued writes clear
-        # # for big existing file lists, this is slow like molasses
-        # if mask_created: # only slice and write if channel mask is made
-        #     # get a list of lists of all the fovs not yet written, jdn is the julian date time (exact time)
-        #     def get_not_written_for_fov(fov):
-        #         return [[k, v['metadata']['jdn']] for k, v in image_metadata.items() if v['fov'] == fov and not v['write_success'] and v['write_plane_order']]
-        #     fov_ready_for_write = map(get_not_written_for_fov, range(num_fovs))
-        #
-        #     # writing is done here
-        #     for fov_fns_jdns in fov_ready_for_write:
-        #         if len(fov_fns_jdns) > 0:
-        #             # check if any of these filenames have been sent to write and haven't yet been processed for exit status
-        #             waiting_on_write = np.sum([fn in w_result_dict.keys() for fn, fjdn in fov_fns_jdns]) > 0
-        #             # if no files are waiting on write, send the next image for write
-        #             if not waiting_on_write:
-        #                 # sort the filenames-jdns by jdn
-        #                 fov_fns_jdns = sorted(fov_fns_jdns, key=lambda imd: imd[1])
-        #                 # data_writer is the major hdf5 writing function.
-        #                 # not switched for saving originals and doing subtraction
-        #                 w_result_dict[fov_fns_jdns[0][0]] = wpool.apply_async(data_writer,
-        #                                             [image_metadata[fov_fns_jdns[0][0]],
-        #                                             channel_masks, subtract_on_datawrite[image_metadata[fov_fns_jdns[0][0]]['fov']],
-        #                                             save_originals])
-        #                 image_metadata[fov_fns_jdns[0][0]]['sent_to_write'] = True
-        #
-        #
-        # # write the list of known files to disk
-        # # marshal is 10x faster and 50% more space efficient than cPickle here, but dtypes
-        # # are all python primitives
-        # if len(found_files) >= known_files_last_save_size * 1.1 or time.time() - known_files_last_save_time > 900:
-        #     with open(experiment_directory + analysis_directory + 'found_files.mrshl', 'w') as outfile:
-        #         marshal.dump(found_files, outfile)
-        #     known_files_last_save_time = time.time()
-        #     known_files_last_save_size = len(found_files) * 1.1
-        #     information("Saved intermediate found_files (%d)." % len(found_files))
-        #
-        # # update user current progress
-        # if count % 1000 == 0:
-        #     information("1000 loop time %0.2fs, running metadata total: %d" % (time.time() - t_s_loop, len(image_metadata)))
-        #     information("Analysis ok for %d images (%d total)." %
-        #                 (loop_analysis_count, successful_analysis_count))
-        #     loop_analysis_count = 0 # reset counter
-        #     information("Wrote %d images to hdf5 (%d total)." %
-        #                 (loop_write_count, successful_write_count))
-        #     loop_write_count = 0 # reset loop counter
-        #     count = 0
-        #
-        #     # if there's nothing going on, don't hog the CPU
-        #     if (len(cp_result_dict) == 0 and len(w_result_dict) == 0 and
-        #         len(image_metadata) == 0):
-        #         information("Queues are empty; waiting 5 seconds to loop.")
-        #         information("%d images analyzed, %d written to hdf5." %
-        #                     (successful_analysis_count, successful_write_count))
-        #         time.sleep(5)
+    # try:
+        # send writes to the pool based on lowest jdn not written
 
-        # except KeyboardInterrupt:
-        #         warning("Caught KeyboardInterrupt, terminating workers...")
-    except:
-        warning("Channel slicing try block failed.")
-        print(sys.exc_info()[0])
-        print(sys.exc_info()[1])
-        print(traceback.print_tb(sys.exc_info()[2]))
+
+
+            # # data_writer is the major hdf5 writing function.
+            # # not switched for saving originals and doing subtraction
+            # w_result_dict[fov_fns_jdns[0][0]] = wpool.apply_async(data_writer,
+            #                             [image_metadata[fov_fns_jdns[0][0]],
+            #                             channel_masks, subtract_on_datawrite[image_metadata[fov_fns_jdns[0][0]]['fov']],
+            #                             save_originals])
+            # image_metadata[fov_fns_jdns[0][0]]['sent_to_write'] = True
+
+    # except:
+    #     warning("Channel slicing try block failed.")
+    #     print(sys.exc_info()[0])
+    #     print(sys.exc_info()[1])
+    #     print(traceback.print_tb(sys.exc_info()[2]))

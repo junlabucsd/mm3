@@ -585,68 +585,11 @@ def fix_orientation(image_data):
 
     return image_data
 
-# extract image and do early processing on tifs before slicing
-def process_tif(image_data):
-    '''
-    Processes tif images, after opening them. fixes the orientation, reorders the planes,
-    and rotates the way the data is stored.
-
-    Parameters
-    image_data : dictionary of image data per image
-        Made by get_params and edited by __main__
-
-    Returns
-    image_edited : numpy array with planes
-        this is the tiff image data
-
-    Called By
-    data_writer
-
-    Calls
-    tiff.imread
-    fix_orientation_perfov
-    '''
-
-    # this gets the original picture again from the folder.
-    image_pixeldata = tiff.imread(image_data['filename'])
-    image_planes = image_data['metadata']['plane_names']
-
-    plane_order = image_data['write_plane_order']
-
-    if len(image_planes) > len(plane_order):
-        warning('image_planes (%d, %s) longer than plane_order (%d)!' % (len(image_planes), str(image_planes), len(plane_order)))
-        return False
-
-    image_pixeldata = fix_orientation_perfov(image_pixeldata, image_data['filename'])
-    assert(len(image_pixeldata.shape) > 2)
-    assert(np.argmin(image_pixeldata.shape) == 0)
-
-    # re-stack planes of the image data by the plane_names order
-    aligned_planes = np.zeros([len(plane_order), image_pixeldata.shape[1], image_pixeldata.shape[2]])
-    for pn_i, pn in enumerate(plane_order):
-        if pn in image_planes:
-            aligned_planes[pn_i] = image_pixeldata[image_planes.index(pn)]
-
-    # rotate image_data such that data is stored per-pixel instead of per-plane;
-    # there is no reason this is required other than it being a common standard
-    # in image data e.g. if you want to get just a section of the image you can
-    # omit the extra :, at the beginning of indexing notation
-    image_pixeldata = np.rollaxis(aligned_planes, 0, 3)
-
-    # pad/crop the image as appropriate
-    if image_vertical_crop >= 0:
-        image_pixeldata = image_pixeldata[image_vertical_crop:image_pixeldata.shape[1]-image_vertical_crop,:,:]
-    else:
-        padsize = abs(image_vertical_crop)
-        image_pixeldata = np.pad(image_pixeldata, ((padsize, padsize), (0,0), (0,0)), mode='edge')
-
-    return image_pixeldata
-
 # cuts out channels from the image
-def cut_slice(image_pixel_data, channel_loc):
+def cut_slice(image_data, channel_loc):
     '''Takes an image and cuts out the channel based on the slice location
     slice location is the list with the peak information, in the form
-    [peak_id, [[y1, y2],[x1, x2]]]. returns the channel slice as a numpy array.
+    [][y1, y2],[x1, x2]]. Returns the channel slice as a numpy array.
     The numpy array will be a stack if there are multiple planes.
 
     if you want to slice all the channels from a picture with the channel_masks
@@ -659,16 +602,12 @@ def cut_slice(image_pixel_data, channel_loc):
     NOTE: this function is for images that have gone through the
           rotation in process_tif
     '''
-    channel_id = channel_loc[0] # the id is the peak location and is the first element
-    channel_slice = np.zeros([image_pixel_data.shape[0],
-                              channel_loc[1][0][1]-channel_loc[1][0][0],
-                              channel_loc[1][1][1]-channel_loc[1][1][0]])
-    #print(channel_id, channel_slice.shape)
-    channel_slicer = np.s_[channel_loc[1][0][0]:channel_loc[1][0][1],
-                           channel_loc[1][1][0]:channel_loc[1][1][1],:] # slice obj
-    channel_slice = image_pixel_data[channel_slicer]
-    if np.any([a < 1 for a in channel_slice.shape]):
-        raise ValueError('channel_slice shapes must be positive (%s, %s)' % (str(channel_loc[0]), str(channel_slice.shape)))
+
+    # make slice object
+    channel_slicer = np.s_[channel_loc[0][0]:channel_loc[0][1],
+                           channel_loc[1][0]:channel_loc[1][1],:]
+    channel_slice = image_pixel_data[channel_slicer] # cut
+
     return channel_id, channel_slice
 
 # remove margins of zeros from 2d numpy array
