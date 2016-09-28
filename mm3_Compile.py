@@ -78,15 +78,9 @@ def get_tif_params(image_filename, find_channels=True):
 
     try:
         # open up file and get metadata
-        try:
-            with tiff.TiffFile(image_filename) as tif:
-                image_data = tif.asarray()
-                image_metadata = mm3.get_tif_metadata_elements(tif)
-        except: # this is just a timer in case it doesn't open fast enough
-            time.sleep(1)
-            with tiff.TiffFile(image_filename) as tif:
-                image_data = tif.asarray()
-                image_metadata = mm3.get_tif_metadata(tif)
+        with tiff.TiffFile(TIFF_dir + image_filename) as tif:
+            image_data = tif.asarray()
+            image_metadata = mm3.get_tif_metadata_elements(tif)
 
         # look for channels if flagged
         if find_channels:
@@ -108,7 +102,7 @@ def get_tif_params(image_filename, find_channels=True):
         information('Analyzed %s' % image_filename)
 
         # return the file name, the data for the channels in that image, and the metadata
-        return {'filename': image_filename,
+        return {'filepath': TIFF_dir + image_filename,
                 'fov' : image_metadata['fov'], # fov id
                 't' : image_metadata['t'], # time point
                 'jd' : image_metadata['jd'], # absolute julian time
@@ -123,7 +117,7 @@ def get_tif_params(image_filename, find_channels=True):
         print(sys.exc_info()[0])
         print(sys.exc_info()[1])
         print(traceback.print_tb(sys.exc_info()[2]))
-        return {'filename': image_filename, 'analyze_success': False}
+        return {'filepath': TIFF_dir + image_filename, 'analyze_success': False}
 
 # slice_and_write cuts up the image files and writes them out to tiff stacks
 def tiff_slice_and_write(image_params, channel_masks):
@@ -137,10 +131,10 @@ def tiff_slice_and_write(image_params, channel_masks):
 
     '''
 
-    information("Writing %s" % image_params['filename'])
+    information("Writing %s" % image_params['filepath'])
 
     # load the tif
-    with tiff.TiffFile(image_params['filename']) as tif:
+    with tiff.TiffFile(image_params['filepath']) as tif:
         image_data = tif.asarray()
 
     # declare identification variables
@@ -154,9 +148,6 @@ def tiff_slice_and_write(image_params, channel_masks):
     if len(image_data.shape) == 2:
         image_data = np.expand_dims(image_data, 0)
 
-    # rotate image_data such that data is stored per-pixel instead of per-plane
-    image_data = np.rollaxis(image_data, 0, 3)
-
     # cut out the channels as per channel masks for this fov
     for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
 
@@ -169,12 +160,16 @@ def tiff_slice_and_write(image_params, channel_masks):
         # Save channel
         tiff.imsave(channel_filename, channel_slice)
 
-        information("Wrote %s" % channel_filename)
+        information("Wrote %s" % channel_filename.split('/'[-1]))
 
     return
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
+    # hardcoded parameters
+    load_metadata = False
+    load_channel_masks = False
+
 
     # get switches and parameters
     try:
@@ -228,13 +223,23 @@ if __name__ == "__main__":
     written_imgs = {} # for storing write objects set to write. Are removed once written
 
     ### process TIFFs for metadata #################################################################
-    try:
+    if load_metadata:
+        information("Loading image parameters dictionary.")
+
+        with open(ana_dir + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
+            analyzed_images = pickle.load(tiff_metadata)
+
+    else:
+        information("Finding image parameters")
+
         # get all the TIFFs in the folder
-        found_files = sorted(glob.glob(TIFF_dir + '*.tif'))
+        found_files = glob.glob(TIFF_dir + '*.tif') # get all tiffs
+        found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
+        found_files = sorted(found_files) # should sort by timepoint
 
         # get information for all these starting tiffs
         if len(found_files) > 0:
-            information("Priming with %d pre-existing files." % len(found_files))
+            information("Found %d image files." % len(found_files))
         else:
             warning('No TIFF files found')
 
@@ -274,16 +279,18 @@ if __name__ == "__main__":
         with open(ana_dir + '/TIFF_metadata.txt', 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
 
-        information('Saved metadata from analyzed images')
-
-    except:
-        warning("Image parameter analysis try block failed.")
-        print(sys.exc_info()[0])
-        print(sys.exc_info()[1])
-        print(traceback.print_tb(sys.exc_info()[2]))
+        information('Saved metadata from analyzed images.')
 
     ### Make consensus channel masks and get other shared metadata #################################
-    try:
+    if load_channel_masks:
+        information("Loading channel masks dictionary.")
+
+        with open(ana_dir + '/channel_masks.pkl', 'w') as cmask_file:
+            channel_masks = pickle.load(channel_masks)
+
+    else:
+        information("Calculating channel masks.")
+
         # Uses channel information from the already processed image data
         channel_masks = mm3.make_masks(analyzed_imgs)
 
@@ -295,15 +302,12 @@ if __name__ == "__main__":
 
         information("Channel masks saved.")
 
-    except:
-        warning("Mask creation try block failed.")
-        print(sys.exc_info()[0])
-        print(sys.exc_info()[1])
-        print(traceback.print_tb(sys.exc_info()[2]))
-
     ### Slice and write TIFF files into channels ###################################################
     # try:
         # send writes to the pool based on lowest jdn not written
+    # initialize pool for writing images
+    pool = Pool(num_analyzers)
+
     for fov, peaks in channel_masks.iteritems():
         # get filenames just for this fov along with the julian date of acquistion
         send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
@@ -311,14 +315,26 @@ if __name__ == "__main__":
         # sort the filenames by jdn
         send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
+        # initialize pool for writing images
+        pool = Pool(num_analyzers)
+
         # writing out each time point
-        for fn_jd_pair in send_to_write:
+        for fn, jd in send_to_write:
             # get the image parameter dictionary from the analyzed image dict.
-            image_params = analyzed_imgs[fn_jd_pair[0]]
+            image_params = analyzed_imgs[fn]
 
             # send to function which slices and writes channels out
-            tiff_slice_and_write(image_params, channel_masks)
+            #tiff_slice_and_write(image_params, channel_masks)
 
+            written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
+                                                args=(image_params, channel_masks))
+
+    information('Waiting for channel write pool to be finished.')
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    information('Channel write pool finished.')
 
             # # data_writer is the major hdf5 writing function.
             # # not switched for saving originals and doing subtraction
