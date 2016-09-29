@@ -24,6 +24,7 @@ import traceback
 import copy
 from scipy import ndimage # used in make_masks
 from skimage.segmentation import clear_border # used in make_masks
+from skimage.feature import match_template # used to align images
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -641,6 +642,33 @@ def trim_zeros_2d(array):
     array = array.T
     # return the array
     return array
+
+# calculat cross correlation between pixels in channel stack
+def channel_xcorr(channel_filepath):
+    '''
+    Function calculates the cross correlation of images in a
+    stack to the first image in the stack. The output is an
+    array that is the length of the stack with the best cross
+    correlation between that image and the first image.
+
+    The very first value should be 1.
+    '''
+
+    # load up the stack. should be 4D [t, x, y, c]
+    with tiff.TiffFile(channel_filepath) as tif:
+        image_data = tif.asarray()
+
+    # just use the first plane, which should be the phase images
+    image_data = image_data[:,:,:,0]
+    first_img = image_data[0,:,:] # we will compare all images to this one
+
+    xcorr_array = [] # array holds cross correlation vaues
+    for img in image_data[1:,:,:]:
+        # use match_template to find all cross correlations for the
+        # current image against the first image.
+        xcorr_array.append(np.max(match_template(img, first_img)))
+
+    return xcorr_array
 
 ### functions abous subtraction
 # worker function for doing subtraction

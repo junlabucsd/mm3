@@ -40,7 +40,6 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import tifffile as tiff
-# from subtraction_helpers import *
 import mm3_helpers as mm3
 
 # get params is the major function which processes raw TIFF images
@@ -240,7 +239,6 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
 
     return
 
-
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
@@ -350,7 +348,7 @@ if __name__ == "__main__":
         information('Got results from analyzed images.')
 
         # save metadata to a .pkl and a human readable txt file
-        with open(ana_dir + '/TIFF_metadata.pkl', 'w') as tiff_metadata:
+        with open(ana_dir + '/TIFF_metadata.pkl', 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata)
         with open(ana_dir + '/TIFF_metadata.txt', 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
@@ -371,7 +369,7 @@ if __name__ == "__main__":
         channel_masks = mm3.make_masks(analyzed_imgs)
 
         #save the channel mask dictionary to a pickle and a text file
-        with open(ana_dir + '/channel_masks.pkl', 'w') as cmask_file:
+        with open(ana_dir + '/channel_masks.pkl', 'wb') as cmask_file:
             pickle.dump(channel_masks, cmask_file)
         with open(ana_dir + '/channel_masks.txt', 'w') as cmask_file:
             pprint(channel_masks, stream=cmask_file)
