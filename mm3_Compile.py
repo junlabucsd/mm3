@@ -28,7 +28,7 @@ except:
     import pickle
 from sys import platform as platform
 import multiprocessing
-from multiprocessing import Pool #, Manager, Lock
+from multiprocessing import Pool #, Lock
 import numpy as np
 import numpy.ma as ma
 from scipy import ndimage
@@ -131,7 +131,7 @@ def tiff_slice_and_write(image_params, channel_masks):
 
     '''
 
-    information("Writing %s" % image_params['filepath'])
+    information("Writing %s to channels." % image_params['filepath'].split('/')[-1])
 
     # load the tif
     with tiff.TiffFile(image_params['filepath']) as tif:
@@ -139,7 +139,7 @@ def tiff_slice_and_write(image_params, channel_masks):
 
     # declare identification variables
     fov_id = image_params['fov']
-    t_point = image_params['t']
+    #t_point = image_params['t']
 
     # fix orientation channels were found in fixed images
     image_data = mm3.fix_orientation(image_data)
@@ -148,19 +148,39 @@ def tiff_slice_and_write(image_params, channel_masks):
     if len(image_data.shape) == 2:
         image_data = np.expand_dims(image_data, 0)
 
+    # change axis so it goes X, Y, Plane
+    image_data = np.rollaxis(image_data, 0, 3)
+
     # cut out the channels as per channel masks for this fov
     for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
-
+        # slice out channel
         channel_slice = mm3.cut_slice(image_data, channel_loc)
 
-        # make a filename for the channel
+        # this is the filename for the channel
         # chnl_dir and p will be looked for in the scope above (__main__)
-        channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_t%04d.tif' % (fov_id, peak, t_point)
+        channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak)
 
-        # Save channel
-        tiff.imsave(channel_filename, channel_slice)
+        # check if it alread exists, append to it if so, make it if not
+        try:
+            with tiff.TiffFile(channel_filename) as channel_stack_file:
+                # load it up
+                channel_stack = channel_stack_file.asarray()
 
-        information("Wrote %s" % channel_filename.split('/'[-1]))
+            # add a dimension for time
+            channel_slice = np.expand_dims(channel_slice, axis=0)
+            if len(channel_stack.shape) == 3:
+                channel_stack = np.expand_dims(channel_stack, axis=0)
+
+            # add on the new channel in the time dimension
+            channel_stack = np.concatenate([channel_stack, channel_slice], axis=0)
+
+            # save over the old stack
+            tiff.imsave(channel_filename, channel_stack)
+
+        except:
+            information('First save for %s' % channel_filename.split('/')[-1])
+            # otherwise just save the first slice
+            tiff.imsave(channel_filename, channel_slice)
 
     return
 
@@ -169,7 +189,6 @@ if __name__ == "__main__":
     # hardcoded parameters
     load_metadata = False
     load_channel_masks = False
-
 
     # get switches and parameters
     try:
@@ -186,7 +205,7 @@ if __name__ == "__main__":
     # if the paramfile string has no length ie it has not been specified, ERROR
     if len(param_file_path) == 0:
         raise ValueError("a parameter file must be specified (-f <filename>).")
-    information ('Loading experiment parameters...')
+    information ('Loading experiment parameters.')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
 
@@ -227,10 +246,10 @@ if __name__ == "__main__":
         information("Loading image parameters dictionary.")
 
         with open(ana_dir + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
-            analyzed_images = pickle.load(tiff_metadata)
+            analyzed_imgs = pickle.load(tiff_metadata)
 
     else:
-        information("Finding image parameters")
+        information("Finding image parameters.")
 
         # get all the TIFFs in the folder
         found_files = glob.glob(TIFF_dir + '*.tif') # get all tiffs
@@ -285,8 +304,8 @@ if __name__ == "__main__":
     if load_channel_masks:
         information("Loading channel masks dictionary.")
 
-        with open(ana_dir + '/channel_masks.pkl', 'w') as cmask_file:
-            channel_masks = pickle.load(channel_masks)
+        with open(ana_dir + '/channel_masks.pkl', 'r') as cmask_file:
+            channel_masks = pickle.load(cmask_file)
 
     else:
         information("Calculating channel masks.")
@@ -303,11 +322,7 @@ if __name__ == "__main__":
         information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
-    # try:
-        # send writes to the pool based on lowest jdn not written
-    # initialize pool for writing images
-    pool = Pool(num_analyzers)
-
+    # do it by FOV. Not set up for multiprocessing
     for fov, peaks in channel_masks.iteritems():
         # get filenames just for this fov along with the julian date of acquistion
         send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
@@ -315,8 +330,8 @@ if __name__ == "__main__":
         # sort the filenames by jdn
         send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
-        # initialize pool for writing images
-        pool = Pool(num_analyzers)
+        # # initialize pool for writing images
+        # pool = Pool(num_analyzers)
 
         # writing out each time point
         for fn, jd in send_to_write:
@@ -324,28 +339,14 @@ if __name__ == "__main__":
             image_params = analyzed_imgs[fn]
 
             # send to function which slices and writes channels out
-            #tiff_slice_and_write(image_params, channel_masks)
+            tiff_slice_and_write(image_params, channel_masks)
 
-            written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
-                                                args=(image_params, channel_masks))
-
-    information('Waiting for channel write pool to be finished.')
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
-
-    information('Channel write pool finished.')
-
-            # # data_writer is the major hdf5 writing function.
-            # # not switched for saving originals and doing subtraction
-            # w_result_dict[fov_fns_jdns[0][0]] = wpool.apply_async(data_writer,
-            #                             [image_metadata[fov_fns_jdns[0][0]],
-            #                             channel_masks, subtract_on_datawrite[image_metadata[fov_fns_jdns[0][0]]['fov']],
-            #                             save_originals])
-            # image_metadata[fov_fns_jdns[0][0]]['sent_to_write'] = True
-
-    # except:
-    #     warning("Channel slicing try block failed.")
-    #     print(sys.exc_info()[0])
-    #     print(sys.exc_info()[1])
-    #     print(traceback.print_tb(sys.exc_info()[2]))
+    #         written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
+    #                                             args=(image_params, channel_masks))
+    #
+    # information('Waiting for channel write pool to be finished.')
+    #
+    # pool.close() # tells the process nothing more will be added.
+    # pool.join() # blocks script until everything has been processed and workers exit
+    #
+    # information('Channel write pool finished.')
