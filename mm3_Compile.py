@@ -13,25 +13,17 @@ import inspect
 import getopt
 import yaml
 import traceback
-# import h5py
 import fnmatch
-# import struct
-import re
 import glob
-import gevent
-import marshal
-# import json # used to write data out in human readable format
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
 except:
     import pickle
-from sys import platform as platform
 import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
-import numpy.ma as ma
-from scipy import ndimage
+
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -398,11 +390,9 @@ if __name__ == "__main__":
         ### This is for loading the whole raw tiff stack and then slicing through it
         tiff_stack_slice_and_write(send_to_write, channel_masks)
 
-        information("Channel slices saved.")
-
         '''
         ### This is for writing each file one at a time.
-
+        # this is really slow do to file opening and closing but less memory hogging
         # writing out each time point
         for fn, jd in send_to_write:
             # get the image parameter dictionary from the analyzed image dict.
@@ -431,3 +421,5 @@ if __name__ == "__main__":
     #
     # information('Channel write pool finished.')
     '''
+
+    information("Channel slices saved.")
