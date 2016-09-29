@@ -184,11 +184,76 @@ def tiff_slice_and_write(image_params, channel_masks):
 
     return
 
+# slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
+def tiff_stack_slice_and_write(images_to_write, channel_masks):
+    '''Writes out 4D stacks of TIFF images per channel.
+    Loads all tiffs from and FOV into memory and then slices all time points at once.
+
+
+    Called by
+    __main__
+    '''
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # go through list of images and get the file path
+    for n, image in enumerate(images_to_write):
+        # analyzed_imgs dictionary will be found in main scope. [0] is the key, [1] is jd
+        image_params = analyzed_imgs[image[0]]
+
+        information("Loading %s." % image_params['filepath'].split('/')[-1])
+
+        if n == 1:
+            # declare identification variables for saving using first image
+            fov_id = image_params['fov']
+
+        # load the tif and store it in array
+        with tiff.TiffFile(image_params['filepath']) as tif:
+            image_data = tif.asarray()
+
+        # fix orientation channels were found in fixed images
+        image_data = mm3.fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        # change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # and now add a dimension for time
+        image_data = np.expand_dims(image_data, 0)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+    # concatenate the list into one big ass stack
+    image_fov_stack = np.concatenate(image_fov_stack, axis=0)
+
+    # cut out the channels as per channel masks for this fov
+    for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
+        # this is the filename for the channel
+        # chnl_dir and p will be looked for in the scope above (__main__)
+        channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak)
+
+        information('Slicing and saving channel %s.' % channel_filename.split('/')[-1])
+
+        # slice out channel.
+        # The function should recognize the shape length as 4 and cut all time points
+        channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
+
+        # save stack
+        tiff.imsave(channel_filename, channel_stack)
+
+    return
+
+
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = False
-    load_channel_masks = False
+    load_metadata = True
+    load_channel_masks = True
 
     # get switches and parameters
     try:
@@ -330,8 +395,13 @@ if __name__ == "__main__":
         # sort the filenames by jdn
         send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
-        # # initialize pool for writing images
-        # pool = Pool(num_analyzers)
+        ### This is for loading the whole raw tiff stack and then slicing through it
+        tiff_stack_slice_and_write(send_to_write, channel_masks)
+
+        information("Channel slices saved.")
+
+        '''
+        ### This is for writing each file one at a time.
 
         # writing out each time point
         for fn, jd in send_to_write:
@@ -340,9 +410,19 @@ if __name__ == "__main__":
 
             # send to function which slices and writes channels out
             tiff_slice_and_write(image_params, channel_masks)
+        '''
 
-    #         written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
-    #                                             args=(image_params, channel_masks))
+    '''
+    ### This is for writing images one at a time using mutliprocessing
+    # This doesn't work yet because Locks have not been set up. Also it doesn't
+    # make much sense because you wouldn't want to split it up by fov first
+
+    # # initialize pool for writing images
+    # pool = Pool(num_analyzers)
+
+    # for fn, jd in send_to_write:
+    #     written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
+    #                                         args=(image_params, channel_masks))
     #
     # information('Waiting for channel write pool to be finished.')
     #
@@ -350,3 +430,4 @@ if __name__ == "__main__":
     # pool.join() # blocks script until everything has been processed and workers exit
     #
     # information('Channel write pool finished.')
+    '''

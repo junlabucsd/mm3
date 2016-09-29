@@ -599,14 +599,30 @@ def cut_slice(image_data, channel_loc):
         channel_slice = cut_slice[image_pixel_data, channel_loc]
         # ... do something with the slice
 
-    NOTE: this function is for images that have 3 dimension, and the shape is
-        [x, y, c]
+    NOTE: this function will try to determine what the shape of your
+    image is and slice accordingly. It expects the images are in the order
+    [t, x, y, c]. It assumes images with three dimensions are [x, y, c] not
+    [t, x, y].
     '''
 
-    # make slice object
-    channel_slicer = np.s_[channel_loc[0][0]:channel_loc[0][1],
-                           channel_loc[1][0]:channel_loc[1][1],:]
-    channel_slice = image_data[channel_slicer] # cut
+    # case where image is in form [x, y]
+    if len(image_data.shape) == 2:
+        # make slice object
+        channel_slicer = np.s_[channel_loc[0][0]:channel_loc[0][1],
+                               channel_loc[1][0]:channel_loc[1][1]]
+
+    # case where image is in form [x, y, c]
+    elif len(image_data.shape) == 3:
+        channel_slicer = np.s_[channel_loc[0][0]:channel_loc[0][1],
+                               channel_loc[1][0]:channel_loc[1][1],:]
+
+    # case where image in form [t, x , y, c]
+    elif len(image_data.shape) == 4:
+        channel_slicer = np.s_[:,channel_loc[0][0]:channel_loc[0][1],
+                                 channel_loc[1][0]:channel_loc[1][1],:]
+
+    # slice based on appropriate slicer object.
+    channel_slice = image_data[channel_slicer]
 
     return channel_slice
 
