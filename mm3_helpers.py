@@ -660,7 +660,17 @@ def channel_xcorr(channel_filepath):
 
     # just use the first plane, which should be the phase images
     image_data = image_data[:,:,:,0]
-    first_img = image_data[0,:,:] # we will compare all images to this one
+
+    # if there are more than 100 images, use 100 images evenly
+    # spaced across the range
+    if image_data.shape[0] > 100:
+        spacing = np.floor(image_data.shape[0] / 100)
+        image_data = image_data[::spacing,:,:]
+        if image_data.shape[0] > 100:
+            image_data = image_data[:100,:,:]
+
+    # we will compare all images to this one
+    first_img = image_data[0,:,:]
 
     xcorr_array = [] # array holds cross correlation vaues
     for img in image_data[1:,:,:]:
