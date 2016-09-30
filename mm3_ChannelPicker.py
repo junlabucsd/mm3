@@ -12,22 +12,13 @@ import time
 import inspect
 import getopt
 import yaml
-import traceback
-# import h5py
-import fnmatch
-import gc
-import random
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
 except:
     import pickle
-import multiprocessing
-from multiprocessing import Pool #, Manager
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import RectangleSelector
-from skimage.feature import match_template # match template used for correlation
 from skimage.exposure import rescale_intensity # for displaying in GUI
 
 # user modules
@@ -329,7 +320,6 @@ if __name__ == "__main__":
     # nested dictionary of {fov : {peak : spec ...}) for if channel should
     # be analyzed, used for empty, or ignored.
     specs = {}
-
     # update dictionary on initial guess from cross correlations
     for fov_id, peaks in crosscorrs.items():
         specs[fov_id] = {}
