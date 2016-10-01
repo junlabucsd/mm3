@@ -24,7 +24,6 @@ import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
 
-
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(

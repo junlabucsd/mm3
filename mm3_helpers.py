@@ -682,6 +682,181 @@ def channel_xcorr(channel_filepath):
 
 ### functions abous subtraction
 # worker function for doing subtraction
+# average empty channels from stacks, making another TIFF stack
+def average_picked_empties(fov_id, specs):
+    '''Takes the fov file name and the peak names of the designated empties,
+    averages them and saves the image
+
+    Parameters
+    fov_id : int
+        FOV number
+    specs : dict
+        specifies whether a channel should be analyzed (1), used for making
+        an average empty (0), or ignored (-1).
+
+    Returns
+        True if succesful.
+        Saves empty stack to analysis folder
+
+    '''
+
+    information("Creating average empty channel for FOV %d." % fov_id)
+
+    # get peak ids of empty channels for this fov
+    empty_peak_ids = []
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 0: # 0 means it should be used for empty
+            empty_peak_ids.append(peak_id)
+    empty_peak_ids = sorted(empty_peak_ids) # sort for repeatability
+
+    # depending on how many empties there are choose what to do
+    # if there is no empty the user is going to have to copy another empty stack
+    if len(empty_peak_ids) == 0:
+        information("No empty channel designated for FOV %d." % fov_id)
+        return False
+
+    # if there is just one then you can just copy that channel
+    elif len(empty_peaks_ids) == 1:
+        peak_id = empty_peak_ids[0]
+        information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
+
+        # copy that tiff stack with a new name as empty
+        channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
+
+        with tiff.TiffFile(channel_filepath) as tif:
+            image_data = tif.asarray()
+
+        # make new name, empty_dir should be found in above scope
+        empty_filename = p['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filepath = empty_dir + empty_filename
+
+        tiff.imsave(empty_filepath, image_data) # save it
+
+        information("Saved empty channel %s." % empty_filename)
+
+        return True
+
+    # but if there is more than one empty you need to align and average them per timepoint
+
+    # declare variables
+    empty_composite = [] # list of empty channel images alligned to overlap
+    paddings = [] # paddings is a list of the paddings used to allign the images
+    reference_image = None # stores the index 0 image with edge padding
+                           # instead of nan padding; edge padding improves the
+                           # alignment by eliminating the cliff of "normal values"
+                           # into np.nan values; this image is still stored as a nan-padded
+                           # image in the empty_composite list
+
+    # go over the list of background peaks
+    for peak in bgrd_peaks:
+        # load the images from the given fov_file
+        with h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest') as h5f:
+            start_i = len(h5f[u'channel_%04d' % peak]) / 4 # same as start in cross corr function
+            final_i = len(h5f[u'channel_%04d' % peak]) - 1 # last image
+            ch_ds = h5f[u'channel_%04d' % peak]
+            images = np.zeros([final_i-start_i, ch_ds.shape[1], ch_ds.shape[2]])
+            ch_ds.read_direct(images, np.s_[start_i:final_i, :, :, 0])
+
+        # images should all be the same size, so this can probably go
+        #max_x = np.max([image.shape[0] for image in images_random_subset])
+        #max_y = np.max([image.shape[1] for image in images_random_subset])
+
+        # Build a stack of overlapping images of empty channels by aligning and padding the images
+        for image in images_random_subset:
+            if reference_image is None:
+                h_im, w_im = image.shape # get the shape of the current image
+
+                # increase the frame size
+                h_full = h_im + 50
+                w_full = w_im + 50
+
+                # calculate the padding size needed to fit the orignial into the full frame
+                h_diff = h_full - h_im
+                w_diff = w_full - w_im
+
+                # pad the image with NaNs for stacking
+                im_padded = np.pad(image,
+                                   ((h_diff/2, h_diff-(h_diff/2)),
+                                    (w_diff/2, w_diff-(w_diff/2))),
+                                   mode='constant',
+                                   constant_values=np.nan)
+
+                # pad the image with edge values for alignment for the reference image
+                reference_image = np.pad(image,
+                                         ((h_diff/2, h_diff-(h_diff/2)),
+                                          (w_diff/2, w_diff-(w_diff/2))),
+                                         mode='edge')
+
+                empty_composite.append(im_padded) # add this image to the list empty_composite
+            else:
+                # use the match template function to find the overlap position of maximum corr
+                # Note the numbers that just the end is used to match
+                match_result = match_template(np.nan_to_num(reference_image[:200]),
+                                              np.nan_to_num(image[:175]))
+                # find the best correlation
+                y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
+
+                # pad the image with np.nan
+                im_padded = np.pad(image,
+                                   ((y, empty_composite[0].shape[0] - (y + image.shape[0])),
+                                    (x, empty_composite[0].shape[1] - (x + image.shape[1]))),
+                                   mode='constant',
+                                   constant_values=np.nan)
+
+                empty_composite.append(im_padded)
+
+    # stack the aligned data along axis 2
+    empty_composite = np.dstack(empty_composite)
+
+    # get a boolean mask of non-NaN positions
+    nanmap = ~np.isnan(empty_composite)
+
+    # sum up the total non-NaN values along the depth
+    counts = nanmap.sum(2).astype(np.float16)
+
+    # divide counts by it highest value
+    counts /= np.amax(counts)
+
+    # get a rectangle of the region where at least half the images have real data
+    binary_core = counts > 0.5
+
+    # get all rows/columns in the common region that are True
+    poscols = np.any(binary_core, axis = 1) # column positions where true (any)
+    posrows = np.any(binary_core, axis = 0) # row positions where true (any)
+
+    # get the mix/max row/column for the binary_core
+    min_row = np.amin(np.where(posrows)[0])
+    max_row = np.amax(np.where(posrows)[0])
+    min_col = np.amin(np.where(poscols)[0])
+    max_col = np.amax(np.where(poscols)[0])
+
+    # crop the composite to the common core
+    empty_composite = empty_composite[min_col:max_col, min_row:max_row]
+
+    # get a mean image along axis 2
+    empty_mean = np.nanmean(empty_composite, axis = 2)
+
+    # old version
+    '''
+    # strip out the rows and or columns of all false
+    overlap_shape = trim_false_2d(overlap)
+    # extract the shape of the stripped array
+    overlap_shape = overlap_shape.shape
+    # sum allong the list getting the mean value ignoring the NANs  ie  for [1,2,NAN] it does (1+2+NAN)/2=1.5 not (1+2+NAN)/3=1
+    empty_mean = np.nanmean(np.asarray(empty_composite), axis = 0)
+    # reshape the numpy array to include elements with data in more than half of the list memebers
+    empty_mean = np.reshape(empty_mean[overlap], overlap_shape)
+    # empty_mean is the mean of the empty channels
+    '''
+
+    # save a tif stack of the average empty channels per time point this FOV
+    tiff.imsave(experiment_directory + analysis_directory + 'empties/fov_%03d_emptymean.tif' % fov, empty_mean.astype('uint16'))
+
+    return True
+
+
+#
 def subtract_phase(dataset):
     '''subtract_phase_only is the main worker function for doign alignment and subtraction.
     Modified from subtract_phase_only by jt on 20160511

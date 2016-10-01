@@ -220,15 +220,6 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # set up how to manage cores for multiprocessing
-    cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
-
     # assign shorthand directory names
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
@@ -336,7 +327,7 @@ if __name__ == "__main__":
 
     # write specfications to pickle and text
     information("Writing specifications file.")
-    with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
+    with open(ana_dir+ "/specs.pkl", 'w') as specs.pkl:
         pickle.dump(specs, specs_file)
     with open(ana_dir + "/specs.txt", 'w') as specs_file:
         pprint(specs, stream=specs_file)
