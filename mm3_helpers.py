@@ -702,6 +702,10 @@ def average_empties_stack(fov_id, specs):
 
     information("Creating average empty channel for FOV %d." % fov_id)
 
+    # directories for saving
+    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+
     # get peak ids of empty channels for this fov
     empty_peak_ids = []
     for peak_id, spec in specs[fov_id].items():
@@ -716,12 +720,12 @@ def average_empties_stack(fov_id, specs):
         return False
 
     # if there is just one then you can just copy that channel
-    elif len(empty_peaks_ids) == 1:
+    elif len(empty_peak_ids) == 1:
         peak_id = empty_peak_ids[0]
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
         # copy that tiff stack with a new name as empty
-        channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
         channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
 
         with tiff.TiffFile(channel_filepath) as tif:
@@ -735,7 +739,7 @@ def average_empties_stack(fov_id, specs):
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
             # load stack
-            channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
             channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
             with tiff.TiffFile(channel_filepath) as tif:
                 image_data = tif.asarray()
@@ -761,7 +765,7 @@ def average_empties_stack(fov_id, specs):
 
     # save out data
     # make new name, empty_dir should be found in above scope
-    empty_filename = p['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
     empty_filepath = empty_dir + empty_filename
 
     tiff.imsave(empty_filepath, avg_empty_stack) # save it
@@ -771,7 +775,7 @@ def average_empties_stack(fov_id, specs):
     return True
 
 
-
+# averages a list of empty channels
 def average_empties(imgs):
     '''
     This function averages a set of images (empty channels) and returns a single image
@@ -817,6 +821,8 @@ def average_empties(imgs):
     avg_empty = np.nanmean(aligned_imgs, axis=2)
     # trim off the padded edges
     avg_empty = avg_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
+    # change type back to unsigned 16 bit not floats
+    avg_empty = avg_empty.astype(dtype='uint16')
 
     return avg_empty
 

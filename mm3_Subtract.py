@@ -102,7 +102,7 @@ if __name__ == "__main__":
         raise ValueError
 
     # make list of FOVs to process (keys of channel_mask file)
-    fov_id_list = sorted([fov_id for fov_id in channel_masks.keys()])
+    fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # remove fovs if the user specified so
     if specify_fovs:
