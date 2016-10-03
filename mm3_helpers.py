@@ -680,10 +680,10 @@ def channel_xcorr(channel_filepath):
 
     return xcorr_array
 
-### functions abous subtraction
+### functions about subtraction
 # worker function for doing subtraction
 # average empty channels from stacks, making another TIFF stack
-def average_picked_empties(fov_id, specs):
+def average_empties_stack(fov_id, specs):
     '''Takes the fov file name and the peak names of the designated empties,
     averages them and saves the image
 
@@ -725,135 +725,100 @@ def average_picked_empties(fov_id, specs):
         channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
 
         with tiff.TiffFile(channel_filepath) as tif:
-            image_data = tif.asarray()
-
-        # make new name, empty_dir should be found in above scope
-        empty_filename = p['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-        empty_filepath = empty_dir + empty_filename
-
-        tiff.imsave(empty_filepath, image_data) # save it
-
-        information("Saved empty channel %s." % empty_filename)
+            avg_empty_stack = tif.asarray()
 
         return True
 
     # but if there is more than one empty you need to align and average them per timepoint
+    elif len(empty_peak_ids) > 1:
+        # load the image stacks into memory
+        empty_stacks = [] # list which holds phase image stacks of designated empties
+        for peak_id in empty_peak_ids:
+            # load stack
+            channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
+            with tiff.TiffFile(channel_filepath) as tif:
+                image_data = tif.asarray()
 
-    # declare variables
-    empty_composite = [] # list of empty channel images alligned to overlap
-    paddings = [] # paddings is a list of the paddings used to allign the images
-    reference_image = None # stores the index 0 image with edge padding
-                           # instead of nan padding; edge padding improves the
-                           # alignment by eliminating the cliff of "normal values"
-                           # into np.nan values; this image is still stored as a nan-padded
-                           # image in the empty_composite list
+            # just get phase data and put it in list
+            image_data = image_data[:,:,:,0]
+            empty_stacks.append(image_data)
 
-    # go over the list of background peaks
-    for peak in bgrd_peaks:
-        # load the images from the given fov_file
-        with h5py.File(experiment_directory + analysis_directory + 'originals/' + fov_file, 'r', libver='earliest') as h5f:
-            start_i = len(h5f[u'channel_%04d' % peak]) / 4 # same as start in cross corr function
-            final_i = len(h5f[u'channel_%04d' % peak]) - 1 # last image
-            ch_ds = h5f[u'channel_%04d' % peak]
-            images = np.zeros([final_i-start_i, ch_ds.shape[1], ch_ds.shape[2]])
-            ch_ds.read_direct(images, np.s_[start_i:final_i, :, :, 0])
+        information("%d empty channels designated for FOV %d." % (len(empty_stacks), fov_id))
 
-        # images should all be the same size, so this can probably go
-        #max_x = np.max([image.shape[0] for image in images_random_subset])
-        #max_y = np.max([image.shape[1] for image in images_random_subset])
+        # go through time points and create list of averaged empties
+        avg_empty_stack = [] # list will be later concatentated into numpy array
+        time_points = range(image_data.shape[0]) # index is time
+        for t in time_points:
+            # get images from one timepoint at a time and send to alignment and averaging
+            imgs = [stack[t] for stack in empty_stacks]
+            avg_empty = average_empties(imgs) # function is in mm3
+            avg_empty = np.expand_dims(avg_empty, 0) # add dimension for time
+            avg_empty_stack.append(avg_empty)
 
-        # Build a stack of overlapping images of empty channels by aligning and padding the images
-        for image in images_random_subset:
-            if reference_image is None:
-                h_im, w_im = image.shape # get the shape of the current image
+        # concatenate list and then save out to tiff stack
+        avg_empty_stack = np.concatenate(avg_empty_stack, axis=0)
 
-                # increase the frame size
-                h_full = h_im + 50
-                w_full = w_im + 50
+    # save out data
+    # make new name, empty_dir should be found in above scope
+    empty_filename = p['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+    empty_filepath = empty_dir + empty_filename
 
-                # calculate the padding size needed to fit the orignial into the full frame
-                h_diff = h_full - h_im
-                w_diff = w_full - w_im
+    tiff.imsave(empty_filepath, avg_empty_stack) # save it
 
-                # pad the image with NaNs for stacking
-                im_padded = np.pad(image,
-                                   ((h_diff/2, h_diff-(h_diff/2)),
-                                    (w_diff/2, w_diff-(w_diff/2))),
-                                   mode='constant',
-                                   constant_values=np.nan)
-
-                # pad the image with edge values for alignment for the reference image
-                reference_image = np.pad(image,
-                                         ((h_diff/2, h_diff-(h_diff/2)),
-                                          (w_diff/2, w_diff-(w_diff/2))),
-                                         mode='edge')
-
-                empty_composite.append(im_padded) # add this image to the list empty_composite
-            else:
-                # use the match template function to find the overlap position of maximum corr
-                # Note the numbers that just the end is used to match
-                match_result = match_template(np.nan_to_num(reference_image[:200]),
-                                              np.nan_to_num(image[:175]))
-                # find the best correlation
-                y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
-
-                # pad the image with np.nan
-                im_padded = np.pad(image,
-                                   ((y, empty_composite[0].shape[0] - (y + image.shape[0])),
-                                    (x, empty_composite[0].shape[1] - (x + image.shape[1]))),
-                                   mode='constant',
-                                   constant_values=np.nan)
-
-                empty_composite.append(im_padded)
-
-    # stack the aligned data along axis 2
-    empty_composite = np.dstack(empty_composite)
-
-    # get a boolean mask of non-NaN positions
-    nanmap = ~np.isnan(empty_composite)
-
-    # sum up the total non-NaN values along the depth
-    counts = nanmap.sum(2).astype(np.float16)
-
-    # divide counts by it highest value
-    counts /= np.amax(counts)
-
-    # get a rectangle of the region where at least half the images have real data
-    binary_core = counts > 0.5
-
-    # get all rows/columns in the common region that are True
-    poscols = np.any(binary_core, axis = 1) # column positions where true (any)
-    posrows = np.any(binary_core, axis = 0) # row positions where true (any)
-
-    # get the mix/max row/column for the binary_core
-    min_row = np.amin(np.where(posrows)[0])
-    max_row = np.amax(np.where(posrows)[0])
-    min_col = np.amin(np.where(poscols)[0])
-    max_col = np.amax(np.where(poscols)[0])
-
-    # crop the composite to the common core
-    empty_composite = empty_composite[min_col:max_col, min_row:max_row]
-
-    # get a mean image along axis 2
-    empty_mean = np.nanmean(empty_composite, axis = 2)
-
-    # old version
-    '''
-    # strip out the rows and or columns of all false
-    overlap_shape = trim_false_2d(overlap)
-    # extract the shape of the stripped array
-    overlap_shape = overlap_shape.shape
-    # sum allong the list getting the mean value ignoring the NANs  ie  for [1,2,NAN] it does (1+2+NAN)/2=1.5 not (1+2+NAN)/3=1
-    empty_mean = np.nanmean(np.asarray(empty_composite), axis = 0)
-    # reshape the numpy array to include elements with data in more than half of the list memebers
-    empty_mean = np.reshape(empty_mean[overlap], overlap_shape)
-    # empty_mean is the mean of the empty channels
-    '''
-
-    # save a tif stack of the average empty channels per time point this FOV
-    tiff.imsave(experiment_directory + analysis_directory + 'empties/fov_%03d_emptymean.tif' % fov, empty_mean.astype('uint16'))
+    information("Saved empty channel %s." % empty_filename)
 
     return True
+
+
+
+def average_empties(imgs):
+    '''
+    This function averages a set of images (empty channels) and returns a single image
+    of the same size. It first aligns the images to the first image before averaging.
+
+    Alignment is done by enlarging the first image using edge padding.
+    Subsequent images are then aligned to this image and the offset recorded.
+    These images are padded such that they are the same size as the first (padde) image but
+    with the image in the correct (aligned) place. Edge padding is again used.
+    The images are then placed in a stack and aveaged. This image is trimmed so it is the size
+    of the original images
+
+    Called by
+    average_empties_stack
+
+    '''
+
+    aligned_imgs = [] # list contains the alingned, padded images
+    pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
+
+    for n, img in enumerate(imgs):
+        # if this is the first image, pad it and add it to the stack
+        if n == 0:
+            ref_img = np.pad(img, pad_size, mode='edge') # padded reference image
+            aligned_imgs.append(ref_img)
+
+        # otherwise align this image to the first padded image
+        else:
+            # find correlation between a convolution of img against the padded reference
+            match_result = match_template(ref_img, img)
+
+            # find index of highest correlation (relative to top left corner of img)
+            y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
+
+            # pad img so it aligns and is the same size as reference image
+            pad_img = np.pad(img, ((y, ref_img.shape[0] - (y + img.shape[0])),
+                                   (x, ref_img.shape[1] - (x + img.shape[1]))), mode='edge')
+            aligned_imgs.append(pad_img)
+
+    # stack the aligned data along 3rd axis
+    aligned_imgs = np.dstack(aligned_imgs)
+    # get a mean image along 3rd axis
+    avg_empty = np.nanmean(aligned_imgs, axis=2)
+    # trim off the padded edges
+    avg_empty = avg_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
+
+    return avg_empty
 
 
 #

@@ -95,8 +95,8 @@ if __name__ == "__main__":
 
     # load specs file
     try:
-        with open(ana_dir + '/specs.pkl', 'r') as specs.pkl:
-            specs = pickle.load(specs.pkl)
+        with open(ana_dir + '/specs.pkl', 'r') as specs_file:
+            specs = pickle.load(specs_file)
     except:
         warning('Could not load specs file.')
         raise ValueError
@@ -117,3 +117,6 @@ if __name__ == "__main__":
         pass # just skip this part and go to subtraction
 
     else:
+        for fov_id in fov_id_list:
+            # send to function which will create empty stack for each fov.
+            averaging_result = mm3.average_empties_stack(fov_id, specs)
