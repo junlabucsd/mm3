@@ -25,6 +25,8 @@ import copy
 from scipy import ndimage # used in make_masks
 from skimage.segmentation import clear_border # used in make_masks
 from skimage.feature import match_template # used to align images
+import multiprocessing
+from multiprocessing import Pool
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -49,6 +51,17 @@ def init_mm3_helpers(param_file_path):
     global params
     with open(param_file_path, 'r') as param_file:
         params = yaml.safe_load(param_file)
+
+    # set up how to manage cores for multiprocessing
+    cpu_count = multiprocessing.cpu_count()
+    if cpu_count == 32:
+        num_analyzers = 20
+    elif cpu_count == 8:
+        num_analyzers = 14
+    else:
+        num_analyzers = cpu_count*2 - 2
+    params['num_analyzers'] = num_analyzers
+
     return
 
 ### functions about loading files
@@ -726,7 +739,7 @@ def average_empties_stack(fov_id, specs):
 
         # copy that tiff stack with a new name as empty
         channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
+        channel_filepath = chnl_dir + channel_filename
 
         with tiff.TiffFile(channel_filepath) as tif:
             avg_empty_stack = tif.asarray()
@@ -740,7 +753,7 @@ def average_empties_stack(fov_id, specs):
         for peak_id in empty_peak_ids:
             # load stack
             channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-            channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
+            channel_filepath = chnl_dir + channel_filename
             with tiff.TiffFile(channel_filepath) as tif:
                 image_data = tif.asarray()
 
@@ -757,23 +770,19 @@ def average_empties_stack(fov_id, specs):
             # get images from one timepoint at a time and send to alignment and averaging
             imgs = [stack[t] for stack in empty_stacks]
             avg_empty = average_empties(imgs) # function is in mm3
-            avg_empty = np.expand_dims(avg_empty, 0) # add dimension for time
             avg_empty_stack.append(avg_empty)
 
         # concatenate list and then save out to tiff stack
-        avg_empty_stack = np.concatenate(avg_empty_stack, axis=0)
+        avg_empty_stack = np.stack(avg_empty_stack, axis=0)
 
     # save out data
-    # make new name, empty_dir should be found in above scope
+    # make new name
     empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
     empty_filepath = empty_dir + empty_filename
-
     tiff.imsave(empty_filepath, avg_empty_stack) # save it
-
     information("Saved empty channel %s." % empty_filename)
 
     return True
-
 
 # averages a list of empty channels
 def average_empties(imgs):
@@ -826,235 +835,129 @@ def average_empties(imgs):
 
     return avg_empty
 
+# Do subtraction for an fov over many timepoints
+def subtract_fov_stack(fov_id, specs):
+    '''
+    For a given FOV, loads the precomputed empty stack and does subtraction on
+    all peaks in the FOV designated to be analyzed
 
-#
-def subtract_phase(dataset):
-    '''subtract_phase_only is the main worker function for doign alignment and subtraction.
+
+    Called by
+    mm3_Subtract.py
+
+    Calls
+    mm3.subtract_phase
+
+    '''
+
+    information('Subtracting peaks for FOV %d.' % fov_id)
+
+    # directories for saving
+    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+    sub_dir = = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
+
+    # load the empty stack
+    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+    empty_filepath = empty_dir + empty_filename
+    with tiff.TiffFile(empty_filepath) as tif:
+        avg_empty_stack = tif.asarray()
+
+    # determine which peaks are to be analyzed
+    ana_peak_ids = []
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 1: # 0 means it should be used for empty
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+    information("Subtracting %d channels for FOV %d." % (len(ana_peaks_ids), fov_id))
+
+    # load images for the peak and get phase images
+    for peak_id in ana_peak_ids:
+        information('Subtracting peaks %d.' % peak_id)
+
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filepath = chnl_dir + channel_filename
+        with tiff.TiffFile(channel_filepath) as tif:
+            image_data = tif.asarray()
+        image_data = image_data[:,:,:,0] # just get phase data and put it in list
+
+        # make a list for all time points to send to a multiprocessing pool
+        # list will length of image_data with tuples (image, empty)
+        subtract_pairs = zip(image_data, avg_empty_stack)
+
+        # set up multiprocessing pool to do subtraction. Should wait until finished
+        pool = Pool(processes=params['num_analyzers'])
+        subtracted_imgs = pool.apply(subtract_phase, subtract_pairs)
+        # stack them up along a time axis
+        subtracted_stack = np.stach(subtracted_imgs, axis=0)
+
+        # save out the subtracted stack
+        sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+        sub_filepath = sub_dir + sub_filename
+        tiff.imsave(sub_filepath, subtracted_stack) # save it
+        information("Saved empty channel %s." % sub_filepath)
+
+    return True
+
+# subtracts one image from another.
+def subtract_phase(image_pair):
+    '''subtract_phase aligns and subtracts a .
     Modified from subtract_phase_only by jt on 20160511
     The subtracted image returned is the same size as the image given. It may however include
     data points around the edge that are meaningless but not marked.
 
-    parameters
-    ---------
-    dataset : list of length two with; [image, empty_mean]
+    We align the empty channel to the phase channel, then subtract.
 
-    returns
-    ---------
+    Parameters
+    image_pair : tuple of length two with; (image, empty_mean)
+
+    Returns
     (subtracted_image, offset) : tuple with the subtracted_image as well as the ammount it
         was shifted to be aligned with the empty. offset = (x, y), negative or positive
         px values.
+
+    Called by
+    subtract_fov_stack
     '''
-    try:
-        if matching_length is not None:
-            pass
-    except:
-        matching_length = 180
 
-    try:
-        # get out data and pad
-        cropped_channel, empty_channel = dataset # [channel slice, empty slice]
-        # rescale empty to levels of channel image
-        #empty_channel = rescale_intensity(empty_channel,
-        #                                  out_range=(np.amin(cropped_channel[:,:,0]),
-        #                                             np.amax(cropped_channel[:,:,0])))
+    matching_length = params['matching_length']
 
-        ### Pad empty channel.
-        # Rough padding amount for empty to become template in match_template
-        start_padding = (25, 25, 25, 25) # (top, bottom, left, right)
+    # get out data and pad
+    cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
-        # adjust padding for empty so padded_empty is same size as channel later.
-        # it is important that the adjustment is made on the bottom and right sides,
-        # as later the alignment is measured from the top and left.
-        y_diff = cropped_channel.shape[0] - empty_channel.shape[0]
-        x_diff = cropped_channel.shape[1] - empty_channel.shape[1]
+    ### Pad empty channel.
+    pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
 
-        # numpy.pad-compatible padding tuple: ((top, bottom), (left, right))
-        empty_paddings = ((start_padding[0], start_padding[1] + y_diff), # add y_diff to sp[1]
-                          (start_padding[2], start_padding[3] + x_diff)) # add x_diff to sp[3]
+    # edge-pad the empty channel using these paddings
+    padded_chnl = np.pad(cropped_channel, pad_size, 'edge')
 
-        # edge-pad the empty channel using these paddings
-        padded_empty = np.pad(empty_channel, empty_paddings, 'edge')
+    ### Align channel to empty using match template.
+    # get a vertical chunk of the image of the padded channel
+    chan_subpart = cropped_channel[:matching_length + 2*pad_size,:]
+    # get a vertical chunk of the empty channel
+    empty_subpart = empty_channel[:matching_length,:]
+    # use match template to get a correlation array and find the position of maximum overlap
+    match_result = match_template(chan_subpart, empty_subpart)
+    # get row and colum of max correlation value in correlation array
+    y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
-        ### Align channel to empty using match template.
-        # get a vertical chunk of the image of the empty channel
-        empty_subpart = padded_empty[:matching_length+start_padding[0]+start_padding[1]]
-        # get a vertical chunk of the channel to be subtracted from
-        chan_subpart = cropped_channel[:matching_length,:,0] # phase data = 0
+    # pad the empty channel according to alignment to be overlayed on padded channel.
+    empty_paddings = ((y, padded_chnl.shape[0] - (y + empty_channel.shape[0])),
+                      (x, padded_chnl.shape[1] - (x + empty_channel.shape[1])))
+    aligned_empty = np.pad(empty_channel, empty_subpart, mode='edge')
+    # now trim it off so it is the same size as the original channel
+    aligned_empty = [pad_size:-1*pad_size, pad_size:-1*pad_size]
 
-        # equalize histograms for alignment
-        empty_subpart = equalize_hist(empty_subpart)
-        chan_subpart = equalize_hist(chan_subpart)
+    ### Compute the difference between the empty and channel phase contrast images
+    # subtract the empty image from the cropped channel image
+    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
 
-        # use match template to get a correlation array and find the position of maximum overlap
-        match_result = match_template(empty_subpart, chan_subpart)
-        # get row and colum of max correlation value in correlation array
-        y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
+    channel_subtracted *= -1 # make cells high-intensity
+    # Reset the zero level in the image by subtracting the min value (-1 so no zero values)
+    channel_subtracted -= np.min(channel_subtracted) - 1
+    channel_subtracted = channel_subtracted.astype('uint16') # change back to 16bit
 
-        # this is how much it was shifted in x and y.
-        # important to store for getting exact px position later
-        offset = (x - start_padding[2], y - start_padding[0])
-
-        ### pad the original cropped channel image.
-        # align the data between the empty image and the cropped images
-        # using the offsets to create a padding that adjusts the location of
-        # the channel
-        channel_paddings = ((y, start_padding[0] + start_padding[1] - y), # include sp[0] with sp[1]
-                            (x, start_padding[2] + start_padding[3] - x), # include sp[2] with sp[3]
-                            (0,0))
-
-        # the difference of padding on different sides relocates the channel to same
-        # relative location as the empty channel (in the padded version.)
-        shifted_padded_channel = np.pad(cropped_channel.astype('int32'),
-                                        channel_paddings,
-                                        mode="edge")
-
-        # trim down the pad-shifted channel to the same region where the empty image has data
-        channel_for_sub = shifted_padded_channel[start_padding[0]:-1*start_padding[1],
-                                                 start_padding[2]:-1*start_padding[3]]
-        empty_for_sub = padded_empty[start_padding[0]:-1*start_padding[1],
-                                     start_padding[2]:-1*start_padding[3]]
-
-        ### rescale the empty image intensity based on the pixel intensity ratios
-        # calculate the ratio of pixel intensities
-        pxratios = channel_for_sub[:,:,0].astype('float')/empty_for_sub.astype('float')
-        # calculate the rough peak of intensity values
-        pxrdist = np.histogram(pxratios, range=(0.5,1.5), bins=100)
-        # get the peak value for rescaling the empty image
-        distcenters = pxrdist[1][:-1]+np.diff(pxrdist[1])/2
-        pxrpeak = distcenters[np.argmax(pxrdist[0])]
-        # rescale the empty image
-        empty_for_sub = (empty_for_sub.astype('float')/pxrpeak).astype('uint16')
-
-        # add dimension to empty channel to give it Z=1 size
-        if len(empty_for_sub.shape) < 3:
-            # this function as called adds a third axis to empty channel which is flat now
-            empty_for_sub = np.expand_dims(empty_for_sub, axis = 2)
-        padded_empty_3d0 = np.zeros_like(empty_for_sub)
-        for color in xrange(1, cropped_channel.shape[2]):
-            # depth-stack the non-phase planes of the cropped image with zero arrays of same size
-            empty_for_sub = np.dstack((empty_for_sub, padded_empty_3d0))
-
-        ### Compute the difference between the empty and channel phase contrast images
-        # subtract the empty image from the cropped channel image
-        channel_subtracted = channel_for_sub.astype('int32') - empty_for_sub.astype('int32')
-
-        channel_subtracted[:,:,0] *= -1 # make cells high-intensity
-        # Reset the zero level in the image by subtracting the min value
-        channel_subtracted[:,:,0] -= np.min(channel_subtracted[:,:,0])
-        # add one to everything so there are no zeros in the image
-        channel_subtracted[:,:,0] += 1
-        # Stack the phase-contrast image used for subtraction to the bottom of the stack
-        channel_subtracted = np.dstack((channel_subtracted, channel_for_sub[:,:,0]))
-
-        return((channel_subtracted, offset))
-    except:
-        warning("Error in subtracting_phase:")
-        warning(sys.exc_info()[1])
-        warning(traceback.print_tb(sys.exc_info()[2]))
-        raise
-
-# for doing subtraction when just starting and there is a backlog
-def subtract_backlog(fov_id):
-    return_value = -1
-    try:
-        information('subtract_backlog: Subtracting backlog of images FOV %03d.' % fov_id)
-
-        # load cell peaks and empty mean
-        cell_peaks = mm3.load_cell_peaks(fov_id) # load list of cell peaks from spec file
-        empty_mean = mm3.load_empty_tif(fov_id) # load empty mean image
-        empty_mean = mm3.trim_zeros_2d(empty_mean) # trim any zero data from the image
-        information('subtract_backlog: There are %d cell peaks for FOV %03d.' % (len(cell_peaks), fov_id))
-
-        # aquire lock, giving other threads which may be blocking a chance to clear
-        lock_acquired = hdf5_locks[fov_id].acquire(block = True)
-
-        # peaks_images will be a list of [fov_id, peak, images, empty_mean]
-        with h5py.File(experiment_directory + analysis_directory +
-                       'originals/' + 'original_%03d.hdf5' % fov_id, 'r', libver='earliest') as h5f:
-
-            for peak in sorted(cell_peaks):
-                images = h5f[u'channel_%04d' % peak][:] # get all the images (and whole stack)
-                plane_names = h5f[u'channel_%04d' % peak].attrs['plane_names'] # get plane names
-
-                # move the images into a long list of list with the image next to empty mean.
-                images_with_empties = []
-                for image in images:
-                    images_with_empties.append([image, empty_mean])
-                del images
-
-                # set up multiprocessing
-                spool = Pool(num_blsubtract_subthreads) # for 'subpool of alignment/subtraction '.
-                # send everything to be processed
-                pool_result = spool.map_async(subtract_phase, images_with_empties,
-                                              chunksize = 10)
-                spool.close()
-                information('subtract_backlog: Subtraction started for FOV %d, peak %04d.' % (fov_id, peak))
-
-                # just loop around waiting for the peak to be done.
-                try:
-                    while (True):
-                        time.sleep(1)
-                        if pool_result.ready():
-                            break
-                    # inform user once this is done
-                    information("subtract_backlog: Completed peak %d in FOV %03d (%d timepoints)" %
-                                (peak, fov_id, len(images_with_empties)))
-                except KeyboardInterrupt:
-                    raise
-
-                if not pool_result.successful():
-                    warning('subtract_backlog: Processing pool not successful for peak %d.' % peak)
-                    raise AttributeError
-
-                # get the results and clean up memory
-                subtracted_data = pool_result.get() # this is a list of (sub_image, offset)
-                subtracted_images = zip(*subtracted_data)[0] # list of subtracted images
-                offsets = zip(*subtracted_data)[1] # list of offsets for x and y
-                # free some memory
-                del pool_result
-                del subtracted_data
-                del images_with_empties
-
-                # write the subtracted data to disk
-                with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5s:
-                    # create data set, use first image to set chunk and max size
-                    h5si = h5s.create_dataset("subtracted_%04d" % peak,
-                                              data=np.asarray(subtracted_images, dtype=np.uint16),
-                                              chunks=(1, subtracted_images[0].shape[0],
-                                                      subtracted_images[0].shape[1], 1),
-                                              maxshape=(None, subtracted_images[0].shape[0],
-                                                        subtracted_images[0].shape[1], None),
-                                              compression="gzip", shuffle=True)
-
-                    # rearrange plane names
-                    plane_names = plane_names.tolist()
-                    plane_names.append(plane_names.pop(0))
-                    plane_names.insert(0, 'subtracted_phase')
-                    h5si.attrs['plane_names'] = plane_names
-
-                    # create dataset for offset information
-                    # create and write first metadata
-                    h5os = h5s.create_dataset(u'offsets_%04d' % peak,
-                                              data=np.array(offsets),
-                                              maxshape=(None, 2))
-
-            # move over metadata once peaks have all peaks have been written
-            with h5py.File(experiment_directory + analysis_directory + 'subtracted/subtracted_%03d.hdf5' % fov_id, 'a', libver='earliest') as h5s:
-                sub_mds = h5s.create_dataset("metadata", data=h5f[u'metadata'],
-                                             maxshape=(None, 3))
-
-        # return 0 to the parent loop if everything was OK
-        return_value = 0
-    except:
-        warning("subtract_backlog: Failed for FOV: %03d" % fov_id)
-        warning(sys.exc_info()[1])
-        warning(traceback.print_tb(sys.exc_info()[2]))
-        return_value = 1
-
-    # release lock
-    hdf5_locks[fov_id].release()
-
-    return return_value
+    return channel_subtracted
 
 ### functions about converting dates and times
 ### Functions

@@ -44,7 +44,8 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_empties = False # use precomputed empties
+    load_empties = True # use precomputed empties
+    do_subtraction
 
     # get switches and parameters
     try:
@@ -88,10 +89,13 @@ if __name__ == "__main__":
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
     empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
+    sub_dir = = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
 
     # create the analysis folder if it doesn't exist
     if not os.path.exists(empty_dir):
         os.makedirs(empty_dir)
+    if not os.path.exists(sub_dir):
+        os.makedirs(sub_dir)
 
     # load specs file
     try:
@@ -120,3 +124,12 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             averaging_result = mm3.average_empties_stack(fov_id, specs)
+
+    ### Subtract ##################################################################################
+    if do_subtraction:
+        for fov_id in fov_id_list:
+            # send to function which will create empty stack for each fov.
+            averaging_result = mm3.subtract_fov_stack(fov_id, specs)
+
+    else:
+        pass
