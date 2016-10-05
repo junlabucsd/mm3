@@ -45,7 +45,7 @@ import mm3_helpers as mm3
 if __name__ == "__main__":
     # hardcoded parameters
     load_empties = True # use precomputed empties
-    do_subtraction
+    do_subtraction = True
 
     # get switches and parameters
     try:
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
     empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
-    sub_dir = = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
+    sub_dir = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
 
     # create the analysis folder if it doesn't exist
     if not os.path.exists(empty_dir):
@@ -118,18 +118,25 @@ if __name__ == "__main__":
 
     ### Make average empty channels ###############################################################
     if load_empties:
+        information("Loading precalculated empties.")
         pass # just skip this part and go to subtraction
 
     else:
+        information("Calculated averaged empties.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             averaging_result = mm3.average_empties_stack(fov_id, specs)
 
     ### Subtract ##################################################################################
     if do_subtraction:
+        information("Subtracting channels.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             averaging_result = mm3.subtract_fov_stack(fov_id, specs)
 
+    # Else just end, they only wanted to do empty averaging.
     else:
+        information("Skipping subtraction.")
         pass
+
+    information("Finished.")

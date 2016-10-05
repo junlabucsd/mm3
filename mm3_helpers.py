@@ -855,7 +855,7 @@ def subtract_fov_stack(fov_id, specs):
     # directories for saving
     chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
     empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-    sub_dir = = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
+    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
 
     # load the empty stack
     empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
@@ -869,7 +869,7 @@ def subtract_fov_stack(fov_id, specs):
         if spec == 1: # 0 means it should be used for empty
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
-    information("Subtracting %d channels for FOV %d." % (len(ana_peaks_ids), fov_id))
+    information("Subtracting %d channels for FOV %d." % (len(ana_peak_ids), fov_id))
 
     # load images for the peak and get phase images
     for peak_id in ana_peak_ids:
@@ -887,15 +887,15 @@ def subtract_fov_stack(fov_id, specs):
 
         # set up multiprocessing pool to do subtraction. Should wait until finished
         pool = Pool(processes=params['num_analyzers'])
-        subtracted_imgs = pool.apply(subtract_phase, subtract_pairs)
+        subtracted_imgs = pool.map(subtract_phase, subtract_pairs, chunksize=10)
         # stack them up along a time axis
-        subtracted_stack = np.stach(subtracted_imgs, axis=0)
+        subtracted_stack = np.stack(subtracted_imgs, axis=0)
 
         # save out the subtracted stack
         sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
         sub_filepath = sub_dir + sub_filename
         tiff.imsave(sub_filepath, subtracted_stack) # save it
-        information("Saved empty channel %s." % sub_filepath)
+        information("Saved empty channel %s." % sub_filename)
 
     return True
 
@@ -919,34 +919,25 @@ def subtract_phase(image_pair):
     Called by
     subtract_fov_stack
     '''
-
-    matching_length = params['matching_length']
-
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
     ### Pad empty channel.
     pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
+    padded_chnl = np.pad(cropped_channel, pad_size, mode='edge')
 
-    # edge-pad the empty channel using these paddings
-    padded_chnl = np.pad(cropped_channel, pad_size, 'edge')
-
-    ### Align channel to empty using match template.
-    # get a vertical chunk of the image of the padded channel
-    chan_subpart = cropped_channel[:matching_length + 2*pad_size,:]
-    # get a vertical chunk of the empty channel
-    empty_subpart = empty_channel[:matching_length,:]
+    # ### Align channel to empty using match template.
     # use match template to get a correlation array and find the position of maximum overlap
-    match_result = match_template(chan_subpart, empty_subpart)
+    match_result = match_template(padded_chnl, empty_channel)
     # get row and colum of max correlation value in correlation array
     y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
     # pad the empty channel according to alignment to be overlayed on padded channel.
-    empty_paddings = ((y, padded_chnl.shape[0] - (y + empty_channel.shape[0])),
-                      (x, padded_chnl.shape[1] - (x + empty_channel.shape[1])))
-    aligned_empty = np.pad(empty_channel, empty_subpart, mode='edge')
+    empty_paddings = [[y, padded_chnl.shape[0] - (y + empty_channel.shape[0])],
+                      [x, padded_chnl.shape[1] - (x + empty_channel.shape[1])]]
+    aligned_empty = np.pad(empty_channel, empty_paddings, mode='edge')
     # now trim it off so it is the same size as the original channel
-    aligned_empty = [pad_size:-1*pad_size, pad_size:-1*pad_size]
+    aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract the empty image from the cropped channel image
