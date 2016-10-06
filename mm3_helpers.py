@@ -17,7 +17,7 @@ try:
 except:
     import pickle
 import numpy as np
-import scipy.signal as spsig
+import scipy.signal as spsig # used in channel finding
 import scipy.stats as spstats
 import struct # for interpretting strings as binary data
 import re # regular expressions
@@ -64,34 +64,6 @@ def init_mm3_helpers(param_file_path):
     params['num_analyzers'] = num_analyzers
 
     return
-
-### functions about loading files
-# loading the channel id of cell containing peaks
-def load_cell_peaks(fov_id):
-    '''Returns and array of the cell peaks from the spec file for a given fov number'''
-    exp_dir = params['experiment_directory']
-    ana_dir = params['analysis_directory']
-    if not os.path.exists(exp_dir + ana_dir + 'specs/specs_%03d.pkl' % fov_id):
-        warning("Spec file missing for " + fov_id)
-        return -1
-    else:
-        with open(exp_dir + ana_dir + 'specs/specs_%03d.pkl' % fov_id, 'rb') as pkl_file:
-            user_picks = pickle.load(pkl_file) # tuple = (drop_peaks, cell_peaks, bgrd_peaks)
-    # get the cell-containing peaks
-    cell_peaks = user_picks[1]
-    cell_peaks = np.array(cell_peaks) # it is currently just a list of ints
-    return cell_peaks
-
-# load empty tif for an fov_id (empty for background subtraction)
-def load_empty_tif(fov_id):
-    exp_dir = params['experiment_directory']
-    ana_dir = params['analysis_directory']
-    if not os.path.exists(exp_dir + ana_dir + "empties/fov_%03d_emptymean.tif" % fov_id):
-        warning("Empty mean .tif file missing for " + fov_id)
-        return -1
-    else:
-        empty_mean = tiff.imread(exp_dir + ana_dir + "empties/fov_%03d_emptymean.tif" % fov_id)
-    return empty_mean
 
 # finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
@@ -240,191 +212,74 @@ def find_channel_locs(image_data):
 
 
     Called by
-    get_tif_params
+    mm3_Compile.get_tif_params
 
     '''
 
-    try:
-        # declare temp variables from yaml parameter dict.
-        chan_w = params['channel_width']
-        chan_midline_sep = params['channel_midline_separation']
-        crop_hw = params['crop_half_width']
-        chan_snr = params['channel_detection_snr']
+    # declare temp variables from yaml parameter dict.
+    chan_w = params['channel_width']
+    chan_sep = params['channel_separation']
+    crop_wp = int(params['channel_width_pad'] + params['channel_width']/2)
+    chan_snr = params['channel_detection_snr']
 
-        # structure for channel dimensions
-        channel_params = []
-        # Structure of channel_params
-        # 0 = peak position ('peak_px')
-        # 1 = index of max (the closed end)
-        # 2 = index of min (the open end)
-        # 3 = length of the channel (min - max)
+    # Detect peaks in the x projection (i.e. find the channels)
+    projection_x = image_data.sum(axis=0)
+    # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
+    # convolving it with a wave. here the wave is the default wave used by the algorithm
+    # but the minimum signal to noise ratio is specified
+    peaks = spsig.find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
+                                 min_snr=chan_snr)
 
-        # Detect peaks in the x projection (i.e. find the channels)
-        projection_x = image_data.sum(axis = 0)
-        # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
-        # convolving it with a wave. here the wave is the default wave used by the algorythm
-        # but the minimum signal to noise ratio is specified
-        peaks = spsig.find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
-                                     min_snr=chan_snr)
+    # If the left-most peak position is within half of a channel separation,
+    # discard the channel from the list.
+    if peaks[0] < (chan_sep / 2):
+        peaks = peaks[1:]
+    # If the diference between the right-most peak position and the right edge
+    # of the image is less than half of a channel separation, discard the channel.
+    if image_data.shape[1] - peaks[-1] < (chan_sep / 2):
+        peaks = peaks[:-1]
 
-        # If the left-most peak position is within half of a channel separation,
-        # discard the channel from the list.
-        if peaks[0] < (chan_midline_sep / 2):
-            peaks = peaks[1:]
-        # If the difference between the right-most peak position and the right edge
-        # of the image is less than half of a channel separation, discard the channel.
-        if image_data.shape[0] - peaks[len(peaks)-1] < (chan_midline_sep / 2):
-            peaks = peaks[:-1]
+    # Find the average channel ends for the y-projected image
+    projection_y = image_data.sum(axis=1)
+    # find derivative, must use int32 because it was unsigned 16b before.
+    proj_y_d = np.diff(projection_y.astype(np.int32))
+    midpoint_y = int(projection_y.shape[0]/2)
+    # use the top half to look for closed end, is pixel location of highest deriv
+    default_closed_end_px = proj_y_d[:midpoint_y].argmax()
+    # use bottom half to look for open end, pixel location of lowest deriv
+    default_open_end_px = midpoint_y + proj_y_d[midpoint_y:].argmin()
+    default_length = default_open_end_px - default_closed_end_px # used for checks
 
-        # Find the average channel ends for the y-projected image
-        projection_y = image_data.sum(axis = 1)
-        # diff returns the array of the differences between each element and its neighbor
-        # in a given array. View takes a snapshot of data in memory and allows it to be
-        # reinterpreted as annother data type. this appears to be the index of the
-        # maximum of the derivative of the uper 2/3's of the y projection rebinned
-        image_deriv_max = np.diff(projection_y[:int(projection_y.shape[0]*(1./3.))].view(np.int32)[0::2]).argmax()
-        # the same only the indexl of the min of the derivative of the  lower 2/3's
-        # of the projection plus 2/3 of the "height" of the y projection
-        image_deriv_min = np.diff(projection_y[int(projection_y.shape[0]*(2./3.)):].view(np.int32)[0::2]).argmin() + int(projection_y.shape[0]*(2./3.))
+    # go through peaks and assign information
+    # dict for channel dimensions
+    chnl_loc_dict = {}
+    # key is peak location, value is dict with {'closed_end_px': px, 'open_end_px': px}
 
-        # Slice up the image into an array of channel strips
-        channel_strips = []
-        for peak in peaks:
-            # Structure of channel_strips
-            # 0 = peak position, 1 = image of the strip (AKA the channel) itself
-            channel_strips.append([peak, image_data[0:image_data.shape[0],
-                                   peak - crop_hw:peak + crop_hw]])
+    for peak in peaks:
+        # set defaults
+        chnl_loc_dict['peak'] = {'closed_end_px': default_closed_end_px,
+                                 'open_end_px': default_open_end_px}
+        # redo the previous y projection finding with just this channel
+        channel_slice = image_data[:, peak-crop_wp:peak+crop_wp]]
+        slice_projection_y = channel_slice.sum(axis = 1)
+        slice_proj_y_d = np.diff(slice_projection_y.astype(np.int32))
+        slice_closed_end_px = proj_y_d[:midpoint_y].argmax()
+        slice_open_end_px = midpoint_y + proj_y_d[midpoint_y:].argmin()
+        slice_length = open_end_px_default - closed_end_px_default
 
-        # Find channel starts and ends based on the maximum derivative of the channel profile;
-        # min of the first derivative is usually the open end and max is usually the closed end.
+        # check if these values make sense. If so, use them. If not, use default
+        # make sure lenght is not 15 pixels to big or small
+        if slice_length + 15 < default_length or slice_length - 15 > default_length:
+            continue
+        # make sure ends are greater than 15 pixels from image edge
+        if slice_closed_end_px < 15 or slice_open_end_px > image_data.shape[0] - 15:
+            continue
 
-        # THE FOLLOWING IS SIMILAR TO WHAT THE CODE ALREADY DID TO THE WHOLE IMAGE ONLY NOW IT IS
-        # DOING ANALYSIS OF THE IMAGES OF INDIVIDUAL CHANNELS! i.e. it is a first order correction
-        # on the previous calculations done at the whole image level
-        # loop through the list of channel strip structures that we created
+        # if you made it to this point then update the entry
+        chnl_loc_dict['peak'] = {'closed_end_px': slice_closed_end_px,
+                                 'open_end_px': slice_open_end_px}
 
-        # create these slice bounds to ensure we are within the image
-        px_window = 20 # Search for a channel bounds in 20px windows around the image global bounds
-        low_for_max = max(0, image_deriv_max-(px_window))
-        high_for_max = min(image_deriv_max+px_window, image_data.shape[0])
-        low_for_min = max(0, image_deriv_min-px_window)
-        high_for_min = min(image_deriv_min+(px_window), image_data.shape[0])
-
-        for strip in channel_strips:
-            # get the projection of the image of the channel strip onto the y axis
-            slice_projection_y = strip[1].sum(axis = 1)
-            # get the derivative of the projection
-            first_derivative = np.diff(slice_projection_y.view(np.int32)[0::2])
-
-            # find the postion of the maximum value of the derivative of the projection
-            # of the slice onto the y axis within the distance of px_window from the edge of slice
-            maximum_index = first_derivative[low_for_max:high_for_max].argmax()
-            # same for the min
-            minimum_index = first_derivative[low_for_min:high_for_min].argmin()
-            # attach the calculated data to the list channel_params, corrected
-            channel_params.append([strip[0], # peak position (x)
-                int(maximum_index + low_for_max), # close end position (y)
-                int(minimum_index + low_for_min), # open end position (y)
-                int(abs((minimum_index + low_for_min) - (maximum_index + low_for_max))), # length y
-                False]) # not sure what false is for
-
-        # Guide a re-detection of the min/max indices to smaller windows of the modes for this image
-        # here mode is meant in the statistical sence ie mode([1,2,2,3,3,3,3,4]) give 3
-        # channel_modes is a list of the modes (and a list of ther frequencies) for each of the
-        # coordinates sorted in each element of the channel_params list elements
-        channel_modes = spstats.mode(channel_params, axis = 0)
-        # channel_medians is a list of the medians in the same fashion
-        channel_medians = spstats.nanmedian(channel_params, axis = 0)
-
-        # Sanity-check boundaries:
-        #  Reset modes
-        channel_modes = spstats.mode(channel_params, axis = 0)
-        channel_medians = spstats.nanmedian(channel_params, axis = 0)
-        max_baseline = 0
-        min_baseline = 0
-        len_baseline = 0
-        # set min_baseline
-        try:
-            if channel_modes[0][0][2] > 0:
-                min_baseline = int(channel_modes[0][0][2])
-            # use median information if modes are no use
-            else:
-                min_baseline = int(channel_medians[2])
-            # if everything is unreasonable COMPLAIN!
-            if min_baseline <= 0:
-                warning("No reasonable baseline minumum found!")
-                warning("Image:",image_filename)
-                warning("Medians:",channel_medians)
-                warning("Modes:",channel_modes)
-                raise
-        except:
-            warning('%s: error in mode/median analysis; maybe the device is delaminated?' % image_filename.split("/")[-1])
-            return [image_filename, -1]
-
-        # set max_baseline
-        if channel_modes[0][0][1] > 0:
-            max_baseline = int(channel_modes[0][0][1])
-        # use median information if modes are no use
-        else:
-            max_baseline = int(channel_medians[1])
-        # if everything is unreasonable COMPLAIN!
-        if max_baseline <= 0:
-            warning("%s: no reasonable baseline maximum found." % image_filename.split("/")[-1])
-            print("-")
-            return [image_filename, -1]
-
-        # set len_baseline
-        if channel_modes[0][0][3] > 0:
-            len_baseline = channel_modes[0][0][3]
-        # use median information if modes are no use
-        else:
-            len_baseline = channel_medians[3]
-
-        # check each channel for a length that is > 50% different from the mode length
-        # 20150525: using 10% as a threshold for reassignment is problematic for SJW103
-        # dual-trench devices because the channels on either side of the double-tall FOVs are not the same.
-        # doing a C style for loop an alternative is to use "for n,channel in enumerate(channel_params)"
-        # assigments to the list using the index n will stick!
-        for n in range(0,len(channel_params)):
-            if float(abs(channel_params[n][3] - len_baseline)) / float(len_baseline) > 0.5:
-                information("Correcting  diff(len) > 0.3...")
-                information("...")
-                if abs(channel_params[n][1] - max_baseline) < abs(channel_params[n][2] - min_baseline):
-                    channel_params[n][2] = int(channel_params[n][1]) + int(len_baseline)
-                else:
-                    channel_params[n][1] = int(channel_params[n][2]) - int(len_baseline)
-                channel_params[n][3] = int(abs(channel_params[n][1] - channel_params[n][2]))
-
-        # check each channel for a closed end that is inside the image boundaries
-        for n in range(0,len(channel_params)):
-            if channel_params[n][1] < 0:
-                information("Correcting [n][1] < 0 in",image_filename,"at peak",channel_params[n][0])
-                information("...", max_baseline, min_baseline, int(max_baseline), int(min_baseline))
-                channel_params[n][1] = max_baseline
-                channel_params[n][2] = min_baseline
-                channel_params[n][3] = abs(channel_params[n][1] - channel_params[n][2])
-
-        # check each channel for an open end that is inside the image boundaries
-        for n in range(0,len(channel_params)):
-            if channel_params[n][2] > image_data.shape[0]:
-                information("Correcting [n][2] > image_data.shape[0] in",image_filename,"at peak",channel_params[n][0])
-                information("...", max_baseline, min_baseline, int(max_baseline), int(min_baseline))
-                channel_params[n][1] = max_baseline
-                channel_params[n][2] = min_baseline
-                channel_params[n][3] = abs(channel_params[n][1] - channel_params[n][2])
-
-        # create a dictionary of channel starts and ends
-        cp_dict = {cp[0]:
-                  {'closed_end_px': cp[1], 'open_end_px': cp[2]} for cp in channel_params}
-
-        return cp_dict
-
-    except:
-        warning('Channel locating failed.')
-        print(sys.exc_info()[0])
-        print(sys.exc_info()[1])
-        print(traceback.print_tb(sys.exc_info()[2]))
-        return -1
+    return chnl_loc_dict
 
 # make masks from initial set of images (same images as clusters)
 def make_masks(analyzed_imgs):
@@ -454,7 +309,7 @@ def make_masks(analyzed_imgs):
     information("Determining initial channel masks...")
 
     # declare temp variables from yaml parameter dict.
-    crop_hw = params['crop_half_width']
+    crop_wp = int(params['channel_width_pad'] + params['channel_width']/2)
     chan_lp = params['channel_length_pad']
 
     #intiaize dictionary
@@ -500,10 +355,10 @@ def make_masks(analyzed_imgs):
             for chnl_peak, peak_ends in img_v['channels'].iteritems():
                 # pull out the peak location and top and bottom location
                 # and expand by padding (more padding done later for width)
-                x1 = max(chnl_peak - int(crop_hw), 0)
-                x2 = min(chnl_peak + int(crop_hw), image_cols)
-                y1 = peak_ends['closed_end_px']
-                y2 = peak_ends['open_end_px']
+                x1 = max(chnl_peak - crop_wp, 0)
+                x2 = min(chnl_peak + crop_wp, image_cols)
+                y1 = max(peak_ends['closed_end_px'] - chan_lp, 0)
+                y2 = min(peak_ends['open_end_px'] + chan_lp, image_rows)
 
                 # add it to the mask for this image
                 img_chnl_mask[y1:y2, x1:x2] = 1
@@ -537,10 +392,10 @@ def make_masks(analyzed_imgs):
             channel_id = int(np.median(np.where(poscols)[0]))
 
             # store the edge locations of the channel mask in the dictionary
-            min_row = np.min(np.where(posrows)[0]) - chan_lp # pad length
-            max_row = np.max(np.where(posrows)[0]) + chan_lp
-            min_col = max(np.min(np.where(poscols)[0]) - 5, 0) # pad width
-            max_col = min(np.max(np.where(poscols)[0]) + 5, image_cols)
+            min_row = np.min(np.where(posrows)[0])
+            max_row = np.max(np.where(posrows)[0])
+            min_col = np.min(np.where(poscols)[0])
+            max_col = np.max(np.where(poscols)[0])
 
             # if the min/max cols are within the image bounds,
             # add the mask, as 4 points, to the dictionary
@@ -577,7 +432,6 @@ def make_masks(analyzed_imgs):
     return cm_copy
 
 ### functions about trimming, padding, and manipulating images
-# cuts out a channel from an tiff image (that has been processed)
 # define function for flipping the images on an FOV by FOV basis
 def fix_orientation(image_data):
     '''
@@ -599,11 +453,6 @@ def fix_orientation(image_data):
 
     # setting image_orientation to 'auto' will use autodetection
     if image_orientation == "auto":
-        # crop image to just the area of the channels
-        if params['image_vertical_crop'] >= 0:
-            image_data = image_data[:,params['image_vertical_crop']:image_data.shape[1] -
-                                      params['image_vertical_crop'],:]
-
         # Pick the plane to analyze with the highest mean px value (should be phase)
         ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
 
