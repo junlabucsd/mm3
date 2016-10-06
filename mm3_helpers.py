@@ -11,6 +11,7 @@ import os
 import time
 import inspect
 import yaml
+import json # for importing tiff metdata
 try:
     import cPickle as pickle # pickle
 except:
@@ -92,7 +93,7 @@ def load_empty_tif(fov_id):
         empty_mean = tiff.imread(exp_dir + ana_dir + "empties/fov_%03d_emptymean.tif" % fov_id)
     return empty_mean
 
-# finds metdata in a tiff image.
+# finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
     '''This function pulls out the metadata from a tif file and returns it as a dictionary.
     This if tiff files as exported by Nikon Elements as a stacked tiff, each for one tpoint.
@@ -109,7 +110,7 @@ def get_tif_metadata_elements(tif):
             'plane_names' (list of strings)
 
     Called by
-    mm3.get_tif_params
+    mm3.Compile
 
     '''
 
@@ -201,6 +202,33 @@ def get_tif_metadata_elements(tif):
                     planes.append(words[idx+1])
 
                 idata['planes'] = planes
+
+    return idata
+
+# finds metdata in a tiff image which has been expoted with nd2ToTIFF.py.
+def get_tif_metadata_nd2ToTIFF(tif):
+    '''This function pulls out the metadata from a tif file and returns it as a dictionary.
+    This if tiff files as exported by the mm3 function mm3_nd2ToTIFF.py. All the metdata
+    is found in that script and saved in json format to the tiff, so it is simply extracted here
+
+    Paramters:
+        tif: TIFF file object from which data will be extracted
+    Returns:
+        dictionary of values:
+            'fov': -1,
+            't' : -1,
+            'jdn' (float)
+            'x' (float)
+            'y' (float)
+            'planes' (list of strings)
+
+    Called by
+    mm3_Compile.get_tif_params
+
+    '''
+    # get the first page of the tiff and pull out image description
+    # this dictionary should be in the above form
+    idata = tif[0].image_description
 
     return idata
 

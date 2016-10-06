@@ -69,7 +69,11 @@ def get_tif_params(image_filename, find_channels=True):
         # open up file and get metadata
         with tiff.TiffFile(TIFF_dir + image_filename) as tif:
             image_data = tif.asarray()
-            image_metadata = mm3.get_tif_metadata_elements(tif)
+
+            if p['TIFF_source'] == 'elements':
+                image_metadata = mm3.get_tif_metadata_elements(tif)
+            elif p['TIFF_source'] = 'nd2ToTIFF':
+                image_metadata = mm3.get_tif_metadata_nd2ToTIFF(tif)
 
         # look for channels if flagged
         if find_channels:
@@ -264,11 +268,6 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    ### multiprocessing variables and set up.
-    # set up a dictionary of locks to prevent HDF5 disk collisions
-    # global hdf5_locks
-    # hdf5_locks = {x: Lock() for x in range(p['num_fovs'])} # num_fovs is global parameter
-
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
     if cpu_count == 32:
@@ -397,25 +396,5 @@ if __name__ == "__main__":
             # send to function which slices and writes channels out
             tiff_slice_and_write(image_params, channel_masks)
         '''
-
-    '''
-    ### This is for writing images one at a time using mutliprocessing
-    # This doesn't work yet because Locks have not been set up. Also it doesn't
-    # make much sense because you wouldn't want to split it up by fov first
-
-    # # initialize pool for writing images
-    # pool = Pool(num_analyzers)
-
-    # for fn, jd in send_to_write:
-    #     written_imgs[fn] = pool.apply_async(tiff_slice_and_write,
-    #                                         args=(image_params, channel_masks))
-    #
-    # information('Waiting for channel write pool to be finished.')
-    #
-    # pool.close() # tells the process nothing more will be added.
-    # pool.join() # blocks script until everything has been processed and workers exit
-    #
-    # information('Channel write pool finished.')
-    '''
 
     information("Channel slices saved.")

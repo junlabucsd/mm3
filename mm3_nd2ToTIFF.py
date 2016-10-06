@@ -119,7 +119,7 @@ if __name__ == "__main__":
             #     nd2f.bundle_axes = [u'c', u'y', u'x']
 
             # get the color names out. Kinda roundabout way.
-            file_colors = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
+            planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
 
             # get timepoints for extraction. Check is for multiple FOVs or not
             if len(nd2f) == 1:
@@ -147,10 +147,9 @@ if __name__ == "__main__":
                     days = hours / 24.
                     acq_time = starttime + days
 
-                    # Put in the calcultated absolute acquisition time to the existing meta
-                    nd2f[t_id].metadata['acq_time'] = acq_time
-                    # This json of the metadata will be put in the tiff directly
-                    metadata_json = json.dumps(nd2f[t_id].metadata)
+                    # get physical location FOV on stage
+                    x_um = nd2f[t_id].metadata['x_um']
+                    y_um = nd2f[t_id].metadata['y_um']
 
                     # # save stack of colors if there are colors
                     # if u'c' in nd2f.sizes.keys():
@@ -169,6 +168,15 @@ if __name__ == "__main__":
 
                     # save a single phase image if no colors
                     # else:
+
+                    # make dictionary which will be the metdata for this TIFF
+                    metadata_t = { 'fov': fov+1,
+                                   't' : t_id+1,
+                                   'jd': acq_time,
+                                   'x': x_um,
+                                   'y': y_um,
+                                   'planes': planes}
+                    metadata_json = json.dumps(metadata_t)
 
                     tif_filename = nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
                     information('Saving %s.' % tif_filename)
