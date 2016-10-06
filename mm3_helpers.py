@@ -201,6 +201,7 @@ def get_tif_metadata_nd2ToTIFF(tif):
     # get the first page of the tiff and pull out image description
     # this dictionary should be in the above form
     idata = tif[0].image_description
+    idata = json.loads(idata.decode('utf-8'))
 
     return idata
 
@@ -243,11 +244,12 @@ def find_channel_locs(image_data):
     projection_y = image_data.sum(axis=1)
     # find derivative, must use int32 because it was unsigned 16b before.
     proj_y_d = np.diff(projection_y.astype(np.int32))
-    midpoint_y = int(projection_y.shape[0]/2)
-    # use the top half to look for closed end, is pixel location of highest deriv
-    default_closed_end_px = proj_y_d[:midpoint_y].argmax()
-    # use bottom half to look for open end, pixel location of lowest deriv
-    default_open_end_px = midpoint_y + proj_y_d[midpoint_y:].argmin()
+    # use the top third to look for closed end, is pixel location of highest deriv
+    onethirdpoint_y = int(projection_y.shape[0]/3.0)
+    default_closed_end_px = proj_y_d[:onethirdpoint_y].argmax()
+    # use bottom third to look for open end, pixel location of lowest deriv
+    twothirdpoint_y = int(projection_y.shape[0]*2.0/3.0)
+    default_open_end_px = twothirdpoint_y + proj_y_d[twothirdpoint_y:].argmin()
     default_length = default_open_end_px - default_closed_end_px # used for checks
 
     # go through peaks and assign information
@@ -263,8 +265,8 @@ def find_channel_locs(image_data):
         channel_slice = image_data[:, peak-crop_wp:peak+crop_wp]
         slice_projection_y = channel_slice.sum(axis = 1)
         slice_proj_y_d = np.diff(slice_projection_y.astype(np.int32))
-        slice_closed_end_px = slice_proj_y_d[:midpoint_y].argmax()
-        slice_open_end_px = midpoint_y + slice_proj_y_d[midpoint_y:].argmin()
+        slice_closed_end_px = slice_proj_y_d[:onethirdpoint_y].argmax()
+        slice_open_end_px = twothirdpoint_y + slice_proj_y_d[twothirdpoint_y:].argmin()
         slice_length = slice_open_end_px - slice_closed_end_px
 
         # check if these values make sense. If so, use them. If not, use default
@@ -549,12 +551,13 @@ def channel_xcorr(channel_filepath):
         image_data = tif.asarray()
 
     # just use the first plane, which should be the phase images
-    image_data = image_data[:,:,:,0]
+    if len(image_data.shape) > 3: # if there happen to be multiple planes
+        image_data = image_data[:,:,:,0]
 
     # if there are more than 100 images, use 100 images evenly
     # spaced across the range
     if image_data.shape[0] > 100:
-        spacing = np.floor(image_data.shape[0] / 100)
+        spacing = int(image_data.shape[0] / 100)
         image_data = image_data[::spacing,:,:]
         if image_data.shape[0] > 100:
             image_data = image_data[:100,:,:]
@@ -563,7 +566,7 @@ def channel_xcorr(channel_filepath):
     first_img = image_data[0,:,:]
 
     xcorr_array = [] # array holds cross correlation vaues
-    for img in image_data[1:,:,:]:
+    for img in image_data:
         # use match_template to find all cross correlations for the
         # current image against the first image.
         xcorr_array.append(np.max(match_template(img, first_img)))
@@ -765,7 +768,12 @@ def subtract_fov_stack(fov_id, specs):
 
         # set up multiprocessing pool to do subtraction. Should wait until finished
         pool = Pool(processes=params['num_analyzers'])
+
         subtracted_imgs = pool.map(subtract_phase, subtract_pairs, chunksize=10)
+
+        pool.close() # tells the process nothing more will be added.
+        pool.join() # blocks script until everything has been processed and workers exit
+
         # stack them up along a time axis
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
 
@@ -773,7 +781,7 @@ def subtract_fov_stack(fov_id, specs):
         sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
         sub_filepath = sub_dir + sub_filename
         tiff.imsave(sub_filepath, subtracted_stack) # save it
-        information("Saved empty channel %s." % sub_filename)
+        information("Saved subtracted channel %s." % sub_filename)
 
     return True
 
