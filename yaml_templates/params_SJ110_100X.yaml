@@ -1,6 +1,6 @@
 # Refer to the .yaml parameters file walkthrough in the git repository wiki
 # Name your experiment
-experiment_name: "20160406_realtime_test"
+experiment_name: "experiment_name"
 
 # the number of fields of view
 num_fovs: 2
@@ -8,10 +8,10 @@ num_fovs: 2
 seconds_per_time_index: 60
 # image start and end indexes for tracing lineage, currently used by pyMakeMotherMap.py
 # indicates the first frame for analysis. Should be zero indexed if starting from start.
-mmm_image_start: 0
+image_start: 0
 # indicates last frame for analysis. If this value exceeds the maximum index value
 # present in an experiment, it will be silently ignored
-mmm_image_end: 1000
+image_end: 1000
 
 # constants for tuning the algorithm (units are pixels)
 # channel_width is simply the width of the channels in pixels
@@ -33,11 +33,7 @@ channel_detection_snr: 1 # on suggestion from Steve 20160118
 global_otsu_minimum: 180
 # threshold for calling empty/full channels in pyChannelPicker
 channel_picking_threshold: 0.97
-# matching_length sets the vertical distance of each channel image to use for matching the empty
-# channel image for subtraction. In general, values ~ 1.5x the average l_b give alignments
-# which are accurate enough for most analyses; errors manifest as slight distortions of cell width.
-# Values > 2.5x the average l_b provide no increase in accuracy and are quadractically slower.
-matching_length: 120
+
 # image_vertical_crop sets the amount of the image to crop from the top and
 # bottom before analysis
 image_vertical_crop: 0
@@ -54,48 +50,27 @@ image_orientation: "auto"
 flip_fovs: []
 
 # root directory for the experiment. Must end in "/"
-experiment_directory: "/Users/jt/data/test_set_redgreen/"
+experiment_directory: "/Users/jt/drive/code/mm_test_data/red_green/"
 # subdirectory for the original TIFs
-image_directory: 'TIFF_2FOV100/'
+image_directory: 'TIFF/'
 # subdirectory for storing analysis data
-analysis_directory: 'analysis_2FOV100/'
-# subdirectory containing .csv files with Nikon Elements-exported .csv files with timestamps
-# this is not needed when the timestamps are retrieved from the TIFs directly (see below)
-#acquisition_data_directory: acquisition_data/
-# file_prefix and file_postfix describe the naming of the TIF files themselves
-# the scripts assume that the files are named as '<file_prefix>t<time index>xy<fov index><file_postfix>'
-# change file_postfix & file_prefix per the individual experiment
-#file_prefix: "20160114_xtl420_mm"
-# file_postfix is what is after the time and FOV indicies. Even if you have
-# multiple fluorescent colors, you can still enter c1 here.
-#file_postfix: ""
-
-# matplotlib color spectrum to use for R^2 values ( http://matplotlib.org/examples/color/colormaps_reference.html )
-# JT liked RdBu, Steve likes RdYlGn; both maps use red for low R^2.
-r2cmap: RdYlGn
-
-# Timing
-# set to True if you want to use the time values directly from the TIFs
-external_timings: True
-# set to true if using data compiled from exported NIS Elements data
-nis_export_timings: False
-nis_export_timings_file: "acquisition_data/t.csv"
+analysis_directory: 'analysis/'
 
 ### settings for fluorescence accounting #######################################
-# first_fluorescence is True when you have a single time point with fluorescence for multiplex experiments
-first_fluorescence: False
-fluorescence_channels: ["FITC"]
-first_fluorescence_channels: ["FITC"]
-
-# for foci detecetion
-# finding_foci is just a boolean value that enables or disables foci detection
-finding_foci: False
-# foci_detection_channel specifies a channel name from fluorescence_channels
-# to use for foci detection
-foci_detection_channel: ["FITC"]
+# # first_fluorescence is True when you have a single time point with fluorescence for multiplex experiments
+# first_fluorescence: False
+# fluorescence_channels: ["FITC"]
+# first_fluorescence_channels: ["FITC"]
+#
+# # for foci detecetion
+# # finding_foci is just a boolean value that enables or disables foci detection
+# finding_foci: False
+# # foci_detection_channel specifies a channel name from fluorescence_channels
+# # to use for foci detection
+# foci_detection_channel: ["FITC"]
 
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment
-movie_directory: Users/jt/data/test_set_redgreen/movies/
+movie_directory: 'movies/'
 # fps set the framerate per second
 fps: 24
