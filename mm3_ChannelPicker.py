@@ -20,6 +20,8 @@ except:
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage.exposure import rescale_intensity # for displaying in GUI
+import multiprocessing
+from multiprocessing import Pool
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -54,7 +56,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     Returns
     bgdr_peaks : list
         list of peak id's (int) of channels to be used for subtraction
-    spec_file_...pkl : pickle file
+    spec_file_pkl : pickle file
         saves the lists cell_peaks, bgrd_peaks, and drop_peaks to a pkl file
 
     '''
@@ -161,7 +163,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     # enter user input
     # ask the user to correct cell/nocell calls
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
-    raw_input("Click colored channels to toggle between analyze, use for empty, and ignore.\nDefault green channels will be analyzed, blue used for empty\nPress enter when done and go to the next FOV (do not close window).\n") # raw input waits for enter key
+    raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPress enter when done and go to the next FOV (do not close window).\n") # raw input waits for enter key
     fig.canvas.mpl_disconnect(cells_handler)
 
     plt.close()
@@ -180,7 +182,6 @@ def format_channel_plot(ax, peak_id):
 if __name__ == "__main__":
     # hardcoded parameters
     load_crosscorrs = True
-    full_empty_threshold = 0.985
 
     # get switches and parameters
     try:
@@ -220,6 +221,15 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
+    # set up how to manage cores for multiprocessing
+    cpu_count = multiprocessing.cpu_count()
+    if cpu_count == 32:
+        num_analyzers = 20
+    elif cpu_count == 8:
+        num_analyzers = 14
+    else:
+        num_analyzers = cpu_count*2 - 2
+
     # assign shorthand directory names
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
@@ -247,7 +257,7 @@ if __name__ == "__main__":
     if load_crosscorrs: # load precalculate ones if indicated
         information('Loading precalculated cross-correlations.')
 
-        with open(ana_dir + '/crosscorrs.pkl', 'r') as xcorrs_file:
+        with open(ana_dir + 'crosscorrs.pkl', 'r') as xcorrs_file:
             crosscorrs = pickle.load(xcorrs_file)
 
     else:
@@ -295,7 +305,7 @@ if __name__ == "__main__":
                     # is full into the dictionary
                     crosscorrs[fov_id][peak_id] = {'ccs' : result.get(),
                                                    'cc_avg' : np.average(result.get()),
-                                                   'full' : np.average(result.get()) < full_empty_threshold}
+                                                   'full' : np.average(result.get()) < p['channel_picking_threshold']}
                 else:
                     crosscorrs[fov_id][peak_id] = False # put a false there if it's bad
 
@@ -327,7 +337,7 @@ if __name__ == "__main__":
 
     # write specfications to pickle and text
     information("Writing specifications file.")
-    with open(ana_dir+ "/specs.pkl", 'w') as specs.pkl:
+    with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
         pickle.dump(specs, specs_file)
     with open(ana_dir + "/specs.txt", 'w') as specs_file:
         pprint(specs, stream=specs_file)

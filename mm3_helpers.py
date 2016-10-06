@@ -257,18 +257,18 @@ def find_channel_locs(image_data):
 
     for peak in peaks:
         # set defaults
-        chnl_loc_dict['peak'] = {'closed_end_px': default_closed_end_px,
+        chnl_loc_dict[peak] = {'closed_end_px': default_closed_end_px,
                                  'open_end_px': default_open_end_px}
         # redo the previous y projection finding with just this channel
-        channel_slice = image_data[:, peak-crop_wp:peak+crop_wp]]
+        channel_slice = image_data[:, peak-crop_wp:peak+crop_wp]
         slice_projection_y = channel_slice.sum(axis = 1)
         slice_proj_y_d = np.diff(slice_projection_y.astype(np.int32))
-        slice_closed_end_px = proj_y_d[:midpoint_y].argmax()
-        slice_open_end_px = midpoint_y + proj_y_d[midpoint_y:].argmin()
-        slice_length = open_end_px_default - closed_end_px_default
+        slice_closed_end_px = slice_proj_y_d[:midpoint_y].argmax()
+        slice_open_end_px = midpoint_y + slice_proj_y_d[midpoint_y:].argmin()
+        slice_length = slice_open_end_px - slice_closed_end_px
 
         # check if these values make sense. If so, use them. If not, use default
-        # make sure lenght is not 15 pixels to big or small
+        # make sure lenght is not 15 pixels bigger or smaller than default
         if slice_length + 15 < default_length or slice_length - 15 > default_length:
             continue
         # make sure ends are greater than 15 pixels from image edge
@@ -276,7 +276,7 @@ def find_channel_locs(image_data):
             continue
 
         # if you made it to this point then update the entry
-        chnl_loc_dict['peak'] = {'closed_end_px': slice_closed_end_px,
+        chnl_loc_dict[peak] = {'closed_end_px': slice_closed_end_px,
                                  'open_end_px': slice_open_end_px}
 
     return chnl_loc_dict
@@ -621,7 +621,8 @@ def average_empties_stack(fov_id, specs):
         with tiff.TiffFile(channel_filepath) as tif:
             avg_empty_stack = tif.asarray()
 
-        return True
+        # get just the phase data
+        avg_empty_stack = avg_empty_stack[:,:,:,0]
 
     # but if there is more than one empty you need to align and average them per timepoint
     elif len(empty_peak_ids) > 1:
@@ -750,7 +751,7 @@ def subtract_fov_stack(fov_id, specs):
 
     # load images for the peak and get phase images
     for peak_id in ana_peak_ids:
-        information('Subtracting peaks %d.' % peak_id)
+        information('Subtracting peak %d.' % peak_id)
 
         channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
         channel_filepath = chnl_dir + channel_filename

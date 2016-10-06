@@ -72,7 +72,7 @@ def get_tif_params(image_filename, find_channels=True):
 
             if p['TIFF_source'] == 'elements':
                 image_metadata = mm3.get_tif_metadata_elements(tif)
-            elif p['TIFF_source'] = 'nd2ToTIFF':
+            elif p['TIFF_source'] == 'nd2ToTIFF':
                 image_metadata = mm3.get_tif_metadata_nd2ToTIFF(tif)
 
         # look for channels if flagged
@@ -244,8 +244,8 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = True
-    load_channel_masks = True
+    load_metadata = False
+    load_channel_masks = False
 
     # get switches and parameters
     try:
