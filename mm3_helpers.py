@@ -829,8 +829,9 @@ def subtract_phase(image_pair):
     # subtract the empty image from the cropped channel image
     channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
 
-    channel_subtracted *= -1 # make cells high-intensity
-    # Reset the zero level in the image by subtracting the min value (-1 so no zero values)
+    # make cells high-intensity
+    channel_subtracted *= -1
+    # # Reset the zero level in the image by subtracting the min value (-1 so no zero values)
     channel_subtracted -= np.min(channel_subtracted) - 1
     channel_subtracted = channel_subtracted.astype('uint16') # change back to 16bit
 
