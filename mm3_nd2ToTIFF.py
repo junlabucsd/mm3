@@ -44,17 +44,23 @@ import tifffile as tiff
 ### Main script
 if __name__ == "__main__":
 
+    # hard coded parameters
+    number_of_rows = 2
+    # crop out the area between these two y points. Leave empty for no cropping.
+    # if there is more than one row, make a list of pairs
+    #vertical_crop = [25, 375]
+    vertical_crop = [[150, 575], [540, 965]] # [y1, y2]
 
+    # parameters will be overwritten by switches
+    param_file = ""
+    specify_fovs = [73, 85] #[15, 16]
+    start_fov = -1
+    external_directory = ""
+    fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
 
     # switches
     try:
         opts, args = getopt.getopt(sys.argv[1:], "f:o:s:x:n:")
-        # parameters to be overwritten by switches
-        param_file = ""
-        specify_fovs = []
-        start_fov = -1
-        external_directory = ""
-        fov_num_offset = 0
     except getopt.GetoptError:
         warning('No arguments detected (-f -o -s -x -n).')
 
@@ -89,13 +95,10 @@ if __name__ == "__main__":
 
     # assign shorthand directory names
     TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
-    ana_dir = p['experiment_directory'] + p['analysis_directory']
 
     # set up image and analysis folders if they do not already exist
     if not os.path.exists(TIFF_dir):
         os.makedirs(TIFF_dir)
-    if not os.path.exists(ana_dir):
-        os.makedirs(ana_dir)
 
     # Load ND2 files into a list for processing
     if len(external_directory) > 0:
@@ -106,13 +109,13 @@ if __name__ == "__main__":
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
-        information('Extracting %s ...' % nd2_file)
-
-        i_mdata = {} # saves image metadata
+        file_prefix = nd2_file.split(".nd")[0].split("/")[-1] # used for tiff name saving
+        information('Extracting %s ...' % file_prefix)
 
         # load the nd2. the nd2f file object has lots of information thanks to pims
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
             starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+
 
             # # set bundle colors together if there are multiple colors
             # if u'c' in nd2f.sizes.keys():
@@ -120,6 +123,10 @@ if __name__ == "__main__":
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
+
+            # this insures all colors will be saved when saving tiff
+            if len(planes) > 1:
+                nd2f.bundle_axes = [u'c', u'y', u'x']
 
             # get timepoints for extraction. Check is for multiple FOVs or not
             if len(nd2f) == 1:
@@ -129,16 +136,22 @@ if __name__ == "__main__":
 
             # loop through time points
             for t_id in extraction_range:
-                for fov in range(0, nd2f.sizes[u'm']): # for every FOV
+                # timepoint output name (1 indexed rather than 0 indexed)
+                t = t_id + 1
+                # set counter for FOV output name
+                fov = fov_naming_start
+
+                for fov_id in range(0, nd2f.sizes[u'm']): # for every FOV
+                    # fov_id is the fov index according to elements, fov is the output fov ID
 
                     # skip FOVs as specified above
-                    if len(specify_fovs) > 0 and not (fov + 1) in specify_fovs:
+                    if len(specify_fovs) > 0 and not (fov_id + 1) in specify_fovs:
                         continue
-                    if start_fov > -1 and fov + 1 < start_fov:
+                    if start_fov > -1 and fov_id + 1 < start_fov:
                         continue
 
                     # set the FOV we are working on in the nd2 file object
-                    nd2f.default_coords[u'm'] = fov
+                    nd2f.default_coords[u'm'] = fov_id
 
                     # get time picture was taken
                     seconds = copy.deepcopy(nd2f[t_id].metadata['t_ms']) / 1000.
@@ -151,40 +164,55 @@ if __name__ == "__main__":
                     x_um = nd2f[t_id].metadata['x_um']
                     y_um = nd2f[t_id].metadata['y_um']
 
-                    # # save stack of colors if there are colors
-                    # if u'c' in nd2f.sizes.keys():
-                    #     for c_id in range(0, nd2f.sizes[u'c']):
-                    #         tif_filename = nd2_file.split(".nd") + "_t%04dxy%03dc%01d.tif" %
-                    #                        (t_id+1, fov+1 + fov_num_offset, c_id+1)
-                    #         if len(np.unique(nd2f[t_id][c_id])) > 1:
-                    #             tiff.imsave(p['experiment_directory'] + p['image_directory'] +
-                    #                         tif_filename, nd2f[t_id][c_id])
-                    #             information('Saving %s.' % tif_filename)
-                    #
-                    #             # Pull out the metadata
-                    #             i_mdata[tif_filename] = nd2f[t_id][c_id].metadata
-                    #             # Put in the calcultate absolute acquisition time
-                    #             i_mdata[tif_filename]['acq_time'] = acq_time
-
-                    # save a single phase image if no colors
-                    # else:
-
                     # make dictionary which will be the metdata for this TIFF
-                    metadata_t = { 'fov': fov+1,
-                                   't' : t_id+1,
+                    metadata_t = { 'fov': fov,
+                                   't' : t,
                                    'jd': acq_time,
                                    'x': x_um,
                                    'y': y_um,
                                    'planes': planes}
                     metadata_json = json.dumps(metadata_t)
 
-                    tif_filename = nd2_file.split(".nd")[0].split("/")[-1] + "_t%04dxy%03dc1.tif" % (t_id+1, fov+1 + fov_num_offset)
-                    information('Saving %s.' % tif_filename)
-                    tiff.imsave(TIFF_dir + tif_filename, nd2f[t_id], description=metadata_json)
-                    # Save image metadata to dictionary to be saved separately.
-                    i_mdata[tif_filename] = nd2f[t_id].metadata
+                    # get the pixel information
+                    image_data = nd2f[t_id]
 
-            # # Save the metadata.
-            # with open(p['experiment_directory'] + p['analysis_directory'] +
-            #     nd2_file.split(".nd")[0] + "_image_metadata.pkl", 'wb') as metadata_file:
-            #     pickle.dump(i_mdata, metadata_file, protocol=2)
+                    # crop tiff if specified. Lots of flags for if there are double rows or
+                    # multiple colors
+                    if vertical_crop:
+                        # add extra axis to make below slicing simpler.
+                        if len(image_data.shape) < 3:
+                            image_data = np.expand_dims(image_data, axis=0)
+
+                        # for just a simple crop
+                        if number_of_rows == 1:
+                            image_data = image_data[:,vertical_crop[0]:vertical_crop[1],:]
+
+                        # for dealing with two rows of channel
+                        elif number_of_rows == 2:
+                            # cut and save top row
+                            image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
+                            tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
+                            information('Saving %s.' % tif_filename)
+                            tiff.imsave(TIFF_dir + tif_filename, image_data_one, description=metadata_json)
+
+                            # cut and save bottom row
+                            fov += 1 # add one to naming of FOV
+                            metadata_t['fov'] = fov # update metdata
+                            metadata_json = json.dumps(metadata_t)
+                            image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
+                            tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
+                            information('Saving %s.' % tif_filename)
+                            tiff.imsave(TIFF_dir + tif_filename, image_data_two, description=metadata_json)
+
+                            # increase FOV counter
+                            fov += 1
+                            # Continue to next FOV and not execute code below (extra saving)
+                            continue
+
+                    # save the tiff
+                    tif_filename = file_prefix + "_t%04dxy%03d.tif_hi" % (t, fov)
+                    information('Saving %s.' % tif_filename)
+                    tiff.imsave(TIFF_dir + tif_filename, image_data, description=metadata_json)
+
+                    # increase FOV counter
+                    fov += 1

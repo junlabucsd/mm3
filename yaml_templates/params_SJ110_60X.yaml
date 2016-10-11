@@ -46,12 +46,8 @@ channel_width_pad: 10
 
 # image_orientation: set to "up" if growth pushes cells up
 # set to "down" if growth pushes cells down
-# set to "double" if images are end-to-end-stacked (central channels)
+# set to 'auto' if there is a mix
 image_orientation: 'auto'
-
-# FOVs to be flipped vertically so they match the image_orientation value
-# this is simply a list of FOV numbers, or an empty list if nothing should be flipped
-flip_fovs: []
 
 # root directory for the experiment. Must end in "/"
 experiment_directory: '/path/to/exp/folder/'
