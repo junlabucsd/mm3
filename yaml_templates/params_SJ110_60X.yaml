@@ -24,11 +24,11 @@ image_end: 1000
 # channel_width is simply the width of the channels in pixels
 # is used to set the middle of the size range for detecting
 # intensity peaks corresponding to individual channels.
-channel_width: 24
+channel_width: 12
 
 # channel_separation is used to judge the closeness of channels
 # to the edges of the image
-channel_separation: 76
+channel_separation: 45
 
 # channel_detection_snr sets the signal-to-noise ratio for detecting
 # intensities corresponding to channels
