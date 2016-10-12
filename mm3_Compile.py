@@ -223,26 +223,28 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
 
     # cut out the channels as per channel masks for this fov
     for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
-        # this is the filename for the channel
-        # chnl_dir and p will be looked for in the scope above (__main__)
-        channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak)
-
-        information('Slicing and saving channel %s.' % channel_filename.split('/')[-1])
+        #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+        information('Slicing and saving channel peak %d.' % peak)
 
         # slice out channel.
         # The function should recognize the shape length as 4 and cut all time points
         channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
 
-        # save stack
-        tiff.imsave(channel_filename, channel_stack)
+        # save a different time stack for all colors
+        for color_index in range(channel_stack.shape[3]):
+            # this is the filename for the channel
+            # # chnl_dir and p will be looked for in the scope above (__main__)
+            channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index)
+            # save stack
+            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=5)
 
     return
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = True
-    load_channel_masks = True
+    load_metadata = False
+    load_channel_masks = False
 
     # get switches and parameters
     try:

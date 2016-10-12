@@ -108,12 +108,13 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
         peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
         # load image data needed
-        channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        # channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
         channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
         with tiff.TiffFile(channel_filepath) as tif:
             image_data = tif.asarray()
-        first_img = rescale_intensity(image_data[0,:,:,0]) # phase image at t=0
-        last_img = rescale_intensity(image_data[-1,:,:,0]) # phase image at end
+        first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
         last_imgs.append(last_img) # append for updating later
         del image_data # clear memory (maybe)
 
@@ -181,7 +182,7 @@ def format_channel_plot(ax, peak_id):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = False
+    load_crosscorrs = True
 
     # get switches and parameters
     try:
@@ -277,7 +278,8 @@ if __name__ == "__main__":
             # find all peak ids in the current FOV
             for peak_id in sorted(channel_masks[fov_id].keys()):
                 # determine the channel file name and path
-                channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+                #channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+                channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
                 channel_filepath = chnl_dir + channel_filename
 
                 information("Calculating cross correlations for peak %d." % peak_id)

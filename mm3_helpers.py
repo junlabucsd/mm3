@@ -614,14 +614,16 @@ def average_empties_stack(fov_id, specs):
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
         # copy that tiff stack with a new name as empty
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
         channel_filepath = chnl_dir + channel_filename
 
         with tiff.TiffFile(channel_filepath) as tif:
             avg_empty_stack = tif.asarray()
 
-        # get just the phase data
-        avg_empty_stack = avg_empty_stack[:,:,:,0]
+        # get just the phase data if it is multidimensional
+        if len(avg_empty_stack.shape) > 3:
+            avg_empty_stack = avg_empty_stack[:,:,:,0]
 
     # but if there is more than one empty you need to align and average them per timepoint
     elif len(empty_peak_ids) > 1:
@@ -629,13 +631,14 @@ def average_empties_stack(fov_id, specs):
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
             # load stack
-            channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
             channel_filepath = chnl_dir + channel_filename
             with tiff.TiffFile(channel_filepath) as tif:
                 image_data = tif.asarray()
 
             # just get phase data and put it in list
-            image_data = image_data[:,:,:,0]
+            if len(image_data.shape) > 3:
+                image_data = image_data[:,:,:,0]
             empty_stacks.append(image_data)
 
         information("%d empty channels designated for FOV %d." % (len(empty_stacks), fov_id))
@@ -752,11 +755,14 @@ def subtract_fov_stack(fov_id, specs):
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
 
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
         channel_filepath = chnl_dir + channel_filename
         with tiff.TiffFile(channel_filepath) as tif:
             image_data = tif.asarray()
-        image_data = image_data[:,:,:,0] # just get phase data and put it in list
+
+        if len(image_data.shape) > 3:
+            image_data = image_data[:,:,:,0] # just get phase data and put it in list
 
         # make a list for all time points to send to a multiprocessing pool
         # list will length of image_data with tuples (image, empty)
