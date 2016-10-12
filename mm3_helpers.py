@@ -329,10 +329,6 @@ def make_masks(analyzed_imgs):
         if img_v['fov'] not in fovs:
             fovs.append(img_v['fov'])
 
-        # if you have found as many fovs as params indicates break out
-        if len(fovs) == params['num_fovs']:
-            break
-
     # max width and length across all fovs. channels will get expanded by these values
     # this important for later updates to the masks, which should be the same
     max_chnl_mask_len = 0

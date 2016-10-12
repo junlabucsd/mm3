@@ -205,24 +205,21 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
         with tiff.TiffFile(image_params['filepath']) as tif:
             image_data = tif.asarray()
 
-        # fix orientation channels were found in fixed images
+        # channel finding was also done on images after orientation was fixed
         image_data = mm3.fix_orientation(image_data)
 
         # add additional axis if the image is flat
         if len(image_data.shape) == 2:
             image_data = np.expand_dims(image_data, 0)
 
-        # change axis so it goes X, Y, Plane
+        #change axis so it goes X, Y, Plane
         image_data = np.rollaxis(image_data, 0, 3)
-
-        # and now add a dimension for time
-        image_data = np.expand_dims(image_data, 0)
 
         # add it to list. The images should be in time order
         image_fov_stack.append(image_data)
 
     # concatenate the list into one big ass stack
-    image_fov_stack = np.concatenate(image_fov_stack, axis=0)
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
 
     # cut out the channels as per channel masks for this fov
     for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
@@ -244,8 +241,8 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = False
-    load_channel_masks = False
+    load_metadata = True
+    load_channel_masks = True
 
     # get switches and parameters
     try:
@@ -345,11 +342,11 @@ if __name__ == "__main__":
         information('Got results from analyzed images.')
 
         # save metadata to a .pkl and a human readable txt file
+        information('Saving metadata from analyzed images...')
         with open(ana_dir + '/TIFF_metadata.pkl', 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata)
         with open(ana_dir + '/TIFF_metadata.txt', 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
-
         information('Saved metadata from analyzed images.')
 
     ### Make consensus channel masks and get other shared metadata #################################

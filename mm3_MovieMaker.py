@@ -195,8 +195,19 @@ if __name__ == "__main__":
     if not os.path.exists(movie_dir):
         os.makedirs(movie_dir)
 
+    # find FOV list
+    fov_list = [] # list will hold integers which correspond to FOV ids
+    fov_images = glob.glob(TIFF_dir + '*t0001xy*.tif')
+    for image_name in fov_images:
+        # add FOV number from filename to list
+        fov_list.append(int(image_name.split('xy')[1].split('.tif')[0]))
+
+    # sort and remove duplicates
+    fov_list = sorted(list(set(fov_list)))
+    information('Found %d FOVs to process.' % len(fov_list))
+
     # start the movie making
-    for fov in range(1, p['num_fovs']+1): # for every FOV
+    for fov in fov_list: # for every FOV
         # skip FOVs as specified above
         if len(specify_fovs) > 0 and not (fov) in specify_fovs:
             continue
@@ -243,6 +254,8 @@ if __name__ == "__main__":
 
                 # set the movie name
                 movie_dir + p['experiment_name'] + '_xy%03d.mp4' % fov]
+
+        information('Writing movie for FOV %d.' % fov)
 
         pipe = sp.Popen(command, stdin=sp.PIPE)
 

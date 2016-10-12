@@ -45,15 +45,15 @@ import tifffile as tiff
 if __name__ == "__main__":
 
     # hard coded parameters
-    number_of_rows = 2
+    number_of_rows = 1
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
     #vertical_crop = [25, 375]
-    vertical_crop = [[150, 575], [540, 965]] # [y1, y2]
+    vertical_crop = [150, 520] # [y1, y2]
 
     # parameters will be overwritten by switches
     param_file = ""
-    specify_fovs = [73, 85] #[15, 16]
+    specify_fovs = [1, 2, 3] #[15, 16]
     start_fov = -1
     external_directory = ""
     fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
@@ -115,11 +115,6 @@ if __name__ == "__main__":
         # load the nd2. the nd2f file object has lots of information thanks to pims
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
             starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
-
-
-            # # set bundle colors together if there are multiple colors
-            # if u'c' in nd2f.sizes.keys():
-            #     nd2f.bundle_axes = [u'c', u'y', u'x']
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
@@ -210,7 +205,7 @@ if __name__ == "__main__":
                             continue
 
                     # save the tiff
-                    tif_filename = file_prefix + "_t%04dxy%03d.tif_hi" % (t, fov)
+                    tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
                     information('Saving %s.' % tif_filename)
                     tiff.imsave(TIFF_dir + tif_filename, image_data, description=metadata_json)
 

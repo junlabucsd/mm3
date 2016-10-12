@@ -6,9 +6,6 @@ experiment_name: 'exp_name'
 # retrieve metadata. Choices are 'elements' or 'nd2ToTIFF'
 TIFF_source: 'nd2ToTIFF'
 
-# the number of fields of view
-num_fovs: 2
-
 # nominal time between indexes for a single FOV used during image acquisition
 seconds_per_time_index: 60
 
