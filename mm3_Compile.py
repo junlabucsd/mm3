@@ -115,7 +115,7 @@ def get_tif_params(image_filename, find_channels=True):
 # slice_and_write cuts up the image files and writes them out to tiff stacks
 def tiff_slice_and_write(image_params, channel_masks):
     '''Writes out 4D stacks of TIFF images per channel.
-
+    This appends to a stack if it already exists, and is so slow it is not used. 
 
     Called by
     __main__
@@ -168,12 +168,12 @@ def tiff_slice_and_write(image_params, channel_masks):
             channel_stack = np.concatenate([channel_stack, channel_slice], axis=0)
 
             # save over the old stack
-            tiff.imsave(channel_filename, channel_stack)
+            tiff.imsave(channel_filename, channel_stack, compress=tif_compress)
 
         except:
             information('First save for %s' % channel_filename.split('/')[-1])
             # otherwise just save the first slice
-            tiff.imsave(channel_filename, channel_slice)
+            tiff.imsave(channel_filename, channel_slice, compress=tif_compress)
 
     return
 
@@ -236,7 +236,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
             # # chnl_dir and p will be looked for in the scope above (__main__)
             channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index)
             # save stack
-            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=5)
+            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=tif_compress)
 
     return
 
@@ -245,6 +245,9 @@ if __name__ == "__main__":
     # hardcoded parameters
     load_metadata = False
     load_channel_masks = False
+
+    # number between 0 and 9, 0 is no compression, 9 is most compression.
+    tif_compress = 3
 
     # get switches and parameters
     try:

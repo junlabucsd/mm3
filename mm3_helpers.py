@@ -659,7 +659,7 @@ def average_empties_stack(fov_id, specs):
     # make new name
     empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
     empty_filepath = empty_dir + empty_filename
-    tiff.imsave(empty_filepath, avg_empty_stack) # save it
+    tiff.imsave(empty_filepath, avg_empty_stack, compress=1) # save it
     information("Saved empty channel %s." % empty_filename)
 
     return True
@@ -782,7 +782,7 @@ def subtract_fov_stack(fov_id, specs):
         # save out the subtracted stack
         sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
         sub_filepath = sub_dir + sub_filename
-        tiff.imsave(sub_filepath, subtracted_stack) # save it
+        tiff.imsave(sub_filepath, subtracted_stack, compress=1) # save it
         information("Saved subtracted channel %s." % sub_filename)
 
     return True

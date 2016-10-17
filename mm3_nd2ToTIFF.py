@@ -49,14 +49,17 @@ if __name__ == "__main__":
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
     #vertical_crop = [25, 375]
-    vertical_crop = [150, 520] # [y1, y2]
+    vertical_crop = [400, 680] # [y1, y2]
+
+    # number between 0 and 9, 0 is no compression, 9 is most compression.
+    tif_compress = 1
 
     # parameters will be overwritten by switches
     param_file = ""
-    specify_fovs = [1, 2, 3] #[15, 16]
+    specify_fovs = [102] #[15, 16]
     start_fov = -1
     external_directory = ""
-    fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
+    fov_naming_start = 102 # where to start with giving out FOV its for tiff saving
 
     # switches
     try:
@@ -188,7 +191,7 @@ if __name__ == "__main__":
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
                             tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(TIFF_dir + tif_filename, image_data_one, description=metadata_json)
+                            tiff.imsave(TIFF_dir + tif_filename, image_data_one, description=metadata_json, compress=tif_compress)
 
                             # cut and save bottom row
                             fov += 1 # add one to naming of FOV
@@ -197,7 +200,7 @@ if __name__ == "__main__":
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
                             tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(TIFF_dir + tif_filename, image_data_two, description=metadata_json)
+                            tiff.imsave(TIFF_dir + tif_filename, image_data_two, description=metadata_json, compress=tif_compress)
 
                             # increase FOV counter
                             fov += 1
@@ -207,7 +210,8 @@ if __name__ == "__main__":
                     # save the tiff
                     tif_filename = file_prefix + "_t%04dxy%03d.tif" % (t, fov)
                     information('Saving %s.' % tif_filename)
-                    tiff.imsave(TIFF_dir + tif_filename, image_data, description=metadata_json)
+                    tiff.imsave(TIFF_dir + tif_filename, image_data, description=metadata_json,
+                                compress=tif_compress)
 
                     # increase FOV counter
                     fov += 1
