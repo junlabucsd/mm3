@@ -1,0 +1,61 @@
+# Refer to the "Setting up .yaml file" in the git repository wiki
+# Name your experiment
+experiment_name: 'exp_name'
+
+# indicate where TIFFs came from. This changes which function is used to
+# retrieve metadata. Choices are 'elements' or 'nd2ToTIFF'
+TIFF_source: 'nd2ToTIFF'
+
+# nominal time between indexes for a single FOV used during image acquisition
+seconds_per_time_index: 60
+
+# constants for tuning the algorithm (units are pixels)
+# channel_width is simply the width of the channels in pixels
+# is used to set the middle of the size range for detecting
+# intensity peaks corresponding to individual channels.
+channel_width: 24
+
+# channel_separation is used to judge the closeness of channels
+# to the edges of the image
+channel_separation: 76
+
+# channel_detection_snr sets the signal-to-noise ratio for detecting
+# intensities corresponding to channels
+channel_detection_snr: 1
+
+# threshold for calling empty/full channels in ChannelPicker
+channel_picking_threshold: 0.97
+
+# channel_length_pad sets the amount of padding to top and bottom when making channel masks
+channel_length_pad: 15
+
+# channel_width_pad sets ammount of padding at sides of channel when making channels masks
+channel_width_pad: 10
+
+# image_orientation: set to "up" if growth pushes cells up
+# set to "down" if growth pushes cells down
+# set to 'auto' if there is a mix
+image_orientation: 'auto'
+
+# root directory for the experiment. Must end in "/"
+experiment_directory: '/path/to/exp/folder/'
+
+# subdirectory for the original TIFs
+image_directory: 'TIFF/'
+
+# subdirectory for storing analysis data
+analysis_directory: 'analysis/'
+
+### movie parameters ###########################################################
+# set a subdirectory name to contain movies for this experiment
+movie_directory: 'movies/'
+
+# fps set the framerate per second
+fps: 24
+
+# image start for movie making
+image_start: 1
+
+# image end for movie making. If this value exceeds the maximum index value
+# present in an experiment, it will be silently ignored
+image_end: 1000
