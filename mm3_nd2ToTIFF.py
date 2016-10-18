@@ -83,10 +83,10 @@ if __name__ == "__main__":
             external_directory = arg
         if opt == '-n':
             try:
-                fov_num_offset = int(arg)
+                fov_naming_start = int(arg)
             except:
                 raise ValueError("Could not convert FOV numbering offset (%s) to an integer." % arg)
-            if fov_num_offset < 0:
+            if fov_naming_start < 0:
                 raise ValueError("FOV offset (%s) should probably be positive." % fov_num_offset)
 
     # Load the project parameters file

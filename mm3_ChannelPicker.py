@@ -182,7 +182,7 @@ def format_channel_plot(ax, peak_id):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = False
+    load_crosscorrs = True
 
     # get switches and parameters
     try:

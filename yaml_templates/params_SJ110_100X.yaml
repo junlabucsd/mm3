@@ -1,4 +1,4 @@
-# Refer to the .yaml parameters file walkthrough in the git repository wiki
+# Refer to the "Setting up .yaml file" in the git repository wiki
 # Name your experiment
 experiment_name: 'exp_name'
 
@@ -8,14 +8,6 @@ TIFF_source: 'nd2ToTIFF'
 
 # nominal time between indexes for a single FOV used during image acquisition
 seconds_per_time_index: 60
-
-# image start and end indexes for tracing lineage, currently used by pyMakeMotherMap.py
-# indicates the first frame for analysis. Should be 1 indexed.
-image_start: 1
-
-# indicates last frame for analysis. If this value exceeds the maximum index value
-# present in an experiment, it will be silently ignored
-image_end: 1000
 
 # constants for tuning the algorithm (units are pixels)
 # channel_width is simply the width of the channels in pixels
@@ -29,16 +21,15 @@ channel_separation: 76
 
 # channel_detection_snr sets the signal-to-noise ratio for detecting
 # intensities corresponding to channels
-channel_detection_snr: 1 # on suggestion from Steve 20160118
+channel_detection_snr: 1
 
 # threshold for calling empty/full channels in ChannelPicker
 channel_picking_threshold: 0.97
 
-# channel_length_pad sets the amount of padding to put at the start and end of
-# the length of channels during detection
+# channel_length_pad sets the amount of padding to top and bottom when making channel masks
 channel_length_pad: 15
 
-# channel_width_pad set ammount of padding at sides of channel when slicing channels
+# channel_width_pad sets ammount of padding at sides of channel when making channels masks
 channel_width_pad: 10
 
 # image_orientation: set to "up" if growth pushes cells up
@@ -61,3 +52,10 @@ movie_directory: 'movies/'
 
 # fps set the framerate per second
 fps: 24
+
+# image start for movie making
+image_start: 1
+
+# image end for movie making. If this value exceeds the maximum index value
+# present in an experiment, it will be silently ignored
+image_end: 1000
