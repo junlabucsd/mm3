@@ -558,14 +558,14 @@ def channel_xcorr(channel_filepath):
         if image_data.shape[0] > 100:
             image_data = image_data[:100,:,:]
 
-    # we will compare all images to this one
-    first_img = image_data[0,:,:]
+    # we will compare all images to this one, needs to be padded to account for image drift
+    first_img = np.pad(image_data[0,:,:], 10, mode='reflect')
 
     xcorr_array = [] # array holds cross correlation vaues
     for img in image_data:
         # use match_template to find all cross correlations for the
         # current image against the first image.
-        xcorr_array.append(np.max(match_template(img, first_img)))
+        xcorr_array.append(np.max(match_template(first_img, img)))
 
     return xcorr_array
 
@@ -688,7 +688,7 @@ def average_empties(imgs):
     for n, img in enumerate(imgs):
         # if this is the first image, pad it and add it to the stack
         if n == 0:
-            ref_img = np.pad(img, pad_size, mode='edge') # padded reference image
+            ref_img = np.pad(img, pad_size, mode='reflect') # padded reference image
             aligned_imgs.append(ref_img)
 
         # otherwise align this image to the first padded image
@@ -701,7 +701,7 @@ def average_empties(imgs):
 
             # pad img so it aligns and is the same size as reference image
             pad_img = np.pad(img, ((y, ref_img.shape[0] - (y + img.shape[0])),
-                                   (x, ref_img.shape[1] - (x + img.shape[1]))), mode='edge')
+                                   (x, ref_img.shape[1] - (x + img.shape[1]))), mode='reflect')
             aligned_imgs.append(pad_img)
 
     # stack the aligned data along 3rd axis
@@ -812,7 +812,7 @@ def subtract_phase(image_pair):
 
     ### Pad empty channel.
     pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
-    padded_chnl = np.pad(cropped_channel, pad_size, mode='edge')
+    padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
     # ### Align channel to empty using match template.
     # use match template to get a correlation array and find the position of maximum overlap
@@ -823,7 +823,7 @@ def subtract_phase(image_pair):
     # pad the empty channel according to alignment to be overlayed on padded channel.
     empty_paddings = [[y, padded_chnl.shape[0] - (y + empty_channel.shape[0])],
                       [x, padded_chnl.shape[1] - (x + empty_channel.shape[1])]]
-    aligned_empty = np.pad(empty_channel, empty_paddings, mode='edge')
+    aligned_empty = np.pad(empty_channel, empty_paddings, mode='reflect')
     # now trim it off so it is the same size as the original channel
     aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
 
