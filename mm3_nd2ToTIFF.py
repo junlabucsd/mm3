@@ -48,18 +48,17 @@ if __name__ == "__main__":
     number_of_rows = 1
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
-    #vertical_crop = [25, 375]
-    vertical_crop = [400, 680] # [y1, y2]
+    vertical_crop = [] # [y1, y2]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 1
 
     # parameters will be overwritten by switches
     param_file = ""
-    specify_fovs = [102] #[15, 16]
+    specify_fovs = []
     start_fov = -1
     external_directory = ""
-    fov_naming_start = 102 # where to start with giving out FOV its for tiff saving
+    fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
 
     # switches
     try:
