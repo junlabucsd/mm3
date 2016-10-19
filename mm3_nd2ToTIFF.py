@@ -51,7 +51,7 @@ if __name__ == "__main__":
     vertical_crop = [] # [y1, y2]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 1
+    tif_compress = 0
 
     # parameters will be overwritten by switches
     param_file = ""
@@ -125,10 +125,12 @@ if __name__ == "__main__":
             if len(planes) > 1:
                 nd2f.bundle_axes = [u'c', u'y', u'x']
 
-            # get timepoints for extraction. Check is for multiple FOVs or not
-            if len(nd2f) == 1:
-                extraction_range = [0,]
-            else:
+            # extraction range is the time points that will be taken out. Note the indexing,
+            # it is zero indexed to grab from nd2, but TIFF naming starts at 1.
+            extraction_range = range(p['image_start'] - 1, p['image_end'] - 0)
+            # if there is more than one FOV (len(nd2f) != 1), make sure the user input
+            # last time index is before the actual time index. Ignore it.
+            if len(nd2f) != 1 and len(nd2f) - 1 < p['image_end'] - 0:
                 extraction_range = range(0, len(nd2f) - 1)
 
             # loop through time points

@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
     # find FOV list
     fov_list = [] # list will hold integers which correspond to FOV ids
-    fov_images = glob.glob(TIFF_dir + '*t0001xy*.tif')
+    fov_images = glob.glob(TIFF_dir + '*.tif')
     for image_name in fov_images:
         # add FOV number from filename to list
         fov_list.append(int(image_name.split('xy')[1].split('.tif')[0]))
@@ -216,6 +216,8 @@ if __name__ == "__main__":
 
         # grab the images for this fov
         images = glob.glob(TIFF_dir + '*xy%03d*.tif' % (fov))
+        if len(images) == 0:
+            images = glob.glob(TIFF_dir + '*xy%02d*.tif' % (fov)) # for filenames with 2 digit FOV
         if len(images) == 0:
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
