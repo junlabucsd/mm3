@@ -746,7 +746,7 @@ def subtract_fov_stack(fov_id, specs):
     # determine which peaks are to be analyzed
     ana_peak_ids = []
     for peak_id, spec in specs[fov_id].items():
-        if spec == 1: # 0 means it should be used for empty
+        if spec == 1: # 0 means it should be used for empty, -1 is ignore
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
     information("Subtracting %d channels for FOV %d." % (len(ana_peak_ids), fov_id))
@@ -810,7 +810,7 @@ def subtract_phase(image_pair):
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
-    ### Pad empty channel.
+    ### Pad cropped channel.
     pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
     padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
@@ -828,13 +828,11 @@ def subtract_phase(image_pair):
     aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
 
     ### Compute the difference between the empty and channel phase contrast images
-    # subtract the empty image from the cropped channel image
-    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
+    # subtract cropped cell image from empty channel.
+    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32') -
 
-    # make cells high-intensity
-    channel_subtracted *= -1
-    # # Reset the zero level in the image by subtracting the min value (-1 so no zero values)
-    channel_subtracted -= np.min(channel_subtracted) - 1
+    # just zero out anything less than 0. This is what Sattar does
+    channel_subtracted[channel_subtracted < 0] = 0
     channel_subtracted = channel_subtracted.astype('uint16') # change back to 16bit
 
     return channel_subtracted
