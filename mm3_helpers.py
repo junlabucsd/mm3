@@ -23,7 +23,7 @@ import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
 import copy
-from scipy import ndimage # used in make_masks
+from scipy import ndimage # ndimage.label is used in make_masks
 from skimage.segmentation import clear_border # used in make_masks
 from skimage.feature import match_template # used to align images
 import multiprocessing
