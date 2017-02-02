@@ -23,9 +23,15 @@ import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
 import copy
-from scipy import ndimage # ndimage.label is used in make_masks
-from skimage.segmentation import clear_border # used in make_masks
+
+# Image analysis modules
+#from scipy import ndimage # ndimage.label is used in make_masks
+from skimage.segmentation import clear_border # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
+from skimage.filters import threshold_otsu
+from skimage import morphology # many functions is segmentation used from this
+
+
 import multiprocessing
 from multiprocessing import Pool
 
@@ -372,7 +378,7 @@ def make_masks(analyzed_imgs):
         # the [0] is for the array ([1] is the number of regions)
         # It transposes and then transposes again so regions are labeled left to right
         # clear border it to make sure the channels are off the edge
-        consensus_mask = ndimage.label(clear_border(consensus_mask.T > 0.1))[0].T
+        consensus_mask = morphology.label(clear_border(consensus_mask.T > 0.1))[0].T
 
         # go through each label
         for label in np.unique(consensus_mask):
@@ -836,6 +842,9 @@ def subtract_phase(image_pair):
     channel_subtracted = channel_subtracted.astype('uint16') # change back to 16bit
 
     return channel_subtracted
+
+### functions that deal with segmentation
+
 
 ### functions about converting dates and times
 ### Functions
