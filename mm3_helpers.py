@@ -31,7 +31,7 @@ from skimage.feature import match_template # used to align images
 from skimage.filters import threshold_otsu
 from skimage import morphology # many functions is segmentation used from this
 
-
+# Parralelization modules
 import multiprocessing
 from multiprocessing import Pool
 
@@ -844,6 +844,107 @@ def subtract_phase(image_pair):
     return channel_subtracted
 
 ### functions that deal with segmentation
+def segment_image(image):
+    '''Segments a subtracted image and returns a labeled image
+
+    Parameters
+    image : a ndarray which is an image. This should be the subtracted image
+
+    Returns
+    labeled_image : a ndarray which is also an image. Labeled values, which
+        should correspond to cells, all have the same integer value starting with 1.
+        Non labeled area should have value zero.
+
+
+    '''
+
+    # threshold image
+    thresh = morphology.threshold_otsu(image) # finds optimal OTSU thershhold value
+    threshholded = image > thresh # will create binary image
+
+    # tool for morphological transformations
+    tool = disk(3)
+
+    # Opening = erosion then dialation.
+    opened = binary_opening(image > thresh, tool) # threshhold and then use tool
+
+    # Here are the above steps one by one for debugging
+    # eroded = binary_erosion(threshholded, tool)
+    # dilated = binary_dilation(eroded, tool)
+    # opened = np.zeros_like(dilated)
+    # opened[:] = dilated
+
+    # remove artifacts connected to image border
+    cleared = clear_border(opened)
+    # remove small object
+    # the minsize here may need to be a function of the magnification.
+    cleared = remove_small_objects(opened, min_size=100)
+
+    # zero out rows that have very few pixels
+    # widens or creates gaps between cells
+    # sum of rows (how many pixels are occupied in each row)
+    line_profile = np.sum(cleared, axis=1)
+    # find highest value, aka width of fattest cell
+    max_width = max(line_profile)
+    # find indexes of rows where sum is less than 1/5th of this value.
+    zero_these_indicies = np.all([line_profile < (max_width/5.0), line_profile > 0], axis=0)
+    zero_these_indicies = np.where(zero_these_indicies)
+    # zero out those rows
+    cleared[zero_these_indicies] = 0
+
+    # label image regions to create markers for watershedding
+    markers = label(separated)
+
+    # watershed. Markers are where to start.
+    # mask means to not watershed outside of the OTSU threshhold
+    watersheded = watershed(image, markers, mask=threshholded)
+
+    return labeled_image
+
+# Do segmentation for an channel time stack
+def segment_chnl_stack(fov_id, peak_id):
+    '''
+    For a given fov and peak (channel), do segmentation for all images in the
+    subtracted .tif stack.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.segment_image
+    '''
+
+    information('Subtracting FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # directories for loading and saving images
+    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+    seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+
+    # load the subtracted stack
+    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_empty.tif' % (fov_id, peak_id)
+    sub_filepath = sub_dir + sub_filename
+    with tiff.TiffFile(empty_filepath) as tif:
+        sub_stack = tif.asarray()
+
+    # set up multiprocessing pool to do segmentation. Will do everything before going on.
+    pool = Pool(processes=params['num_analyzers'])
+
+    # send the 3d array to multiprocessing
+    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=10)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # stack them up along a time axis
+    segmented_imgs = np.stack(segmented_imgs, axis=0)
+
+    # save out the subtracted stack
+    seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+    seg_filepath = seg_dir + seg_filename
+    tiff.imsave(seg_filepath, segmented_stack, compress=1) # save it
+    information("Saved segmented channel %s." % seg_filename)
+
+    return True
 
 
 ### functions about converting dates and times
