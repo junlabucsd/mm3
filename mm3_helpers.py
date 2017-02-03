@@ -25,7 +25,8 @@ import traceback
 import copy
 
 # Image analysis modules
-from skimage.segmentation import clear_border # used in make_masks and segmentation
+from scipy import ndimage as ndi
+from skimage import segmentation # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
 from skimage.filters import threshold_otsu
 from skimage import morphology # many functions is segmentation used from this
@@ -377,7 +378,8 @@ def make_masks(analyzed_imgs):
         # the [0] is for the array ([1] is the number of regions)
         # It transposes and then transposes again so regions are labeled left to right
         # clear border it to make sure the channels are off the edge
-        consensus_mask = morphology.label(clear_border(consensus_mask.T > 0.1))[0].T
+        consensus_mask = segmentation.clear_border(consensus_mask.T > 0.1)
+        consensus_mask = morphology.label(consensus_mask)[0].T
 
         # go through each label
         for label in np.unique(consensus_mask):
@@ -874,7 +876,7 @@ def segment_image(image):
     # opened[:] = dilated
 
     # Erode again to help break cells touching at end
-    morph = morphology.binary_erosion(morph, morphology.disk(1))
+    # morph = morphology.binary_erosion(morph, morphology.disk(1))
 
     # zero out rows that have very few pixels
     # widens or creates gaps between cells
@@ -888,22 +890,50 @@ def segment_image(image):
     # zero out those rows
     morph[zero_these_indicies] = 0
 
-    # label image regions to create markers for watershedding
-    # connectivity=1 means the pixels have to be next to eachother (not diagonal)
-    # return_num=True means return the number of labels, useful for checking
-    markers, label_num = morphology.label(morph, connectivity=1, return_num=True)
+    # here is the method based on watershedding
+    # # label image regions to create markers for watershedding
+    # # connectivity=1 means the pixels have to be next to eachother (not diagonal)
+    # # return_num=True means return the number of labels, useful for checking
+    # markers, label_num = morphology.label(morph, connectivity=1, return_num=True)
+    #
+    # # remove artifacts connected to image border
+    # segmentation.clear_border(markers, in_place=True)
+    # # remove small objects
+    # if label_num > 1: # use conditional becaues it warns if there is only one label.
+    #     # the minsize here may need to be a function of the magnification.
+    #     morphology.remove_small_objects(markers, min_size=100, in_place=True)
+    #
+    # # watershed. Markers are where to start.
+    # # mask means to not watershed outside of the OTSU threshhold
+    # #labeled_image = morphology.watershed(image, markers, mask=threshholded)
+    # labeled_image = markers
 
-    # remove artifacts connected to image border
-    clear_border(markers, in_place=True)
+    ### here is the method based on the diffusion
+    # Generate the markers based on distance to the background
+    distance = ndi.distance_transform_edt(morph)
+    # here we zero anything less than 3 pixels from the boarder
+    distance[distance < 4] = 0
+    # anything that is left make a 1
+    distance[distance > 1] = 1
+    distance = distance.astype('int8') # convert (distance is actually a matrix of floats)
+
     # remove small objects
-    if label_num > 1: # use conditional becaues it warns if there is only one label.
-        # the minsize here may need to be a function of the magnification.
-        morphology.remove_small_objects(markers, min_size=100, in_place=True)
+    # remove artifacts connected to image border
+    cleared = segmentation.clear_border(distance)
+    # remove small objects. Note how we are relabeling here, as remeove_small_objects
+    # wants a labeled image, and only works if there is more than one label
+    cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
+    if label_num > 1:
+        cleared = morphology.remove_small_objects(cleared, min_size=100)
 
-    # watershed. Markers are where to start.
-    # mask means to not watershed outside of the OTSU threshhold
-    #labeled_image = morphology.watershed(image, markers, mask=threshholded)
-    labeled_image = markers
+    # relabel now that small objects have been removed
+    markers = morphology.label(cleared)
+    # set anything outside of OTSU threshold to -1 so it will not be labeled
+    markers[threshholded == 0] = -1
+    # label using the random walker (diffusion watershed) algorithm
+    labeled_image = segmentation.random_walker(image, markers)
+    # put negative values back to zero for proper image
+    labeled_image[labeled_image == -1] = 0
 
     return labeled_image
 
