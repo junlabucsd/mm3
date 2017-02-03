@@ -91,7 +91,7 @@ if __name__ == "__main__":
     empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
     sub_dir = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
 
-    # create the analysis folder if it doesn't exist
+    # create folders if they do not exist
     if not os.path.exists(empty_dir):
         os.makedirs(empty_dir)
     if not os.path.exists(sub_dir):

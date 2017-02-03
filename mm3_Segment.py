@@ -44,8 +44,6 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_empties = False # use precomputed empties
-    do_subtraction = True
 
     # get switches and parameters
     try:
@@ -87,15 +85,11 @@ if __name__ == "__main__":
 
     # assign shorthand directory names
     ana_dir = p['experiment_directory'] + p['analysis_directory']
-    chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
-    empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
-    sub_dir = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
+    seg_dir = p['experiment_directory'] + p['analysis_directory'] + 'segmented/'
 
-    # create the analysis folder if it doesn't exist
-    if not os.path.exists(empty_dir):
-        os.makedirs(empty_dir)
-    if not os.path.exists(sub_dir):
-        os.makedirs(sub_dir)
+    # create segmenteation older if it doesn't exist
+    if not os.path.exists(seg_dir):
+        os.makedirs(seg_dir)
 
     # load specs file
     try:
@@ -116,27 +110,19 @@ if __name__ == "__main__":
 
     information("Found %d FOVs to process." % len(fov_id_list))
 
-    ### Make average empty channels ###############################################################
-    if load_empties:
-        information("Loading precalculated empties.")
-        pass # just skip this part and go to subtraction
+    ### Do Segmentation by FOV and then peak #######################################################
+    information("Segmenting channels.")
 
-    else:
-        information("Calculated averaged empties.")
-        for fov_id in fov_id_list:
-            # send to function which will create empty stack for each fov.
-            averaging_result = mm3.average_empties_stack(fov_id, specs)
+    for fov_id in fov_id_list:
+        # determine which peaks are to be analyzed (those which have been subtracted)
+        ana_peak_ids = []
+        for peak_id, spec in specs[fov_id].items():
+            if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
+                ana_peak_ids.append(peak_id)
+        ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
-    ### Subtract ##################################################################################
-    if do_subtraction:
-        information("Subtracting channels.")
-        for fov_id in fov_id_list:
-            # send to function which will create empty stack for each fov.
-            averaging_result = mm3.subtract_fov_stack(fov_id, specs)
-
-    # Else just end, they only wanted to do empty averaging.
-    else:
-        information("Skipping subtraction.")
-        pass
+        for peak_id in ana_peak_ids:
+            # send to subtraction
+            mm3.segment_chnl_stack(fov_id, peak_id)
 
     information("Finished.")

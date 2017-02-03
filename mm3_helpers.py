@@ -25,7 +25,6 @@ import traceback
 import copy
 
 # Image analysis modules
-#from scipy import ndimage # ndimage.label is used in make_masks
 from skimage.segmentation import clear_border # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
 from skimage.filters import threshold_otsu
@@ -854,19 +853,19 @@ def segment_image(image):
     labeled_image : a ndarray which is also an image. Labeled values, which
         should correspond to cells, all have the same integer value starting with 1.
         Non labeled area should have value zero.
-
-
     '''
 
     # threshold image
-    thresh = morphology.threshold_otsu(image) # finds optimal OTSU thershhold value
+    thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
     threshholded = image > thresh # will create binary image
 
     # tool for morphological transformations
-    tool = disk(3)
+    tool = morphology.disk(3)
 
     # Opening = erosion then dialation.
-    opened = binary_opening(image > thresh, tool) # threshhold and then use tool
+    # opening smooths images, breaks isthmuses, and eliminates protrusions.
+    # "opens" dark gaps between bright features.
+    morph = morphology.binary_opening(image > thresh, tool) # threshhold and then use tool
 
     # Here are the above steps one by one for debugging
     # eroded = binary_erosion(threshholded, tool)
@@ -874,30 +873,37 @@ def segment_image(image):
     # opened = np.zeros_like(dilated)
     # opened[:] = dilated
 
-    # remove artifacts connected to image border
-    cleared = clear_border(opened)
-    # remove small object
-    # the minsize here may need to be a function of the magnification.
-    cleared = remove_small_objects(opened, min_size=100)
+    # Erode again to help break cells touching at end
+    morph = morphology.binary_erosion(morph, morphology.disk(1))
 
     # zero out rows that have very few pixels
     # widens or creates gaps between cells
     # sum of rows (how many pixels are occupied in each row)
-    line_profile = np.sum(cleared, axis=1)
+    line_profile = np.sum(morph, axis=1)
     # find highest value, aka width of fattest cell
     max_width = max(line_profile)
     # find indexes of rows where sum is less than 1/5th of this value.
-    zero_these_indicies = np.all([line_profile < (max_width/5.0), line_profile > 0], axis=0)
+    zero_these_indicies = np.all([line_profile < (max_width/5), line_profile > 0], axis=0)
     zero_these_indicies = np.where(zero_these_indicies)
     # zero out those rows
-    cleared[zero_these_indicies] = 0
+    morph[zero_these_indicies] = 0
 
     # label image regions to create markers for watershedding
-    markers = label(separated)
+    # connectivity=1 means the pixels have to be next to eachother (not diagonal)
+    # return_num=True means return the number of labels, useful for checking
+    markers, label_num = morphology.label(morph, connectivity=1, return_num=True)
+
+    # remove artifacts connected to image border
+    clear_border(markers, in_place=True)
+    # remove small objects
+    if label_num > 1: # use conditional becaues it warns if there is only one label.
+        # the minsize here may need to be a function of the magnification.
+        morphology.remove_small_objects(markers, min_size=100, in_place=True)
 
     # watershed. Markers are where to start.
     # mask means to not watershed outside of the OTSU threshhold
-    watersheded = watershed(image, markers, mask=threshholded)
+    #labeled_image = morphology.watershed(image, markers, mask=threshholded)
+    labeled_image = markers
 
     return labeled_image
 
@@ -921,9 +927,9 @@ def segment_chnl_stack(fov_id, peak_id):
     seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
 
     # load the subtracted stack
-    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_empty.tif' % (fov_id, peak_id)
+    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
     sub_filepath = sub_dir + sub_filename
-    with tiff.TiffFile(empty_filepath) as tif:
+    with tiff.TiffFile(sub_filepath) as tif:
         sub_stack = tif.asarray()
 
     # set up multiprocessing pool to do segmentation. Will do everything before going on.
@@ -941,11 +947,10 @@ def segment_chnl_stack(fov_id, peak_id):
     # save out the subtracted stack
     seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
     seg_filepath = seg_dir + seg_filename
-    tiff.imsave(seg_filepath, segmented_stack, compress=1) # save it
+    tiff.imsave(seg_filepath, segmented_imgs.astype('uint16'), compress=1) # save it
     information("Saved segmented channel %s." % seg_filename)
 
     return True
-
 
 ### functions about converting dates and times
 ### Functions
