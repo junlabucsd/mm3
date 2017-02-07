@@ -379,7 +379,7 @@ def make_masks(analyzed_imgs):
         # It transposes and then transposes again so regions are labeled left to right
         # clear border it to make sure the channels are off the edge
         consensus_mask = segmentation.clear_border(consensus_mask.T > 0.1)
-        consensus_mask = morphology.label(consensus_mask)[0].T
+        consensus_mask = ndi.label(consensus_mask)[0].T
 
         # go through each label
         for label in np.unique(consensus_mask):
@@ -862,7 +862,7 @@ def segment_image(image):
     threshholded = image > thresh # will create binary image
 
     # tool for morphological transformations
-    tool = morphology.disk(3)
+    tool = morphology.disk(2)
 
     # Opening = erosion then dialation.
     # opening smooths images, breaks isthmuses, and eliminates protrusions.
@@ -908,11 +908,11 @@ def segment_image(image):
     # #labeled_image = morphology.watershed(image, markers, mask=threshholded)
     # labeled_image = markers
 
-    ### here is the method based on the diffusion
+    ### here is the method based on the diffusion algorithm
     # Generate the markers based on distance to the background
     distance = ndi.distance_transform_edt(morph)
     # here we zero anything less than 3 pixels from the boarder
-    distance[distance < 4] = 0
+    distance[distance < 2] = 0
     # anything that is left make a 1
     distance[distance > 1] = 1
     distance = distance.astype('int8') # convert (distance is actually a matrix of floats)
@@ -924,7 +924,7 @@ def segment_image(image):
     # wants a labeled image, and only works if there is more than one label
     cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
     if label_num > 1:
-        cleared = morphology.remove_small_objects(cleared, min_size=100)
+        cleared = morphology.remove_small_objects(cleared, min_size=50)
 
     # relabel now that small objects have been removed
     markers = morphology.label(cleared)
@@ -950,7 +950,7 @@ def segment_chnl_stack(fov_id, peak_id):
     mm3.segment_image
     '''
 
-    information('Subtracting FOV %d, channel %d.' % (fov_id, peak_id))
+    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
 
     # directories for loading and saving images
     sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
@@ -970,6 +970,11 @@ def segment_chnl_stack(fov_id, peak_id):
 
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
+
+    # # image by image for debug
+    # segmented_imgs = []
+    # segmented_imgs.append(segment_image(sub_stack[0]))
+    # segmented_imgs.append(segment_image(sub_stack[1]))
 
     # stack them up along a time axis
     segmented_imgs = np.stack(segmented_imgs, axis=0)

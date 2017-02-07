@@ -122,7 +122,7 @@ if __name__ == "__main__":
         ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
         for peak_id in ana_peak_ids:
-            # send to subtraction
+            # send segmentation
             mm3.segment_chnl_stack(fov_id, peak_id)
 
     information("Finished.")
