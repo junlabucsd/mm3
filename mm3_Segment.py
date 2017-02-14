@@ -44,6 +44,8 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
+    do_segmentation = False # make or load segmentation?
+    do_lineages = True # should lineages be made after segmentation?
 
     # get switches and parameters
     try:
@@ -87,7 +89,7 @@ if __name__ == "__main__":
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     seg_dir = p['experiment_directory'] + p['analysis_directory'] + 'segmented/'
 
-    # create segmenteation older if it doesn't exist
+    # create segmenteation folder if it doesn't exist
     if not os.path.exists(seg_dir):
         os.makedirs(seg_dir)
 
@@ -111,18 +113,34 @@ if __name__ == "__main__":
     information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
-    information("Segmenting channels.")
+    if do_segmentation:
+        information("Segmenting channels.")
 
-    for fov_id in fov_id_list:
-        # determine which peaks are to be analyzed (those which have been subtracted)
-        ana_peak_ids = []
-        for peak_id, spec in specs[fov_id].items():
-            if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
-                ana_peak_ids.append(peak_id)
-        ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+        for fov_id in fov_id_list:
+            # determine which peaks are to be analyzed (those which have been subtracted)
+            ana_peak_ids = []
+            for peak_id, spec in specs[fov_id].items():
+                if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
+                    ana_peak_ids.append(peak_id)
+            ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
-        for peak_id in ana_peak_ids:
-            # send segmentation
-            mm3.segment_chnl_stack(fov_id, peak_id)
+            for peak_id in ana_peak_ids:
+                # send to segmentation
+                mm3.segment_chnl_stack(fov_id, peak_id)
 
-    information("Finished.")
+        information("Finished segmentation.")
+
+    ### Create cell lineages from segmented images
+    if do_lineages:
+        information("Creating cell lineages.")
+
+        # This dictionary holds information for all cells
+        Cells = {}
+
+        # do lineage creation per fov, so pooling can be done by peak
+        for fov_id in fov_id_list:
+            # update will add the output from make_lineages_function, which is a
+            # dict of Cell entries, into Cells
+            Cells.update(mm3.make_lineages_fov(fov_id, specs))
+
+        information("Finished lineage creation.")
