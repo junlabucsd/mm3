@@ -12,16 +12,11 @@ import time
 import inspect
 import getopt
 import yaml
-import traceback
-import fnmatch
-import glob
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
 except:
     import pickle
-import multiprocessing
-from multiprocessing import Pool #, Lock
 import numpy as np
 
 # user modules
@@ -38,7 +33,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
 import mm3_helpers as mm3
 
 # when using this script as a function and not as a library the following will execute

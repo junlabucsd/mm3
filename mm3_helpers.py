@@ -987,8 +987,8 @@ def segment_chnl_stack(fov_id, peak_id):
 
     # # image by image for debug
     # segmented_imgs = []
-    # segmented_imgs.append(segment_image(sub_stack[0]))
-    # segmented_imgs.append(segment_image(sub_stack[1]))
+    # for sub_image in sub_stack:
+    #     segmented_imgs.append(segment_image(sub_image))
 
     # stack them up along a time axis
     segmented_imgs = np.stack(segmented_imgs, axis=0)
@@ -1154,7 +1154,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if True:
+    if False:
         information('Creating lineage image.')
 
         n_imgs = len(regions_by_time)
@@ -1260,7 +1260,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
             lin_filepath = seg_dir + lin_filename
             fig.savefig(lin_filepath, dpi=100)
-            fig.close()
+            plt.close()
 
     # return the dictionary with all the cells
     return Cells
@@ -1287,20 +1287,20 @@ def make_lineages_fov(fov_id, specs):
     # This is a list of tuples (fov_id, peak_id) to send to the Pool command
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
 
-    # set up multiprocessing pool. will complete pool before going on
-    pool = Pool(processes=params['num_analyzers'])
+    # # set up multiprocessing pool. will complete pool before going on
+    # pool = Pool(processes=params['num_analyzers'])
+    #
+    # # create the lineages for each peak individually
+    # # the output is a list of dictionaries
+    # lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=10)
+    #
+    # pool.close() # tells the process nothing more will be added.
+    # pool.join() # blocks script until everything has been processed and workers exit
 
-    # create the lineages for each peak individually
-    # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=10)
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
-
-    # # looped version for debugging
-    # lineages = []
-    # for fov_and_peak_id in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
+    # looped version for debugging
+    lineages = []
+    for fov_and_peak_id in fov_and_peak_ids_list:
+        lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
