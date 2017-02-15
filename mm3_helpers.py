@@ -40,7 +40,7 @@ from multiprocessing import Pool
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
-font = {'family' : 'normal',
+font = {'family' : 'sans-serif',
         'weight' : 'normal',
         'size'   : 12}
 mpl.rc('font', **font)
@@ -1002,7 +1002,7 @@ def segment_chnl_stack(fov_id, peak_id):
     return True
 
 # Creates lineage for a single channel
-def make_lineage_chnl_stack(fov_and_peak_ids):
+def make_lineage_chnl_stack(fov_and_peak_id):
     '''
     Create the lineage for a set of segmented images for one channel.
 
@@ -1018,20 +1018,22 @@ def make_lineage_chnl_stack(fov_and_peak_ids):
 
     '''
     # get the specific ids from the tuple
-    fov_id, peak_id = fov_and_peak_ids
+    fov_id, peak_id = fov_and_peak_id
+
+    information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # directories for loading and saving images
     sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
     seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
 
     # Subtracted images
-    sub_filename = p['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
     sub_filepath = sub_dir + sub_filename
     with tiff.TiffFile(sub_filepath) as tif:
         image_data_sub = tif.asarray()
 
     # Segmented images
-    seg_filename = p['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+    seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
     seg_filepath = seg_dir + seg_filename
     with tiff.TiffFile(seg_filepath) as tif:
         image_data_seg = tif.asarray()
@@ -1143,14 +1145,18 @@ def make_lineage_chnl_stack(fov_and_peak_ids):
                         cell_leaves.append(daughter2_id)
                         cell_leaves.remove(leaf_id)
 
+                    # 1 means that daughter 1 is just a continuation of the mother
                     elif check_division_result == 1:
                         Cells[leaf_id].grow(region1, t)
 
+                    # ditto for 2
                     elif check_division_result == 2:
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
     if True:
+        information('Creating lineage image.')
+
         n_imgs = len(regions_by_time)
         image_indicies = range(n_imgs)
 
@@ -1251,15 +1257,16 @@ def make_lineage_chnl_stack(fov_and_peak_ids):
         #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
 
             # save image to segmentation subfolder
-            lin_filename = p['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
-            lin_filepath = seg_dir + seg_filename
+            lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
+            lin_filepath = seg_dir + lin_filename
             fig.savefig(lin_filepath, dpi=100)
+            fig.close()
 
     # return the dictionary with all the cells
     return Cells
 
 # finds lineages for all peaks in a fov
-def make_lineage_fov(fov_id, specs):
+def make_lineages_fov(fov_id, specs):
     '''
     For a given fov, create the lineages from the segmented images.
 
@@ -1275,7 +1282,7 @@ def make_lineage_fov(fov_id, specs):
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
-    information('Segmenting FOV %d with %d channels.' % (fov_id, len(ana_peak_ids))
+    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
 
     # This is a list of tuples (fov_id, peak_id) to send to the Pool command
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
@@ -1289,6 +1296,11 @@ def make_lineage_fov(fov_id, specs):
 
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
+
+    # # looped version for debugging
+    # lineages = []
+    # for fov_and_peak_id in fov_and_peak_ids_list:
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1403,13 +1415,14 @@ class Cell():
     def print_info(self):
         '''prints information about the cell'''
         print('id = %s' % self.id)
-        print('times = {}'.format(', '.join('{}'.format(t) for t in self.times))
+        print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
         print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
 
 def create_cell_id(region, t, peak, fov):
     '''Make a unique cell id string for a new cell'''
     cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
-    return ''.join(cell_id)
+    cell_id = ''.join(cell_id)
+    return cell_id
 
 # this function should also take the variable t to
 # weight the allowed changes by the difference in time as well
