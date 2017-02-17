@@ -1259,7 +1259,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             # save image to segmentation subfolder
             lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
             lin_filepath = seg_dir + lin_filename
-            fig.savefig(lin_filepath, dpi=100)
+            fig.savefig(lin_filepath, dpi=50)
             plt.close()
 
     # return the dictionary with all the cells
@@ -1287,20 +1287,20 @@ def make_lineages_fov(fov_id, specs):
     # This is a list of tuples (fov_id, peak_id) to send to the Pool command
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
 
-    # # set up multiprocessing pool. will complete pool before going on
-    # pool = Pool(processes=params['num_analyzers'])
-    #
-    # # create the lineages for each peak individually
-    # # the output is a list of dictionaries
-    # lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=10)
-    #
-    # pool.close() # tells the process nothing more will be added.
-    # pool.join() # blocks script until everything has been processed and workers exit
+    # set up multiprocessing pool. will complete pool before going on
+    pool = Pool(processes=params['num_analyzers'])
 
-    # looped version for debugging
-    lineages = []
-    for fov_and_peak_id in fov_and_peak_ids_list:
-        lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
+    # create the lineages for each peak individually
+    # the output is a list of dictionaries
+    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=4)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # looped version for debugging
+    # lineages = []
+    # for fov_and_peak_id in fov_and_peak_ids_list:
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1381,8 +1381,8 @@ class Cell():
         # This is only filled out if a cell divides.
         self.sb = None
         self.sd = None # this should be combined lengths of daughters
-        self.gr = None
         self.tau = None
+        self.gr = None
         self.septum_position = None
 
     def grow(self, region, t):
@@ -1400,17 +1400,28 @@ class Cell():
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
-        daugther1 and daugther2 are instances of the Cell class'''
+        daugther1 and daugther2 are instances of the Cell class.
+        daughter1 is the daugther closer to the closed end.'''
 
         # put the daugther ids into the cell
         self.daughters = [daughter1.id, daughter2.id]
 
         # flesh out the stats for this cell
-#         self.sb =
-#         self.sd =
+        # size at birth
+        self.sb = self.lengths[0] * params['pxl2um']
+
+        # force the division length to be the combined lengths of the daughters
+        self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+
+        # generation time
+        self.tau = self.times[-1] - self.times[0]
+
 #         self.gr =
-#         self.tau =
-#         self.septum_position =
+
+        # calculate the septum position as a number between 0 and 1
+        # which indicates the size of daughter closer to the closed end
+        # compared to the total size
+        self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
 
     def print_info(self):
         '''prints information about the cell'''
@@ -1507,6 +1518,18 @@ def find_cells_with_daughters(Cells):
             Divided_Cells[cell_id] = Cells[cell_id]
 
     return Divided_Cells
+
+def find_complete_cells(Cells):
+    '''Go through a dictionary of cells and return another dictionary
+    that contains just those with a parent and daughters'''
+
+    Complete_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].daughters and Cells[cell_id].parent:
+            Complete_Cells[cell_id] = Cells[cell_id]
+
+    return Complete_Cells
 
 ### functions about converting dates and times
 ### Functions
