@@ -23,6 +23,7 @@ import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
 import copy
+import warnings
 
 # Image analysis modules
 from scipy import ndimage as ndi
@@ -63,7 +64,10 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
 
 ### functions ###########################################################
 # load the parameters file into a global dictionary for this module
@@ -290,7 +294,7 @@ def find_channel_locs(image_data):
         slice_length = slice_open_end_px - slice_closed_end_px
 
         # check if these values make sense. If so, use them. If not, use default
-        # make sure lenght is not 15 pixels bigger or smaller than default
+        # make sure lenght is not 30 pixels bigger or smaller than default
         if slice_length + 15 < default_length or slice_length - 15 > default_length:
             continue
         # make sure ends are greater than 15 pixels from image edge
@@ -533,6 +537,15 @@ def cut_slice(image_data, channel_loc):
 
     # slice based on appropriate slicer object.
     channel_slice = image_data[channel_slicer]
+
+    # pad y of channel if slice happened to be outside of image
+    y_difference  = (channel_loc[0][1] - channel_loc[0][0]) - channel_slice.shape[1]
+    if y_difference > 0:
+        paddings = [[0, 0], # t
+                    [0, y_difference], # y
+                    [0, 0], # x
+                    [0, 0]] # c
+        channel_slice = np.pad(channel_slice, paddings, mode='edge')
 
     return channel_slice
 
@@ -859,7 +872,7 @@ def subtract_phase(image_pair):
     return channel_subtracted
 
 ### functions that deal with segmentation and lineages
-def segment_image(image):
+def segment_image1(image):
     '''Segments a subtracted image and returns a labeled image
 
     Parameters
@@ -883,12 +896,6 @@ def segment_image(image):
     # "opens" dark gaps between bright features.
     morph = morphology.binary_opening(image > thresh, tool) # threshhold and then use tool
 
-    # Here are the above steps one by one for debugging
-    # eroded = binary_erosion(threshholded, tool)
-    # dilated = binary_dilation(eroded, tool)
-    # opened = np.zeros_like(dilated)
-    # opened[:] = dilated
-
     # Erode again to help break cells touching at end
     # morph = morphology.binary_erosion(morph, morphology.disk(1))
 
@@ -904,34 +911,15 @@ def segment_image(image):
     # zero out those rows
     morph[zero_these_indicies] = 0
 
-    # here is the method based on watershedding
-    # # label image regions to create markers for watershedding
-    # # connectivity=1 means the pixels have to be next to eachother (not diagonal)
-    # # return_num=True means return the number of labels, useful for checking
-    # markers, label_num = morphology.label(morph, connectivity=1, return_num=True)
-    #
-    # # remove artifacts connected to image border
-    # segmentation.clear_border(markers, in_place=True)
-    # # remove small objects
-    # if label_num > 1: # use conditional becaues it warns if there is only one label.
-    #     # the minsize here may need to be a function of the magnification.
-    #     morphology.remove_small_objects(markers, min_size=100, in_place=True)
-    #
-    # # watershed. Markers are where to start.
-    # # mask means to not watershed outside of the OTSU threshhold
-    # #labeled_image = morphology.watershed(image, markers, mask=threshholded)
-    # labeled_image = markers
-
-    ### here is the method based on the diffusion algorithm
+    ### Calculate distnace matrix, use as markers for random walker (diffusion watershed)
     # Generate the markers based on distance to the background
     distance = ndi.distance_transform_edt(morph)
     # here we zero anything less than 3 pixels from the boarder
-    distance[distance < 2] = 0
+    distance[distance < 3] = 0
     # anything that is left make a 1
     distance[distance > 1] = 1
     distance = distance.astype('int8') # convert (distance is actually a matrix of floats)
 
-    # remove small objects
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance)
     # remove small objects. Note how we are relabeling here, as remeove_small_objects
@@ -948,6 +936,93 @@ def segment_image(image):
     labeled_image = segmentation.random_walker(image, markers)
     # put negative values back to zero for proper image
     labeled_image[labeled_image == -1] = 0
+
+    return labeled_image
+
+def segment_image(image):
+    '''Segments a subtracted image and returns a labeled image
+
+    Parameters
+    image : a ndarray which is an image. This should be the subtracted image
+
+    Returns
+    labeled_image : a ndarray which is also an image. Labeled values, which
+        should correspond to cells, all have the same integer value starting with 1.
+        Non labeled area should have value zero.
+    '''
+
+    # threshold image
+    thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
+    threshholded = image > thresh # will create binary image
+
+    # if there are no cells, good to clear the border
+    # because otherwise the OTSU is just for random bullshit, most
+    # likely on the side of the image
+    threshholded = segmentation.clear_border(threshholded)
+
+    # Morphological operations
+    # tool for transformations
+    tool = morphology.disk(2)
+
+    # Opening = erosion then dialation.
+    # opening smooths images, breaks isthmuses, and eliminates protrusions.
+    # "opens" dark gaps between bright features.
+    morph = morphology.binary_opening(threshholded, tool)
+
+    # if this image is empty at this point (likely if there were no cells), just return
+    # the morphed image which is a zero array
+    if np.amax(morph) == 0:
+        return morph
+
+    # zero out rows that have very few pixels
+    # widens or creates gaps between cells
+    # sum of rows (how many pixels are occupied in each row)
+    line_profile = np.sum(morph, axis=1)
+    # find highest value, aka width of fattest cell
+    max_width = max(line_profile)
+    # find indexes of rows where sum is less than 1/5th of this value.
+    zero_these_indicies = np.all([line_profile < (max_width/5), line_profile > 0], axis=0)
+    zero_these_indicies = np.where(zero_these_indicies)
+    # zero out those rows
+    morph[zero_these_indicies] = 0
+
+    ### Calculate distnace matrix, use as markers for random walker (diffusion watershed)
+    # Generate the markers based on distance to the background
+    distance = ndi.distance_transform_edt(morph)
+
+    # threshold distance image
+    distance_thresh = np.zeros_like(distance)
+    distance_thresh[distance < 3] = 0
+    distance_thresh[distance >= 3] = 1
+
+    # do an extra opening on the distance
+    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
+
+    # remove artifacts connected to image border
+    cleared = segmentation.clear_border(distance_opened)
+    # remove small objects. We use try because remove small objects wants a
+    # labeled image and will fail if there is only one label. Return zero image in that case
+    # could have used try/except but remove_small_objects love to issue warnings.
+    cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
+    if label_num > 1:
+        cleared = morphology.remove_small_objects(cleared, min_size=50)
+    else:
+        # if there are no labels, then just return the cleared image as it is zero
+        return cleared
+
+    # relabel now that small objects and labels on edges have been cleared
+    markers = morphology.label(cleared)
+
+    # label using the random walker (diffusion watershed) algorithm
+    try:
+        # set anything outside of OTSU threshold to -1 so it will not be labeled
+        markers[threshholded == 0] = -1
+        # here is the main algorithm
+        labeled_image = segmentation.random_walker(image, markers)
+        # put negative values back to zero for proper image
+        labeled_image[labeled_image == -1] = 0
+    except:
+        return cleared # this should just be a zero array
 
     return labeled_image
 
@@ -1154,7 +1229,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if False:
+    if True:
         information('Creating lineage image.')
 
         n_imgs = len(regions_by_time)
