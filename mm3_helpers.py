@@ -19,6 +19,7 @@ except:
 import numpy as np
 import scipy.signal as spsig # used in channel finding
 import scipy.stats as spstats
+from scipy.optimize import curve_fit
 import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
@@ -1176,7 +1177,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     leaf_region_map[leaf_id] = closest_two_regions
 
                     # for the discarded regions, put them as new leaves
-                    # if they near the closed end of the channel
+                    # if they are near the closed end of the channel
                     discarded_regions = sorted(region_links, key=lambda x: x[1])[2:]
                     for discarded_region in discarded_regions:
                         region = regions[discarded_region[0]]
@@ -1229,7 +1230,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if True:
+    if False:
         information('Creating lineage image.')
 
         n_imgs = len(regions_by_time)
@@ -1401,6 +1402,9 @@ min_growth_area = 0.95
 # unless they are daughters of current cells
 new_cell_y_cutoff = 200
 
+def cell_growth_func(t, sb, alpha):
+    return sb*2**(alpha*t)
+
 # Cell class and related functions
 class Cell():
     '''
@@ -1433,13 +1437,24 @@ class Cell():
             '''
 
         # create all the attributes
-        # id and parent are required, though parent_id may be None.
+        # id
         self.id = cell_id
+
+        # identification convenience
+        self.fov = int(cell_id.split('f')[1].split('p')[0])
+        self.peak = int(cell_id.split('p')[1].split('t')[0])
+        self.birth_label = int(cell_id.split('r')[1])
+
+        # parent id may be none
         self.parent = parent_id
 
         # daughters is updated when cell divides
         # if this is none then the cell did not divide
         self.daughters = None
+
+        # birth and division time
+        self.birth_time = t
+        self.division_time = None # filled out if cell divides
 
         # the following information is on a per timepoint basis
         self.times = [t]
@@ -1451,13 +1466,20 @@ class Cell():
         self.lengths = [region.major_axis_length]
         self.widths = [region.minor_axis_length]
 
+        # these two are special, as they include information from the daugthers for division
+        # computed upon division
+        self.times_w_div = None
+        self.lengths_w_div = None
+
         # this information is the "production" information that
         # we want to extract at the end. Some of this is for convenience.
         # This is only filled out if a cell divides.
         self.sb = None
         self.sd = None # this should be combined lengths of daughters
         self.tau = None
-        self.gr = None
+        self.alpha = None
+        self.tau_calc = None
+        self.sum_cov = None
         self.septum_position = None
 
     def grow(self, region, t):
@@ -1481,6 +1503,9 @@ class Cell():
         # put the daugther ids into the cell
         self.daughters = [daughter1.id, daughter2.id]
 
+        # give this guy a division time
+        self.division_time = daughter1.birth_time
+
         # flesh out the stats for this cell
         # size at birth
         self.sb = self.lengths[0] * params['pxl2um']
@@ -1489,9 +1514,23 @@ class Cell():
         self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
 
         # generation time
-        self.tau = self.times[-1] - self.times[0]
+        self.tau = self.division_time - self.birth_time
 
-#         self.gr =
+        # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
+        # include the data points from the daughters
+        self.times_w_div = np.append(self.times, self.division_time)
+        self.lengths_w_div = np.append(self.lengths, daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+        try:
+            popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
+                                   p0=(self.sb, 1.0/self.tau))
+            alpha = popt[1]
+        except:
+            alpha = float('NaN')
+            pcov = float('Nan')
+
+        self.alpha = alpha
+        self.tau_calc = 1/alpha
+        self.sum_cov = np.sum(pcov)
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
@@ -1593,6 +1632,17 @@ def find_cells_with_daughters(Cells):
             Divided_Cells[cell_id] = Cells[cell_id]
 
     return Divided_Cells
+
+def find_mother_cells(Cells):
+    '''Return only cells whose starting region label is 1.'''
+
+    Mother_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].birth_label == 1:
+            Mother_Cells[cell_id] = Cells[cell_id]
+
+    return Mother_Cells
 
 def find_complete_cells(Cells):
     '''Go through a dictionary of cells and return another dictionary
