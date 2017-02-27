@@ -23,6 +23,7 @@ import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
+import h5py
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -246,7 +247,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
     return
 
 # same thing but do it for hdf5
-def hdf5_stack_slicd_and_write(images_to_write, channels_masks):
+def hdf5_stack_slice_and_write(images_to_write, channels_masks):
     '''Writes out 4D stacks of TIFF images to an HDF5 file.
 
     Called by
@@ -288,44 +289,44 @@ def hdf5_stack_slicd_and_write(images_to_write, channels_masks):
     image_fov_stack = np.stack(image_fov_stack, axis=0)
 
     # create the HDF5 file for the FOV, first time this is being done.
-    h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'a', libver='earliest')
+    with h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'w', libver='earliest') as h5f:
 
-    # cut out the channels as per channel masks for this fov
-    for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
-        #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
-        information('Slicing and saving channel peak %d.' % peak)
+        # cut out the channels as per channel masks for this fov
+        for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
+            #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+            information('Slicing and saving channel peak %d.' % peak)
 
-        # slice out channel.
-        # The function should recognize the shape length as 4 and cut all time points
-        channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
+            # slice out channel.
+            # The function should recognize the shape length as 4 and cut all time points
+            channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
 
-        # make an array for the metadata that can be stored by timepoint.
-        # file names and timepoint (t and and jd) is all
+            # make an array for the metadata that can be stored by timepoint.
+            # file names and timepoint (t and and jd) is all
 
-
-        # create group for this channel
-        h5g = h5f.creat_group('p%04d' % peak)
-
-        # save a different dataset  for all colors
-        for color_index in range(channel_stack.shape[3]):
-
-            # create the dataset for the image. Review docs for these options.
-            h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index),
-                                       data=channel_stack[:,:,:,color_index],
-                                       chunks=(1, channel_slice.shape[1],
-                                               channel_slice.shape[2]),
-                                       maxshape=(None, channel_slice.shape[1],
-                                                 channel_slice.shape[2], None),
-                                       compression="gzip", shuffle=True, fletcher32=True)
+            # create group for this channel
+            h5g = h5f.create_group('p%04d' % peak)
 
             # add attribute for peak_id, channel location, and plane name
-            h5ds.attrs['channel_id'] = channel_loc[0]
-            h5ds.attrs['channel_loc'] = channel_loc[1]
+            h5g.attrs.create('channeL_id', peak)
+            h5g.attrs.create('channel_loc', channel_loc)
 
-            # write the data even though we have more to write (free up memory)
-            h5mdds.flush()
+            # save a different dataset  for all colors
+            for color_index in range(channel_stack.shape[3]):
 
-    h5f.close()
+                # create the dataset for the image. Review docs for these options.
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index),
+                                data=channel_stack[:,:,:,color_index],
+                                chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
+                                maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+
+                # add attribute for peak_id, channel location, and plane name
+                h5ds.attrs.create('channeL_id', peak)
+                h5ds.attrs.create('channel_loc', channel_loc)
+
+
+                # write the data even though we have more to write (free up memory)
+                h5f.flush()
 
     return
 
@@ -363,12 +364,7 @@ if __name__ == "__main__":
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
+    num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
     TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
@@ -383,7 +379,7 @@ if __name__ == "__main__":
     if p['output'] == 'TIFF':
         if not os.path.exists(chnl_dir):
             os.makedirs(chnl_dir)
-    elif p['output'] = 'HDF5':
+    elif p['output'] == 'HDF5':
         if not os.path.exists(hdf5_dir):
             os.makedirs(hdf5_dir)
 
@@ -472,8 +468,12 @@ if __name__ == "__main__":
         information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
+    information("Saving channel slices.")
+
     # do it by FOV. Not set up for multiprocessing
     for fov, peaks in channel_masks.iteritems():
+        information("Loading channels for FOV %03d." % fov)
+
         # get filenames just for this fov along with the julian date of acquistion
         send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
 
@@ -495,7 +495,7 @@ if __name__ == "__main__":
                 # send to function which slices and writes channels out
                 tiff_slice_and_write(image_params, channel_masks)
             '''
-        elif p['output'] = 'HDF5':
+        elif p['output'] == 'HDF5':
             # Or write it to hdf5
             hdf5_stack_slice_and_write(send_to_write, channel_masks)
 
