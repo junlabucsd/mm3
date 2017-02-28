@@ -354,8 +354,6 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
 
     return
 
-
-
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters

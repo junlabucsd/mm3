@@ -25,6 +25,7 @@ import re # regular expressions
 import traceback
 import copy
 import warnings
+import h5py
 
 # Image analysis modules
 from scipy import ndimage as ndi
@@ -567,7 +568,7 @@ def trim_zeros_2d(array):
     return array
 
 # calculat cross correlation between pixels in channel stack
-def channel_xcorr(channel_filepath):
+def channel_xcorr(fov_id, peak_id):
     '''
     Function calculates the cross correlation of images in a
     stack to the first image in the stack. The output is an
@@ -578,8 +579,16 @@ def channel_xcorr(channel_filepath):
     '''
 
     # load up the stack. should be 4D [t, x, y, c]
-    with tiff.TiffFile(channel_filepath) as tif:
-        image_data = tif.asarray()
+    if params['output'] == 'TIFF':
+        channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+        chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
+        channel_filepath = chnl_dir + channel_filename
+        with tiff.TiffFile(channel_filepath) as tif:
+            image_data = tif.asarray()
+    elif params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
+        image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
     # just use the first plane, which should be the phase images
     if len(image_data.shape) > 3: # if there happen to be multiple planes
@@ -601,6 +610,9 @@ def channel_xcorr(channel_filepath):
         # use match_template to find all cross correlations for the
         # current image against the first image.
         xcorr_array.append(np.max(match_template(first_img, img)))
+
+    if params['output'] == 'HDF5':
+        h5f.close()
 
     return xcorr_array
 
