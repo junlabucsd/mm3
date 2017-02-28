@@ -257,16 +257,32 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
     # make an array of images and then concatenate them into one big stack
     image_fov_stack = []
 
-    # go through list of images and get the file path
-    for n, image in enumerate(images_to_write):
-        # analyzed_imgs dictionary will be found in main scope. [0] is the key, [1] is jd
-        image_params = analyzed_imgs[image[0]]
+    # make arrays for filenames and times
+    image_filenames = []
+    image_times = [] # times is still an integer but may be indexed arbitrarily
+    image_jds = [] # jds = julian dates (times)
 
+    # go through list of images, load and fix them, and create arrays of metadata
+    for n, image in enumerate(images_to_write):
+        image_name = image[0] # [0] is the key, [1] is jd
+
+        # analyzed_imgs dictionary will be found in main scope.
+        image_params = analyzed_imgs[image_name]
         information("Loading %s." % image_params['filepath'].split('/')[-1])
 
+        # add information to metadata arrays
+        image_filenames.append(image_name)
+        image_times.append(image_params['t'])
+        image_jds.append(image_params['jd'])
+
+        # declare identification variables for saving using first image
         if n == 1:
-            # declare identification variables for saving using first image
+            # same across fov
             fov_id = image_params['fov']
+            x_loc = image_params['x']
+            y_loc = image_params['y']
+            image_shape = image_params['shape']
+            image_planes = image_params['planes']
 
         # load the tif and store it in array
         with tiff.TiffFile(image_params['filepath']) as tif:
@@ -291,24 +307,35 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
     # create the HDF5 file for the FOV, first time this is being done.
     with h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'w', libver='earliest') as h5f:
 
+        # add in metadata for this FOV
+        # these attributes should be common for all channel
+        h5f.attrs.create('fov_id', fov_id)
+        h5f.attrs.create('stage_x_loc', x_loc)
+        h5f.attrs.create('stage_y_loc', y_loc)
+        h5f.attrs.create('image_shape', image_shape)
+        h5f.attrs.create('planes', image_planes)
+        h5f.attrs.create('peaks', sorted(channel_masks[fov_id].keys()))
+
+        # this is for things that change across time, for these create a dataset
+        h5ds = h5f.create_dataset(u'filenames', data=image_filenames, maxshape=(None), dtype='S100')
+        h5ds = h5f.create_dataset(u'times', data=image_times, maxshape=(None))
+        h5ds = h5f.create_dataset(u'times_jd', data=image_jds, maxshape=(None))
+
         # cut out the channels as per channel masks for this fov
-        for peak, channel_loc in channel_masks[image_params['fov']].iteritems():
+        for peak, channel_loc in channel_masks[fov_id].iteritems():
             #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
             information('Slicing and saving channel peak %d.' % peak)
+
+            # create group for this channel
+            h5g = h5f.create_group('channel_%04d' % peak)
+
+            # add attribute for peak_id, channel location
+            h5g.attrs.create('peak_id', peak)
+            h5g.attrs.create('channel_loc', channel_loc)
 
             # slice out channel.
             # The function should recognize the shape length as 4 and cut all time points
             channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
-
-            # make an array for the metadata that can be stored by timepoint.
-            # file names and timepoint (t and and jd) is all
-
-            # create group for this channel
-            h5g = h5f.create_group('p%04d' % peak)
-
-            # add attribute for peak_id, channel location, and plane name
-            h5g.attrs.create('channeL_id', peak)
-            h5g.attrs.create('channel_loc', channel_loc)
 
             # save a different dataset  for all colors
             for color_index in range(channel_stack.shape[3]):
@@ -320,10 +347,7 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
 
-                # add attribute for peak_id, channel location, and plane name
-                h5ds.attrs.create('channeL_id', peak)
-                h5ds.attrs.create('channel_loc', channel_loc)
-
+                h5ds.attrs.create('plane', image_planes[color_index])
 
                 # write the data even though we have more to write (free up memory)
                 h5f.flush()
