@@ -551,21 +551,21 @@ def cut_slice(image_data, channel_loc):
 
     return channel_slice
 
-# remove margins of zeros from 2d numpy array
-def trim_zeros_2d(array):
-    # make the array equal to the sub array which has columns of all zeros removed
-    # "all" looks along an axis and says if all of the valuse are such and such for each row or column
-    # ~ is the inverse operator
-    # using logical indexing
-    array = array[~np.all(array == 0, axis = 1)]
-    # transpose the array
-    array = array.T
-    # make the array equal to the sub array which has columns of all zeros removed
-    array = array[~np.all(array == 0, axis = 1)]
-    # transpose the array again
-    array = array.T
-    # return the array
-    return array
+# # remove margins of zeros from 2d numpy array
+# def trim_zeros_2d(array):
+#     # make the array equal to the sub array which has columns of all zeros removed
+#     # "all" looks along an axis and says if all of the valuse are such and such for each row or column
+#     # ~ is the inverse operator
+#     # using logical indexing
+#     array = array[~np.all(array == 0, axis = 1)]
+#     # transpose the array
+#     array = array.T
+#     # make the array equal to the sub array which has columns of all zeros removed
+#     array = array[~np.all(array == 0, axis = 1)]
+#     # transpose the array again
+#     array = array.T
+#     # return the array
+#     return array
 
 # calculat cross correlation between pixels in channel stack
 def channel_xcorr(fov_id, peak_id):
@@ -638,9 +638,13 @@ def average_empties_stack(fov_id, specs):
 
     information("Creating average empty channel for FOV %d." % fov_id)
 
-    # directories for saving
-    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+    if params['output'] == 'TIFF':
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
 
     # get peak ids of empty channels for this fov
     empty_peak_ids = []
@@ -661,14 +665,16 @@ def average_empties_stack(fov_id, specs):
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
         # copy that tiff stack with a new name as empty
-        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename
+        if params['output'] == 'TIFF':
+            # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+            with tiff.TiffFile(chnl_dir + channel_filename) as tif:
+                avg_empty_stack = tif.asarray()
 
-        with tiff.TiffFile(channel_filepath) as tif:
-            avg_empty_stack = tif.asarray()
+        elif params['output'] == 'HDF5':
+            avg_empty_stack = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
-        # get just the phase data if it is multidimensional
+        # get just the phase data if it is multidimensional (it shouldn't be)
         if len(avg_empty_stack.shape) > 3:
             avg_empty_stack = avg_empty_stack[:,:,:,0]
 
@@ -678,14 +684,19 @@ def average_empties_stack(fov_id, specs):
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
             # load stack
-            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-            channel_filepath = chnl_dir + channel_filename
-            with tiff.TiffFile(channel_filepath) as tif:
-                image_data = tif.asarray()
+            if params['output'] == 'TIFF':
+                channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+                channel_filepath = chnl_dir + channel_filename
+                with tiff.TiffFile(channel_filepath) as tif:
+                    image_data = tif.asarray()
+
+            elif params['output'] == 'HDF5':
+                image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
             # just get phase data and put it in list
             if len(image_data.shape) > 3:
                 image_data = image_data[:,:,:,0]
+
             empty_stacks.append(image_data)
 
         information("%d empty channels designated for FOV %d." % (len(empty_stacks), fov_id))
@@ -703,11 +714,25 @@ def average_empties_stack(fov_id, specs):
         avg_empty_stack = np.stack(avg_empty_stack, axis=0)
 
     # save out data
-    # make new name
-    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-    empty_filepath = empty_dir + empty_filename
-    tiff.imsave(empty_filepath, avg_empty_stack, compress=1) # save it
-    information("Saved empty channel %s." % empty_filename)
+    if params['output'] == 'TIFF':
+        # make new name
+        empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filepath = empty_dir + empty_filename
+        tiff.imsave(empty_filepath, avg_empty_stack, compress=3) # save it
+
+    if params['output'] == 'HDF5':
+        # the empty channel should be it's own dataset
+        h5ds = h5f.create_dataset(u'empty_channel',
+                        data=avg_empty_stack,
+                        chunks=(1, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        maxshape=(None, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+
+        # give attribute which says which channels contribute
+        h5ds.attrs.create('empty_channels', empty_peak_ids)
+        h5f.close()
+
+    information("Saved empty channel for FOV %d." % fov_id)
 
     return True
 
@@ -780,15 +805,20 @@ def subtract_fov_stack(fov_id, specs):
     information('Subtracting peaks for FOV %d.' % fov_id)
 
     # directories for saving
-    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+    if params['output'] == 'TIFF':
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+        # load the empty stack
+        empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filepath = empty_dir + empty_filename
+        with tiff.TiffFile(empty_filepath) as tif:
+            avg_empty_stack = tif.asarray()
 
-    # load the empty stack
-    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-    empty_filepath = empty_dir + empty_filename
-    with tiff.TiffFile(empty_filepath) as tif:
-        avg_empty_stack = tif.asarray()
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
+        avg_empty_stack = h5f['empty_channel'] # for HDF5 grab the dataset dictionary style
 
     # determine which peaks are to be analyzed
     ana_peak_ids = []
@@ -802,12 +832,17 @@ def subtract_fov_stack(fov_id, specs):
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
 
-        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename
-        with tiff.TiffFile(channel_filepath) as tif:
-            image_data = tif.asarray()
+        if params['output'] == 'TIFF':
+            # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+            channel_filepath = chnl_dir + channel_filename
+            with tiff.TiffFile(channel_filepath) as tif:
+                image_data = tif.asarray()
 
+        elif params['output'] == 'HDF5':
+            image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
+
+        # it should just be the phase data, but check just to make sure.
         if len(image_data.shape) > 3:
             image_data = image_data[:,:,:,0] # just get phase data and put it in list
 
@@ -827,10 +862,29 @@ def subtract_fov_stack(fov_id, specs):
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
 
         # save out the subtracted stack
-        sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-        sub_filepath = sub_dir + sub_filename
-        tiff.imsave(sub_filepath, subtracted_stack, compress=1) # save it
-        information("Saved subtracted channel %s." % sub_filename)
+        if params['output'] == 'TIFF':
+            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+            sub_filepath = sub_dir + sub_filename
+            tiff.imsave(sub_filepath, subtracted_stack, compress=3) # save it
+
+        if params['output'] == 'HDF5':
+            # put subtracted channel in correct group
+            h5g = h5f['channel_%04d' % peak_id]
+
+            # delete the dataset if it exists (important for debug)
+            if 'p%04d_sub' % peak_id in h5g:
+                del h5g['p%04d_sub' % peak_id]
+
+            h5ds = h5g.create_dataset(u'p%04d_sub' % peak_id,
+                            data=subtracted_stack,
+                            chunks=(1, subtracted_stack.shape[1], subtracted_stack.shape[2]),
+                            maxshape=(None, subtracted_stack.shape[1], subtracted_stack.shape[2]),
+                            compression="gzip", shuffle=True, fletcher32=True)
+
+        information("Saved subtracted channel %d." % peak_id)
+
+    if params['output'] == 'HDF5':
+        h5f.close()
 
     return True
 
@@ -1013,15 +1067,15 @@ def segment_image(image):
 
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance_opened)
-    # remove small objects. We use try because remove small objects wants a
+    # remove small objects. Remove small objects wants a
     # labeled image and will fail if there is only one label. Return zero image in that case
-    # could have used try/except but remove_small_objects love to issue warnings.
+    # could have used try/except but remove_small_objects loves to issue warnings.
     cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
     if label_num > 1:
         cleared = morphology.remove_small_objects(cleared, min_size=50)
     else:
         # if there are no labels, then just return the cleared image as it is zero
-        return cleared
+        return cleared # should be zero image if there was only 1 label
 
     # relabel now that small objects and labels on edges have been cleared
     markers = morphology.label(cleared)
@@ -1054,15 +1108,21 @@ def segment_chnl_stack(fov_id, peak_id):
 
     information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
 
-    # directories for loading and saving images
-    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-    seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+    # load images for either TIFF or HDF5
+    if params['output'] == 'TIFF':
+        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
 
-    # load the subtracted stack
-    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-    sub_filepath = sub_dir + sub_filename
-    with tiff.TiffFile(sub_filepath) as tif:
-        sub_stack = tif.asarray()
+        # load the subtracted stack
+        sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+        sub_filepath = sub_dir + sub_filename
+        with tiff.TiffFile(sub_filepath) as tif:
+            sub_stack = tif.asarray()
+
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
+        sub_stack = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
 
     # set up multiprocessing pool to do segmentation. Will do everything before going on.
     pool = Pool(processes=params['num_analyzers'])
@@ -1082,10 +1142,27 @@ def segment_chnl_stack(fov_id, peak_id):
     segmented_imgs = np.stack(segmented_imgs, axis=0)
 
     # save out the subtracted stack
-    seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-    seg_filepath = seg_dir + seg_filename
-    tiff.imsave(seg_filepath, segmented_imgs.astype('uint16'), compress=1) # save it
-    information("Saved segmented channel %s." % seg_filename)
+    if params['output'] == 'TIFF':
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        seg_filepath = seg_dir + seg_filename
+        tiff.imsave(seg_filepath, segmented_imgs.astype('uint16'), compress=3) # save it
+
+    if params['output'] == 'HDF5':
+        # put segmented channel in correct group
+        h5g = h5f['channel_%04d' % peak_id]
+
+        # delete the dataset if it exists (important for debug)
+        if 'p%04d_seg' % peak_id in h5g:
+            del h5g['p%04d_seg' % peak_id]
+
+        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
+                        data=segmented_imgs,
+                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+        h5f.close()
+
+    information("Saved segmented channel %d." % peak_id)
 
     return True
 
@@ -1105,26 +1182,25 @@ def make_lineage_chnl_stack(fov_and_peak_id):
         A dictionary of all the cells from this lineage, divided and undivided
 
     '''
+
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
 
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # directories for loading and saving images
-    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-    seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+    if params['output'] == 'TIFF':
+        # Segmented images
+        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        seg_filepath = seg_dir + seg_filename
+        with tiff.TiffFile(seg_filepath) as tif:
+            image_data_seg = tif.asarray()
 
-    # Subtracted images
-    sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-    sub_filepath = sub_dir + sub_filename
-    with tiff.TiffFile(sub_filepath) as tif:
-        image_data_sub = tif.asarray()
-
-    # Segmented images
-    seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-    seg_filepath = seg_dir + seg_filename
-    with tiff.TiffFile(seg_filepath) as tif:
-        image_data_seg = tif.asarray()
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
+        image_data_seg = h5f['channel_%04d/p%04d_seg' % (peak_id, peak_id)]
 
     # Calculate all data for all time points.
     # this list will be length of the number of time points
@@ -1242,8 +1318,19 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if False:
+    if True:
         information('Creating lineage image.')
+
+        # Subtracted images needed for making lineage graphs
+        if params['output'] == 'TIFF':
+            sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+            sub_filepath = sub_dir + sub_filename
+            with tiff.TiffFile(sub_filepath) as tif:
+                image_data_sub = tif.asarray()
+
+        if params['output'] == 'HDF5':
+            image_data_sub = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
 
         n_imgs = len(regions_by_time)
         image_indicies = range(n_imgs)
@@ -1345,10 +1432,16 @@ def make_lineage_chnl_stack(fov_and_peak_id):
         #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
 
             # save image to segmentation subfolder
+            lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+            if not os.path.exists(lin_dir):
+                os.makedirs(lin_dir)
             lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
-            lin_filepath = seg_dir + lin_filename
+            lin_filepath = lin_dir + lin_filename
             fig.savefig(lin_filepath, dpi=50)
             plt.close()
+
+    if params['output'] == 'HDF5':
+        h5f.close()
 
     # return the dictionary with all the cells
     return Cells
@@ -1396,26 +1489,6 @@ def make_lineages_fov(fov_id, specs):
         Cells.update(cell_dict) # updates Cells with the entries in cell_dict
 
     return Cells
-
-# parameters for building lineages
-# amount of frames after which a cell is dropped because no
-# new regions linked to it
-lost_cell_time = 3
-
-# these parameters say the max and minimum ammount a cell is allowed
-# to grow by to link a new region to an existing cell
-max_growth_length = 1.2
-min_growth_length = 0.95
-max_growth_area = 1.2
-min_growth_area = 0.95
-
-# only cells with y positions below this value
-# will recieve the honor of becoming new cells,
-# unless they are daughters of current cells
-new_cell_y_cutoff = 200
-
-def cell_growth_func(t, sb, alpha):
-    return sb*2**(alpha*t)
 
 # Cell class and related functions
 class Cell():
@@ -1533,9 +1606,11 @@ class Cell():
         self.times_w_div = np.append(self.times, self.division_time)
         self.lengths_w_div = np.append(self.lengths, daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
         try:
-            popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
-                                   p0=(self.sb, 1.0/self.tau))
-            alpha = popt[1]
+            with warnings.catch_warnings(): # ignore the warnings if it can't converge
+                warnings.simplefilter("ignore")
+                popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
+                                    p0=(self.sb, 1.0/self.tau))
+                alpha = popt[1]
         except:
             alpha = float('NaN')
             pcov = float('Nan')
@@ -1555,11 +1630,34 @@ class Cell():
         print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
         print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
 
+# take info and make string for cell id
 def create_cell_id(region, t, peak, fov):
     '''Make a unique cell id string for a new cell'''
     cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
     cell_id = ''.join(cell_id)
     return cell_id
+
+# function for a growing cell, used to calculate growth rate
+def cell_growth_func(t, sb, alpha):
+    return sb*2**(alpha*t)
+
+# functions for checking if a cell has divided or not
+# parameters for building lineages
+# amount of frames after which a cell is dropped because no
+# new regions linked to it
+lost_cell_time = 3
+
+# these parameters say the max and minimum ammount a cell is allowed
+# to grow by to link a new region to an existing cell
+max_growth_length = 1.2
+min_growth_length = 0.95
+max_growth_area = 1.2
+min_growth_area = 0.95
+
+# only cells with y positions below this value
+# will recieve the honor of becoming new cells,
+# unless they are daughters of current cells
+new_cell_y_cutoff = 200
 
 # this function should also take the variable t to
 # weight the allowed changes by the difference in time as well
@@ -1593,6 +1691,7 @@ def check_growth_by_region(cell, region):
 
     return grow
 
+# see if a cell has reasonably divided
 def check_division(cell, region1, region2):
     '''Checks to see if it makes sense to divide a
     cell into two new cells based on two regions.
@@ -1633,6 +1732,7 @@ def check_division(cell, region1, region2):
     # if you got this far then divide the mother
     return 3
 
+### functions for pruning a dictionary of cells
 def find_cells_with_daughters(Cells):
     '''Go through a dictionary of cells and return another dictionary
     that contains just those with daughters, i.e., really divided'''
@@ -1670,48 +1770,48 @@ def find_complete_cells(Cells):
 
 ### functions about converting dates and times
 ### Functions
-def days_to_hmsm(days):
-    hours = days * 24.
-    hours, hour = math.modf(hours)
-    mins = hours * 60.
-    mins, min = math.modf(mins)
-    secs = mins * 60.
-    secs, sec = math.modf(secs)
-    micro = round(secs * 1.e6)
-    return int(hour), int(min), int(sec), int(micro)
-
-def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-    days = sec + (micro / 1.e6)
-    days = min + (days / 60.)
-    days = hour + (days / 60.)
-    return days / 24.
-
-def date_to_jd(year,month,day):
-    if month == 1 or month == 2:
-        yearp = year - 1
-        monthp = month + 12
-    else:
-        yearp = year
-        monthp = month
-    # this checks where we are in relation to October 15, 1582, the beginning
-    # of the Gregorian calendar.
-    if ((year < 1582) or
-        (year == 1582 and month < 10) or
-        (year == 1582 and month == 10 and day < 15)):
-        # before start of Gregorian calendar
-        B = 0
-    else:
-        # after start of Gregorian calendar
-        A = math.trunc(yearp / 100.)
-        B = 2 - A + math.trunc(A / 4.)
-    if yearp < 0:
-        C = math.trunc((365.25 * yearp) - 0.75)
-    else:
-        C = math.trunc(365.25 * yearp)
-    D = math.trunc(30.6001 * (monthp + 1))
-    jd = B + C + D + day + 1720994.5
-    return jd
-
-def datetime_to_jd(date):
-    days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
-    return date_to_jd(date.year, date.month, days)
+# def days_to_hmsm(days):
+#     hours = days * 24.
+#     hours, hour = math.modf(hours)
+#     mins = hours * 60.
+#     mins, min = math.modf(mins)
+#     secs = mins * 60.
+#     secs, sec = math.modf(secs)
+#     micro = round(secs * 1.e6)
+#     return int(hour), int(min), int(sec), int(micro)
+#
+# def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
+#     days = sec + (micro / 1.e6)
+#     days = min + (days / 60.)
+#     days = hour + (days / 60.)
+#     return days / 24.
+#
+# def date_to_jd(year,month,day):
+#     if month == 1 or month == 2:
+#         yearp = year - 1
+#         monthp = month + 12
+#     else:
+#         yearp = year
+#         monthp = month
+#     # this checks where we are in relation to October 15, 1582, the beginning
+#     # of the Gregorian calendar.
+#     if ((year < 1582) or
+#         (year == 1582 and month < 10) or
+#         (year == 1582 and month == 10 and day < 15)):
+#         # before start of Gregorian calendar
+#         B = 0
+#     else:
+#         # after start of Gregorian calendar
+#         A = math.trunc(yearp / 100.)
+#         B = 2 - A + math.trunc(A / 4.)
+#     if yearp < 0:
+#         C = math.trunc((365.25 * yearp) - 0.75)
+#     else:
+#         C = math.trunc(365.25 * yearp)
+#     D = math.trunc(30.6001 * (monthp + 1))
+#     jd = B + C + D + day + 1720994.5
+#     return jd
+#
+# def datetime_to_jd(date):
+#     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
+#     return date_to_jd(date.year, date.month, days)
