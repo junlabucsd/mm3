@@ -1318,7 +1318,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if True:
+    if False:
         information('Creating lineage image.')
 
         # Subtracted images needed for making lineage graphs
