@@ -580,8 +580,8 @@ def channel_xcorr(fov_id, peak_id):
 
     # load up the stack. should be 4D [t, x, y, c]
     if params['output'] == 'TIFF':
-        channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
         channel_filepath = chnl_dir + channel_filename
         with tiff.TiffFile(channel_filepath) as tif:
             image_data = tif.asarray()
@@ -1085,7 +1085,7 @@ def segment_image(image):
         # set anything outside of OTSU threshold to -1 so it will not be labeled
         markers[threshholded == 0] = -1
         # here is the main algorithm
-        labeled_image = segmentation.random_walker(image, markers)
+        labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
         labeled_image[labeled_image == -1] = 0
     except:
