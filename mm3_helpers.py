@@ -1318,7 +1318,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if False:
+    if True:
         information('Creating lineage image.')
 
         # Subtracted images needed for making lineage graphs
@@ -1369,6 +1369,15 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
             ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
             ax[i].set_title(str(i), color='white')
+
+        # save image to segmentation subfolder
+        lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+        if not os.path.exists(lin_dir):
+            os.makedirs(lin_dir)
+        lin_filename = params['experiment_name'] + '_xy%03d_p%04d_nolin.png' % (fov_id, peak_id)
+        lin_filepath = lin_dir + lin_filename
+        fig.savefig(lin_filepath, dpi=75)
+        plt.close()
 
         # Annotate each cell with information
         for cell_id in Cells:
@@ -1437,7 +1446,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                 os.makedirs(lin_dir)
             lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
             lin_filepath = lin_dir + lin_filename
-            fig.savefig(lin_filepath, dpi=50)
+            fig.savefig(lin_filepath, dpi=75)
             plt.close()
 
     if params['output'] == 'HDF5':
