@@ -12,18 +12,12 @@ import time
 import inspect
 import getopt
 import yaml
-import traceback
-import fnmatch
-import glob
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
 except:
     import pickle
-import multiprocessing
-from multiprocessing import Pool #, Lock
 import numpy as np
-import warnings
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -39,19 +33,13 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
-
-# this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_empties = True # use precomputed empties
-    do_subtraction = True
+    do_segmentation = False # make or load segmentation?
+    do_lineages = True # should lineages be made after segmentation?
 
     # get switches and parameters
     try:
@@ -91,19 +79,16 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # assign shorthand directory names and create folders if they do not exist
+    # assign shorthand directory names
     ana_dir = p['experiment_directory'] + p['analysis_directory']
+    seg_dir = p['experiment_directory'] + p['analysis_directory'] + 'segmented/'
+    cell_dir = p['experiment_directory'] + p['analysis_directory'] + 'cell_data/'
 
-    if p['output'] == 'TIFF':
-        chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
-        empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
-        sub_dir = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
-        if not os.path.exists(empty_dir):
-            os.makedirs(empty_dir)
-        if not os.path.exists(sub_dir):
-            os.makedirs(sub_dir)
-    elif p['output'] == 'HDF5':
-        hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
+    # create segmenteation and cell data folder if it doesn't exist
+    if not os.path.exists(seg_dir):
+        os.makedirs(seg_dir)
+    if not os.path.exists(cell_dir):
+        os.makedirs(cell_dir)
 
     # load specs file
     try:
@@ -124,27 +109,56 @@ if __name__ == "__main__":
 
     information("Found %d FOVs to process." % len(fov_id_list))
 
-    ### Make average empty channels ###############################################################
-    if load_empties:
-        information("Loading precalculated empties.")
-        pass # just skip this part and go to subtraction
+    ### Do Segmentation by FOV and then peak #######################################################
+    if do_segmentation:
+        information("Segmenting channels.")
 
-    else:
-        information("Calculated averaged empties.")
         for fov_id in fov_id_list:
-            # send to function which will create empty stack for each fov.
-            averaging_result = mm3.average_empties_stack(fov_id, specs)
+            # determine which peaks are to be analyzed (those which have been subtracted)
+            ana_peak_ids = []
+            for peak_id, spec in specs[fov_id].items():
+                if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
+                    ana_peak_ids.append(peak_id)
+            ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
-    ### Subtract ##################################################################################
-    if do_subtraction:
-        information("Subtracting channels.")
+            for peak_id in ana_peak_ids:
+                # send to segmentation
+                mm3.segment_chnl_stack(fov_id, peak_id)
+
+        information("Finished segmentation.")
+
+    ### Create cell lineages from segmented images
+    if do_lineages:
+        information("Creating cell lineages.")
+
+        # This dictionary holds information for all cells
+        Cells = {}
+
+        # do lineage creation per fov, so pooling can be done by peak
         for fov_id in fov_id_list:
-            # send to function which will create empty stack for each fov.
-            subtraction_result = mm3.subtract_fov_stack(fov_id, specs)
+            # update will add the output from make_lineages_function, which is a
+            # dict of Cell entries, into Cells
+            Cells.update(mm3.make_lineages_fov(fov_id, specs))
 
-    # Else just end, they only wanted to do empty averaging.
-    else:
-        information("Skipping subtraction.")
-        pass
+        information("Finished lineage creation.")
 
-    information("Finished.")
+        ### Now prune and save the data.
+        information("Curating and saving cell data.")
+
+        # this returns only cells with a parent and daughters
+        Complete_Cells = mm3.find_complete_cells(Cells)
+
+        # save the cell data
+        with open(cell_dir + '/all_cells.pkl', 'wb') as cell_file:
+            pickle.dump(Cells, cell_file)
+        with open(cell_dir + '/complete_cells.pkl', 'wb') as cell_file:
+            pickle.dump(Complete_Cells, cell_file)
+
+        # convert the objects in the dictionary to dictionaries and save it to pickle and text
+        Complete_Cells_dict = {cell_id : vars(cell) for cell_id, cell in Complete_Cells.iteritems()}
+        with open(cell_dir + '/complete_cells_dict.pkl', 'wb') as cell_file:
+            pickle.dump(Complete_Cells_dict, cell_file)
+        with open(cell_dir + '/complete_cells_dict.txt', 'w') as cell_file:
+            pprint(Complete_Cells_dict, stream=cell_file)
+
+        information("Finished curating and saving cell data.")

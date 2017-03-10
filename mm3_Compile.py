@@ -22,6 +22,8 @@ except:
 import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
+import warnings
+import h5py
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -37,7 +39,12 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
+
+# this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
 # get params is the major function which processes raw TIFF images
@@ -115,7 +122,7 @@ def get_tif_params(image_filename, find_channels=True):
 # slice_and_write cuts up the image files and writes them out to tiff stacks
 def tiff_slice_and_write(image_params, channel_masks):
     '''Writes out 4D stacks of TIFF images per channel.
-    This appends to a stack if it already exists, and is so slow it is not used. 
+    This appends to a stack if it already exists, and is so slow it is not used.
 
     Called by
     __main__
@@ -182,7 +189,6 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
     '''Writes out 4D stacks of TIFF images per channel.
     Loads all tiffs from and FOV into memory and then slices all time points at once.
 
-
     Called by
     __main__
     '''
@@ -240,11 +246,119 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
 
     return
 
+# same thing but do it for hdf5
+def hdf5_stack_slice_and_write(images_to_write, channels_masks):
+    '''Writes out 4D stacks of TIFF images to an HDF5 file.
+
+    Called by
+    __main__
+    '''
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # make arrays for filenames and times
+    image_filenames = []
+    image_times = [] # times is still an integer but may be indexed arbitrarily
+    image_jds = [] # jds = julian dates (times)
+
+    # go through list of images, load and fix them, and create arrays of metadata
+    for n, image in enumerate(images_to_write):
+        image_name = image[0] # [0] is the key, [1] is jd
+
+        # analyzed_imgs dictionary will be found in main scope.
+        image_params = analyzed_imgs[image_name]
+        information("Loading %s." % image_params['filepath'].split('/')[-1])
+
+        # add information to metadata arrays
+        image_filenames.append(image_name)
+        image_times.append(image_params['t'])
+        image_jds.append(image_params['jd'])
+
+        # declare identification variables for saving using first image
+        if n == 1:
+            # same across fov
+            fov_id = image_params['fov']
+            x_loc = image_params['x']
+            y_loc = image_params['y']
+            image_shape = image_params['shape']
+            image_planes = image_params['planes']
+
+        # load the tif and store it in array
+        with tiff.TiffFile(image_params['filepath']) as tif:
+            image_data = tif.asarray()
+
+        # channel finding was also done on images after orientation was fixed
+        image_data = mm3.fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        #change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+    # concatenate the list into one big ass stack
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
+
+    # create the HDF5 file for the FOV, first time this is being done.
+    with h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'w', libver='earliest') as h5f:
+
+        # add in metadata for this FOV
+        # these attributes should be common for all channel
+        h5f.attrs.create('fov_id', fov_id)
+        h5f.attrs.create('stage_x_loc', x_loc)
+        h5f.attrs.create('stage_y_loc', y_loc)
+        h5f.attrs.create('image_shape', image_shape)
+        h5f.attrs.create('planes', image_planes)
+        h5f.attrs.create('peaks', sorted(channel_masks[fov_id].keys()))
+
+        # this is for things that change across time, for these create a dataset
+        h5ds = h5f.create_dataset(u'filenames', data=image_filenames, maxshape=(None), dtype='S100')
+        h5ds = h5f.create_dataset(u'times', data=image_times, maxshape=(None))
+        h5ds = h5f.create_dataset(u'times_jd', data=image_jds, maxshape=(None))
+
+        # cut out the channels as per channel masks for this fov
+        for peak, channel_loc in channel_masks[fov_id].iteritems():
+            #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+            information('Slicing and saving channel peak %d.' % peak)
+
+            # create group for this channel
+            h5g = h5f.create_group('channel_%04d' % peak)
+
+            # add attribute for peak_id, channel location
+            h5g.attrs.create('peak_id', peak)
+            h5g.attrs.create('channel_loc', channel_loc)
+
+            # slice out channel.
+            # The function should recognize the shape length as 4 and cut all time points
+            channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
+
+            # save a different dataset  for all colors
+            for color_index in range(channel_stack.shape[3]):
+
+                # create the dataset for the image. Review docs for these options.
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index),
+                                data=channel_stack[:,:,:,color_index],
+                                chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
+                                maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+
+                h5ds.attrs.create('plane', image_planes[color_index])
+
+                # write the data even though we have more to write (free up memory)
+                h5f.flush()
+
+    return
+
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = False
-    load_channel_masks = False
+    load_metadata = True
+    load_channel_masks = True
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 3
@@ -272,24 +386,24 @@ if __name__ == "__main__":
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
+    num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
     TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
+    hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
 
-    # create the analysis folder if it doesn't exist
+    # create the subfolders if they don't
     if not os.path.exists(ana_dir):
         os.makedirs(ana_dir)
-    # create folder for sliced data.
-    if not os.path.exists(chnl_dir):
-        os.makedirs(chnl_dir)
+
+    if p['output'] == 'TIFF':
+        if not os.path.exists(chnl_dir):
+            os.makedirs(chnl_dir)
+    elif p['output'] == 'HDF5':
+        if not os.path.exists(hdf5_dir):
+            os.makedirs(hdf5_dir)
 
     # declare information variables
     analyzed_imgs = {} # for storing get_params pool results.
@@ -376,27 +490,35 @@ if __name__ == "__main__":
         information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
+    information("Saving channel slices.")
+
     # do it by FOV. Not set up for multiprocessing
     for fov, peaks in channel_masks.iteritems():
+        information("Loading channels for FOV %03d." % fov)
+
         # get filenames just for this fov along with the julian date of acquistion
         send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
 
         # sort the filenames by jdn
         send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
-        ### This is for loading the whole raw tiff stack and then slicing through it
-        tiff_stack_slice_and_write(send_to_write, channel_masks)
+        if p['output'] == 'TIFF':
+            ### This is for loading the whole raw tiff stack and then slicing through it
+            tiff_stack_slice_and_write(send_to_write, channel_masks)
 
-        '''
-        ### This is for writing each file one at a time.
-        # this is really slow do to file opening and closing but less memory hogging
-        # writing out each time point
-        for fn, jd in send_to_write:
-            # get the image parameter dictionary from the analyzed image dict.
-            image_params = analyzed_imgs[fn]
+            '''
+            ### This is for writing each file one at a time.
+            # this is really slow do to file opening and closing but less memory hogging
+            # writing out each time point
+            for fn, jd in send_to_write:
+                # get the image parameter dictionary from the analyzed image dict.
+                image_params = analyzed_imgs[fn]
 
-            # send to function which slices and writes channels out
-            tiff_slice_and_write(image_params, channel_masks)
-        '''
+                # send to function which slices and writes channels out
+                tiff_slice_and_write(image_params, channel_masks)
+            '''
+        elif p['output'] == 'HDF5':
+            # Or write it to hdf5
+            hdf5_stack_slice_and_write(send_to_write, channel_masks)
 
     information("Channel slices saved.")

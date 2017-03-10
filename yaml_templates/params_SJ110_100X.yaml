@@ -15,8 +15,16 @@ analysis_directory: 'analysis/'
 # retrieve metadata. Choices are 'elements' or 'nd2ToTIFF'
 TIFF_source: 'nd2ToTIFF'
 
+# indicate if you want to save out to TIFFs, or use HDF5 to save image data.
+# HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
+output: 'TIFF' # 'HDF5'
+
 # nominal time between indexes for a single FOV used during image acquisition
 seconds_per_time_index: 60
+
+# conversion factor from pixels to microns
+# use 0.065 for 100X, use 0.108 for 60X
+pxl2um: 0.065
 
 # image_orientation: set to "up" if growth pushes cells up
 # set to "down" if growth pushes cells down
@@ -53,8 +61,8 @@ movie_directory: 'movies/'
 # fps set the framerate per second
 fps: 24
 
-# image start for movie making
-image_start: 1
+# image start for movie making. zero indexed
+image_start: 0
 
 # image end for movie making. If this value exceeds the maximum index value
 # present in an experiment, it will be silently ignored

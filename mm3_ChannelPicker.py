@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 from skimage.exposure import rescale_intensity # for displaying in GUI
 import multiprocessing
 from multiprocessing import Pool
+import warnings
+import h5py
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -37,7 +39,12 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
+
+# this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
 ### functions
@@ -104,15 +111,21 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     npeaks = len(sorted_peaks)
     last_imgs = [] # list that holds last images for updating figure
 
+    if p['output'] == 'HDF5':
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
+
     for n, peak_id in enumerate(sorted_peaks, start=1):
         peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
         # load image data needed
-        # channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
-        with tiff.TiffFile(channel_filepath) as tif:
-            image_data = tif.asarray()
+        if p['output'] == 'TIFF':
+            channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+            channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
+            with tiff.TiffFile(channel_filepath) as tif:
+                image_data = tif.asarray()
+        elif p['output'] == 'HDF5':
+            image_data = h5f['channel_%04d' % peak_id]['p%04d_c0' % peak_id]
+
         first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
         last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
         last_imgs.append(last_img) # append for updating later
@@ -157,6 +170,9 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
             ax[-1].set_ylabel("time index, CC on X")
         ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
 
+    if p['output'] == 'HDF5':
+        h5f.close()
+
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
     plt.show(block=False)
@@ -182,7 +198,7 @@ def format_channel_plot(ax, peak_id):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = False
+    load_crosscorrs = True
 
     # get switches and parameters
     try:
@@ -224,16 +240,12 @@ if __name__ == "__main__":
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
+    num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
     ana_dir = p['experiment_directory'] + p['analysis_directory']
     chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
+    hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
 
     # load channel masks
     try:
@@ -277,19 +289,14 @@ if __name__ == "__main__":
 
             # find all peak ids in the current FOV
             for peak_id in sorted(channel_masks[fov_id].keys()):
-                # determine the channel file name and path
-                #channel_filename = p['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-                channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-                channel_filepath = chnl_dir + channel_filename
-
                 information("Calculating cross correlations for peak %d." % peak_id)
 
-                # linear loop
-                # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(channel_filepath)
+                # # linear loop
+                # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
 
                 # multiprocessing verion
                 crosscorrs[fov_id][peak_id] = pool.apply_async(mm3.channel_xcorr,
-                                                               args=(channel_filepath,))
+                                                               args=(fov_id, peak_id,))
 
             information('Waiting for cross correlation pool to finish for FOV %d.' % fov_id)
 
@@ -299,7 +306,6 @@ if __name__ == "__main__":
             information("Finished cross correlations for FOV %d." % fov_id)
 
         # get results from the pool and put the results in the dictionary if succesful
-        xcorr_scores = [] # array holds all values for
         for fov_id, peaks in crosscorrs.iteritems():
             for peak_id, result in peaks.iteritems():
                 if result.successful():

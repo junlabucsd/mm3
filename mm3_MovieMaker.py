@@ -18,6 +18,7 @@ import math
 import subprocess as sp
 import numpy as np
 from freetype import *
+import warnings
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -33,7 +34,10 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
 
 # debug
 # import matplotlib as mpl

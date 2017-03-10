@@ -24,6 +24,7 @@ except:
     import pickle
 import numpy as np
 import pims_nd2
+import warnings
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -39,7 +40,10 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
 
 ### Main script
 if __name__ == "__main__":

@@ -19,15 +19,38 @@ except:
 import numpy as np
 import scipy.signal as spsig # used in channel finding
 import scipy.stats as spstats
+from scipy.optimize import curve_fit
 import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback
 import copy
-from scipy import ndimage # used in make_masks
-from skimage.segmentation import clear_border # used in make_masks
+import warnings
+import h5py
+
+# Image analysis modules
+from scipy import ndimage as ndi
+from skimage import segmentation # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
+from skimage.filters import threshold_otsu
+from skimage import morphology # many functions is segmentation used from this
+from skimage.measure import regionprops # used for creating lineages
+
+# Parralelization modules
 import multiprocessing
 from multiprocessing import Pool
+
+# Plotting for debug
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+font = {'family' : 'sans-serif',
+        'weight' : 'normal',
+        'size'   : 12}
+mpl.rc('font', **font)
+mpl.rcParams['figure.figsize'] = 10, 10
+mpl.rcParams['pdf.fonttype'] = 42
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -43,7 +66,10 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-import tifffile as tiff
+# supress the warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
 
 ### functions ###########################################################
 # load the parameters file into a global dictionary for this module
@@ -270,7 +296,7 @@ def find_channel_locs(image_data):
         slice_length = slice_open_end_px - slice_closed_end_px
 
         # check if these values make sense. If so, use them. If not, use default
-        # make sure lenght is not 15 pixels bigger or smaller than default
+        # make sure lenght is not 30 pixels bigger or smaller than default
         if slice_length + 15 < default_length or slice_length - 15 > default_length:
             continue
         # make sure ends are greater than 15 pixels from image edge
@@ -372,7 +398,8 @@ def make_masks(analyzed_imgs):
         # the [0] is for the array ([1] is the number of regions)
         # It transposes and then transposes again so regions are labeled left to right
         # clear border it to make sure the channels are off the edge
-        consensus_mask = ndimage.label(clear_border(consensus_mask.T > 0.1))[0].T
+        consensus_mask = segmentation.clear_border(consensus_mask.T > 0.1)
+        consensus_mask = ndi.label(consensus_mask)[0].T
 
         # go through each label
         for label in np.unique(consensus_mask):
@@ -513,26 +540,35 @@ def cut_slice(image_data, channel_loc):
     # slice based on appropriate slicer object.
     channel_slice = image_data[channel_slicer]
 
+    # pad y of channel if slice happened to be outside of image
+    y_difference  = (channel_loc[0][1] - channel_loc[0][0]) - channel_slice.shape[1]
+    if y_difference > 0:
+        paddings = [[0, 0], # t
+                    [0, y_difference], # y
+                    [0, 0], # x
+                    [0, 0]] # c
+        channel_slice = np.pad(channel_slice, paddings, mode='edge')
+
     return channel_slice
 
-# remove margins of zeros from 2d numpy array
-def trim_zeros_2d(array):
-    # make the array equal to the sub array which has columns of all zeros removed
-    # "all" looks along an axis and says if all of the valuse are such and such for each row or column
-    # ~ is the inverse operator
-    # using logical indexing
-    array = array[~np.all(array == 0, axis = 1)]
-    # transpose the array
-    array = array.T
-    # make the array equal to the sub array which has columns of all zeros removed
-    array = array[~np.all(array == 0, axis = 1)]
-    # transpose the array again
-    array = array.T
-    # return the array
-    return array
+# # remove margins of zeros from 2d numpy array
+# def trim_zeros_2d(array):
+#     # make the array equal to the sub array which has columns of all zeros removed
+#     # "all" looks along an axis and says if all of the valuse are such and such for each row or column
+#     # ~ is the inverse operator
+#     # using logical indexing
+#     array = array[~np.all(array == 0, axis = 1)]
+#     # transpose the array
+#     array = array.T
+#     # make the array equal to the sub array which has columns of all zeros removed
+#     array = array[~np.all(array == 0, axis = 1)]
+#     # transpose the array again
+#     array = array.T
+#     # return the array
+#     return array
 
 # calculat cross correlation between pixels in channel stack
-def channel_xcorr(channel_filepath):
+def channel_xcorr(fov_id, peak_id):
     '''
     Function calculates the cross correlation of images in a
     stack to the first image in the stack. The output is an
@@ -543,8 +579,16 @@ def channel_xcorr(channel_filepath):
     '''
 
     # load up the stack. should be 4D [t, x, y, c]
-    with tiff.TiffFile(channel_filepath) as tif:
-        image_data = tif.asarray()
+    if params['output'] == 'TIFF':
+        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+        channel_filepath = chnl_dir + channel_filename
+        with tiff.TiffFile(channel_filepath) as tif:
+            image_data = tif.asarray()
+    elif params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
+        image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
     # just use the first plane, which should be the phase images
     if len(image_data.shape) > 3: # if there happen to be multiple planes
@@ -566,6 +610,9 @@ def channel_xcorr(channel_filepath):
         # use match_template to find all cross correlations for the
         # current image against the first image.
         xcorr_array.append(np.max(match_template(first_img, img)))
+
+    if params['output'] == 'HDF5':
+        h5f.close()
 
     return xcorr_array
 
@@ -591,9 +638,13 @@ def average_empties_stack(fov_id, specs):
 
     information("Creating average empty channel for FOV %d." % fov_id)
 
-    # directories for saving
-    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+    if params['output'] == 'TIFF':
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
 
     # get peak ids of empty channels for this fov
     empty_peak_ids = []
@@ -614,14 +665,16 @@ def average_empties_stack(fov_id, specs):
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
         # copy that tiff stack with a new name as empty
-        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename
+        if params['output'] == 'TIFF':
+            # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+            with tiff.TiffFile(chnl_dir + channel_filename) as tif:
+                avg_empty_stack = tif.asarray()
 
-        with tiff.TiffFile(channel_filepath) as tif:
-            avg_empty_stack = tif.asarray()
+        elif params['output'] == 'HDF5':
+            avg_empty_stack = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
-        # get just the phase data if it is multidimensional
+        # get just the phase data if it is multidimensional (it shouldn't be)
         if len(avg_empty_stack.shape) > 3:
             avg_empty_stack = avg_empty_stack[:,:,:,0]
 
@@ -631,14 +684,19 @@ def average_empties_stack(fov_id, specs):
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
             # load stack
-            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-            channel_filepath = chnl_dir + channel_filename
-            with tiff.TiffFile(channel_filepath) as tif:
-                image_data = tif.asarray()
+            if params['output'] == 'TIFF':
+                channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+                channel_filepath = chnl_dir + channel_filename
+                with tiff.TiffFile(channel_filepath) as tif:
+                    image_data = tif.asarray()
+
+            elif params['output'] == 'HDF5':
+                image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
             # just get phase data and put it in list
             if len(image_data.shape) > 3:
                 image_data = image_data[:,:,:,0]
+
             empty_stacks.append(image_data)
 
         information("%d empty channels designated for FOV %d." % (len(empty_stacks), fov_id))
@@ -656,11 +714,25 @@ def average_empties_stack(fov_id, specs):
         avg_empty_stack = np.stack(avg_empty_stack, axis=0)
 
     # save out data
-    # make new name
-    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-    empty_filepath = empty_dir + empty_filename
-    tiff.imsave(empty_filepath, avg_empty_stack, compress=1) # save it
-    information("Saved empty channel %s." % empty_filename)
+    if params['output'] == 'TIFF':
+        # make new name
+        empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filepath = empty_dir + empty_filename
+        tiff.imsave(empty_filepath, avg_empty_stack, compress=3) # save it
+
+    if params['output'] == 'HDF5':
+        # the empty channel should be it's own dataset
+        h5ds = h5f.create_dataset(u'empty_channel',
+                        data=avg_empty_stack,
+                        chunks=(1, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        maxshape=(None, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+
+        # give attribute which says which channels contribute
+        h5ds.attrs.create('empty_channels', empty_peak_ids)
+        h5f.close()
+
+    information("Saved empty channel for FOV %d." % fov_id)
 
     return True
 
@@ -733,20 +805,25 @@ def subtract_fov_stack(fov_id, specs):
     information('Subtracting peaks for FOV %d.' % fov_id)
 
     # directories for saving
-    chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-    empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-    sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+    if params['output'] == 'TIFF':
+        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
+        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
+        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+        # load the empty stack
+        empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filepath = empty_dir + empty_filename
+        with tiff.TiffFile(empty_filepath) as tif:
+            avg_empty_stack = tif.asarray()
 
-    # load the empty stack
-    empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-    empty_filepath = empty_dir + empty_filename
-    with tiff.TiffFile(empty_filepath) as tif:
-        avg_empty_stack = tif.asarray()
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
+        avg_empty_stack = h5f['empty_channel'] # for HDF5 grab the dataset dictionary style
 
     # determine which peaks are to be analyzed
     ana_peak_ids = []
     for peak_id, spec in specs[fov_id].items():
-        if spec == 1: # 0 means it should be used for empty
+        if spec == 1: # 0 means it should be used for empty, -1 is ignore
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
     information("Subtracting %d channels for FOV %d." % (len(ana_peak_ids), fov_id))
@@ -755,12 +832,17 @@ def subtract_fov_stack(fov_id, specs):
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
 
-        # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        channel_filepath = chnl_dir + channel_filename
-        with tiff.TiffFile(channel_filepath) as tif:
-            image_data = tif.asarray()
+        if params['output'] == 'TIFF':
+            # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
+            channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
+            channel_filepath = chnl_dir + channel_filename
+            with tiff.TiffFile(channel_filepath) as tif:
+                image_data = tif.asarray()
 
+        elif params['output'] == 'HDF5':
+            image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
+
+        # it should just be the phase data, but check just to make sure.
         if len(image_data.shape) > 3:
             image_data = image_data[:,:,:,0] # just get phase data and put it in list
 
@@ -780,10 +862,29 @@ def subtract_fov_stack(fov_id, specs):
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
 
         # save out the subtracted stack
-        sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-        sub_filepath = sub_dir + sub_filename
-        tiff.imsave(sub_filepath, subtracted_stack, compress=1) # save it
-        information("Saved subtracted channel %s." % sub_filename)
+        if params['output'] == 'TIFF':
+            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+            sub_filepath = sub_dir + sub_filename
+            tiff.imsave(sub_filepath, subtracted_stack, compress=3) # save it
+
+        if params['output'] == 'HDF5':
+            # put subtracted channel in correct group
+            h5g = h5f['channel_%04d' % peak_id]
+
+            # delete the dataset if it exists (important for debug)
+            if 'p%04d_sub' % peak_id in h5g:
+                del h5g['p%04d_sub' % peak_id]
+
+            h5ds = h5g.create_dataset(u'p%04d_sub' % peak_id,
+                            data=subtracted_stack,
+                            chunks=(1, subtracted_stack.shape[1], subtracted_stack.shape[2]),
+                            maxshape=(None, subtracted_stack.shape[1], subtracted_stack.shape[2]),
+                            compression="gzip", shuffle=True, fletcher32=True)
+
+        information("Saved subtracted channel %d." % peak_id)
+
+    if params['output'] == 'HDF5':
+        h5f.close()
 
     return True
 
@@ -810,7 +911,7 @@ def subtract_phase(image_pair):
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
-    ### Pad empty channel.
+    ### Pad cropped channel.
     pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
     padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
@@ -828,61 +929,898 @@ def subtract_phase(image_pair):
     aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
 
     ### Compute the difference between the empty and channel phase contrast images
-    # subtract the empty image from the cropped channel image
-    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
+    # subtract cropped cell image from empty channel.
+    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
 
-    # make cells high-intensity
-    channel_subtracted *= -1
-    # # Reset the zero level in the image by subtracting the min value (-1 so no zero values)
-    channel_subtracted -= np.min(channel_subtracted) - 1
+    # just zero out anything less than 0. This is what Sattar does
+    channel_subtracted[channel_subtracted < 0] = 0
     channel_subtracted = channel_subtracted.astype('uint16') # change back to 16bit
 
     return channel_subtracted
 
+### functions that deal with segmentation and lineages
+def segment_image1(image):
+    '''Segments a subtracted image and returns a labeled image
+
+    Parameters
+    image : a ndarray which is an image. This should be the subtracted image
+
+    Returns
+    labeled_image : a ndarray which is also an image. Labeled values, which
+        should correspond to cells, all have the same integer value starting with 1.
+        Non labeled area should have value zero.
+    '''
+
+    # threshold image
+    thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
+    threshholded = image > thresh # will create binary image
+
+    # tool for morphological transformations
+    tool = morphology.disk(2)
+
+    # Opening = erosion then dialation.
+    # opening smooths images, breaks isthmuses, and eliminates protrusions.
+    # "opens" dark gaps between bright features.
+    morph = morphology.binary_opening(image > thresh, tool) # threshhold and then use tool
+
+    # Erode again to help break cells touching at end
+    # morph = morphology.binary_erosion(morph, morphology.disk(1))
+
+    # zero out rows that have very few pixels
+    # widens or creates gaps between cells
+    # sum of rows (how many pixels are occupied in each row)
+    line_profile = np.sum(morph, axis=1)
+    # find highest value, aka width of fattest cell
+    max_width = max(line_profile)
+    # find indexes of rows where sum is less than 1/5th of this value.
+    zero_these_indicies = np.all([line_profile < (max_width/5), line_profile > 0], axis=0)
+    zero_these_indicies = np.where(zero_these_indicies)
+    # zero out those rows
+    morph[zero_these_indicies] = 0
+
+    ### Calculate distnace matrix, use as markers for random walker (diffusion watershed)
+    # Generate the markers based on distance to the background
+    distance = ndi.distance_transform_edt(morph)
+    # here we zero anything less than 3 pixels from the boarder
+    distance[distance < 3] = 0
+    # anything that is left make a 1
+    distance[distance > 1] = 1
+    distance = distance.astype('int8') # convert (distance is actually a matrix of floats)
+
+    # remove artifacts connected to image border
+    cleared = segmentation.clear_border(distance)
+    # remove small objects. Note how we are relabeling here, as remeove_small_objects
+    # wants a labeled image, and only works if there is more than one label
+    cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
+    if label_num > 1:
+        cleared = morphology.remove_small_objects(cleared, min_size=50)
+
+    # relabel now that small objects have been removed
+    markers = morphology.label(cleared)
+    # set anything outside of OTSU threshold to -1 so it will not be labeled
+    markers[threshholded == 0] = -1
+    # label using the random walker (diffusion watershed) algorithm
+    labeled_image = segmentation.random_walker(image, markers)
+    # put negative values back to zero for proper image
+    labeled_image[labeled_image == -1] = 0
+
+    return labeled_image
+
+def segment_image(image):
+    '''Segments a subtracted image and returns a labeled image
+
+    Parameters
+    image : a ndarray which is an image. This should be the subtracted image
+
+    Returns
+    labeled_image : a ndarray which is also an image. Labeled values, which
+        should correspond to cells, all have the same integer value starting with 1.
+        Non labeled area should have value zero.
+    '''
+
+    # threshold image
+    thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
+    threshholded = image > thresh # will create binary image
+
+    # if there are no cells, good to clear the border
+    # because otherwise the OTSU is just for random bullshit, most
+    # likely on the side of the image
+    threshholded = segmentation.clear_border(threshholded)
+
+    # Morphological operations
+    # tool for transformations
+    tool = morphology.disk(2)
+
+    # Opening = erosion then dialation.
+    # opening smooths images, breaks isthmuses, and eliminates protrusions.
+    # "opens" dark gaps between bright features.
+    morph = morphology.binary_opening(threshholded, tool)
+
+    # if this image is empty at this point (likely if there were no cells), just return
+    # the morphed image which is a zero array
+    if np.amax(morph) == 0:
+        return morph
+
+    # zero out rows that have very few pixels
+    # widens or creates gaps between cells
+    # sum of rows (how many pixels are occupied in each row)
+    line_profile = np.sum(morph, axis=1)
+    # find highest value, aka width of fattest cell
+    max_width = max(line_profile)
+    # find indexes of rows where sum is less than 1/5th of this value.
+    zero_these_indicies = np.all([line_profile < (max_width/5), line_profile > 0], axis=0)
+    zero_these_indicies = np.where(zero_these_indicies)
+    # zero out those rows
+    morph[zero_these_indicies] = 0
+
+    ### Calculate distnace matrix, use as markers for random walker (diffusion watershed)
+    # Generate the markers based on distance to the background
+    distance = ndi.distance_transform_edt(morph)
+
+    # threshold distance image
+    distance_thresh = np.zeros_like(distance)
+    distance_thresh[distance < 3] = 0
+    distance_thresh[distance >= 3] = 1
+
+    # do an extra opening on the distance
+    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
+
+    # remove artifacts connected to image border
+    cleared = segmentation.clear_border(distance_opened)
+    # remove small objects. Remove small objects wants a
+    # labeled image and will fail if there is only one label. Return zero image in that case
+    # could have used try/except but remove_small_objects loves to issue warnings.
+    cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
+    if label_num > 1:
+        cleared = morphology.remove_small_objects(cleared, min_size=50)
+    else:
+        # if there are no labels, then just return the cleared image as it is zero
+        return cleared # should be zero image if there was only 1 label
+
+    # relabel now that small objects and labels on edges have been cleared
+    markers = morphology.label(cleared)
+
+    # label using the random walker (diffusion watershed) algorithm
+    try:
+        # set anything outside of OTSU threshold to -1 so it will not be labeled
+        markers[threshholded == 0] = -1
+        # here is the main algorithm
+        labeled_image = segmentation.random_walker(-1*image, markers)
+        # put negative values back to zero for proper image
+        labeled_image[labeled_image == -1] = 0
+    except:
+        return cleared # this should just be a zero array
+
+    return labeled_image
+
+# Do segmentation for an channel time stack
+def segment_chnl_stack(fov_id, peak_id):
+    '''
+    For a given fov and peak (channel), do segmentation for all images in the
+    subtracted .tif stack.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.segment_image
+    '''
+
+    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # load images for either TIFF or HDF5
+    if params['output'] == 'TIFF':
+        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+
+        # load the subtracted stack
+        sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+        sub_filepath = sub_dir + sub_filename
+        with tiff.TiffFile(sub_filepath) as tif:
+            sub_stack = tif.asarray()
+
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
+        sub_stack = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
+
+    # set up multiprocessing pool to do segmentation. Will do everything before going on.
+    pool = Pool(processes=params['num_analyzers'])
+
+    # send the 3d array to multiprocessing
+    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=10)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # image by image for debug
+    # segmented_imgs = []
+    # for sub_image in sub_stack:
+    #     segmented_imgs.append(segment_image(sub_image))
+
+    # stack them up along a time axis
+    segmented_imgs = np.stack(segmented_imgs, axis=0)
+
+    # save out the subtracted stack
+    if params['output'] == 'TIFF':
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        seg_filepath = seg_dir + seg_filename
+        tiff.imsave(seg_filepath, segmented_imgs.astype('uint16'), compress=3) # save it
+
+    if params['output'] == 'HDF5':
+        # put segmented channel in correct group
+        h5g = h5f['channel_%04d' % peak_id]
+
+        # delete the dataset if it exists (important for debug)
+        if 'p%04d_seg' % peak_id in h5g:
+            del h5g['p%04d_seg' % peak_id]
+
+        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
+                        data=segmented_imgs,
+                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+        h5f.close()
+
+    information("Saved segmented channel %d." % peak_id)
+
+    return True
+
+# Creates lineage for a single channel
+def make_lineage_chnl_stack(fov_and_peak_id):
+    '''
+    Create the lineage for a set of segmented images for one channel.
+
+    Parameters
+    ----------
+    fov_and_peak_ids : tuple.
+        (fov_id, peak_id)
+
+    Returns
+    -------
+    Cells : dict
+        A dictionary of all the cells from this lineage, divided and undivided
+
+    '''
+
+    # get the specific ids from the tuple
+    fov_id, peak_id = fov_and_peak_id
+
+    information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # directories for loading and saving images
+    if params['output'] == 'TIFF':
+        # Segmented images
+        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        seg_filepath = seg_dir + seg_filename
+        with tiff.TiffFile(seg_filepath) as tif:
+            image_data_seg = tif.asarray()
+
+    if params['output'] == 'HDF5':
+        hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
+        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
+        image_data_seg = h5f['channel_%04d/p%04d_seg' % (peak_id, peak_id)]
+
+    # Calculate all data for all time points.
+    # this list will be length of the number of time points
+    regions_by_time = [regionprops(timepoint) for timepoint in image_data_seg]
+
+    # Set up data structures.
+    Cells = {} # Dict that holds all the cell objects, divided and undivided
+    cell_leaves = [] # cell ids of the current leaves of the growing lineage tree
+
+    # go through regions by timepoint and build lineages
+    for t, regions in enumerate(regions_by_time):
+        # if there are cell leaves where too much time has passed
+        # since they have grown or divided, remove them from the running
+        for leaf_id in cell_leaves:
+            if t - Cells[leaf_id].times[-1] > lost_cell_time:
+                cell_leaves.remove(leaf_id)
+
+        # make all the regions leaves if there are no current leaves
+        if not cell_leaves:
+            for region in regions:
+                if region.centroid[0] < new_cell_y_cutoff:
+                    # Create cell and put in cell dictionary
+                    cell_id = create_cell_id(region, t, peak_id, fov_id)
+                    Cells[cell_id] = Cell(cell_id, region, t, parent_id=None)
+
+                    # add thes id to list of current leaves
+                    cell_leaves.append(cell_id)
+
+        # Determine if the regions are children of current leaves
+        else:
+            ### create mapping between regions and leaves
+            leaf_region_map = {}
+            leaf_region_map = {leaf_id : [] for leaf_id in cell_leaves}
+
+            # get the last y position of current leaves and create tuple with the id
+            current_leaf_positions = [(leaf_id, Cells[leaf_id].y_positions[-1]) for leaf_id in cell_leaves]
+
+            # go through regions, they will come off in Y position order
+            for r, region in enumerate(regions):
+                # create tuple which is cell_id of closest leaf, distance
+                current_closest = (None, 1000) # 1000 is just a large number
+
+                # check this region against all positions
+                for leaf in current_leaf_positions:
+                    # calculate distance between region and leaf
+                    y_dist_region_to_leaf = abs(region.centroid[0] - leaf[1])
+
+                    # if the distance is closer than before, update
+                    if y_dist_region_to_leaf < current_closest[1]:
+                        current_closest = (leaf[0], y_dist_region_to_leaf)
+
+                # update map with the closest region
+                leaf_region_map[current_closest[0]].append((r, y_dist_region_to_leaf))
+
+            # limit by the closest two regions if there are three regions to the leaf
+            for leaf_id, region_links in leaf_region_map.iteritems():
+                if len(region_links) > 2:
+                    closest_two_regions = sorted(region_links, key=lambda x: x[1])[:2]
+                    # but sort by region order so top region is first
+                    closest_two_regions = sorted(closest_two_regions, key=lambda x: x[0])
+                    # replace value in dictionary
+                    leaf_region_map[leaf_id] = closest_two_regions
+
+                    # for the discarded regions, put them as new leaves
+                    # if they are near the closed end of the channel
+                    discarded_regions = sorted(region_links, key=lambda x: x[1])[2:]
+                    for discarded_region in discarded_regions:
+                        region = regions[discarded_region[0]]
+                        if region.centroid[0] < new_cell_y_cutoff:
+                            cell_id = create_cell_id(region, t, peak_id, fov_id)
+                            Cells[cell_id] = Cell(cell_id, region, t, parent_id=None)
+                            cell_leaves.append(cell_id) # add to leaves
+
+            ### iterate over the leaves, looking to see what regions connect to them.
+            for leaf_id, region_links in leaf_region_map.iteritems():
+
+                # their is just one suggested descendant, see if it checks out and append the data
+                if len(region_links) == 1:
+                    region = regions[region_links[0][0]] # grab the region from the list
+
+                    # check if the pairing makes sense based on size and position
+                    # this function returns true if things are okay
+                    if check_growth_by_region(Cells[leaf_id], region):
+                        # grow the cell by the region in this case
+                        Cells[leaf_id].grow(region, t)
+
+                # there may be two daughters, or maybe there is just one child and a new cell
+                elif len(region_links) == 2:
+                    # grab these two daughters
+                    region1 = regions[region_links[0][0]]
+                    region2 = regions[region_links[1][0]]
+
+                    # check_division returns 3 if cell divided, 1 if first region is just the cell
+                    # 2 if the second region is the cell, or 0 if it cannot be determined.
+                    check_division_result = check_division(Cells[leaf_id], region1, region2)
+                    if check_division_result == 3:
+                        # create two new cells and divide the mother
+                        daughter1_id = create_cell_id(region1, t, peak_id, fov_id)
+                        daughter2_id = create_cell_id(region2, t, peak_id, fov_id)
+                        Cells[daughter1_id] = Cell(daughter1_id, region1, t, parent_id=leaf_id)
+                        Cells[daughter2_id] = Cell(daughter2_id, region2, t, parent_id=leaf_id)
+                        Cells[leaf_id].divide(Cells[daughter1_id], Cells[daughter2_id], t)
+
+                        # add the daughter ids to list of current leaves, remove mother
+                        cell_leaves.append(daughter1_id)
+                        cell_leaves.append(daughter2_id)
+                        cell_leaves.remove(leaf_id)
+
+                    # 1 means that daughter 1 is just a continuation of the mother
+                    elif check_division_result == 1:
+                        Cells[leaf_id].grow(region1, t)
+
+                    # ditto for 2
+                    elif check_division_result == 2:
+                        Cells[leaf_id].grow(region2, t)
+
+    # Also save an image of the lineages superimposed on the segmented images
+    if True:
+        information('Creating lineage image.')
+
+        # Subtracted images needed for making lineage graphs
+        if params['output'] == 'TIFF':
+            sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+            sub_filepath = sub_dir + sub_filename
+            with tiff.TiffFile(sub_filepath) as tif:
+                image_data_sub = tif.asarray()
+
+        if params['output'] == 'HDF5':
+            image_data_sub = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
+
+        n_imgs = len(regions_by_time)
+        image_indicies = range(n_imgs)
+
+        # Color map for good label colors
+        cmap = plt.cm.jet
+        cmap.set_under(color='black')
+        vmin = 0.1 # values under this color go to black
+        vmax = image_data_seg.shape[1] # max y value
+        # Trying to get the image size down
+        figxsize = image_data_seg.shape[2] * n_imgs / 100.0
+        figysize = image_data_seg.shape[1] / 100.0
+
+        # plot the images in a series
+        fig, axes = plt.subplots(ncols=n_imgs, nrows=1,
+                                 figsize=(figxsize, figysize))
+        fig.subplots_adjust(wspace=0, hspace=0, left=0, right=1, top=1, bottom=0)
+        transFigure = fig.transFigure.inverted()
+
+        # change settings for each axis
+        ax = axes.flat # same as axes.ravel()
+        for a in ax:
+            a.set_axis_off()
+            a.set_aspect('equal')
+            ttl = a.title
+            ttl.set_position([0.5, 0.05])
+
+        for i in image_indicies:
+            ax[i].imshow(image_data_sub[i], cmap=plt.cm.gray, aspect='equal')
+
+            # make a new version of the segmented image where the
+            # regions are relabeled by their y centroid position.
+            seg_relabeled = image_data_seg[i].copy()
+            for region in regions_by_time[i]:
+                seg_relabeled[seg_relabeled == region.label] = region.centroid[0]
+
+            ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
+            ax[i].set_title(str(i), color='white')
+
+        # save image to segmentation subfolder
+        lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+        if not os.path.exists(lin_dir):
+            os.makedirs(lin_dir)
+        lin_filename = params['experiment_name'] + '_xy%03d_p%04d_nolin.png' % (fov_id, peak_id)
+        lin_filepath = lin_dir + lin_filename
+        fig.savefig(lin_filepath, dpi=75)
+        plt.close()
+
+        # Annotate each cell with information
+        for cell_id in Cells:
+            for n, t in enumerate(Cells[cell_id].times):
+                x = Cells[cell_id].x_positions[n]
+                y = Cells[cell_id].y_positions[n]
+
+                # add a circle at the centroid for every point in this cell's life
+                circle = mpatches.Circle(xy=(x, y), radius=3, color='white', lw=0, alpha=0.5)
+                ax[t].add_patch(circle)
+
+                # draw connecting lines between the centroids of cells in same lineage
+                if n < len(Cells[cell_id].times)-1:
+                    # coordinates of the next centroid
+                    x_next = Cells[cell_id].x_positions[n+1]
+                    y_next = Cells[cell_id].y_positions[n+1]
+                    t_next = Cells[cell_id].times[n+1]
+
+                    # get coordinates for the whole figure
+                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                    coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+
+                    # create line
+                    line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
+                                            transform=fig.transFigure,
+                                            color='white', lw=2, alpha=0.3)
+
+                    # add it to plot
+                    fig.lines.append(line)
+
+                # draw connecting between mother and daughters
+                if n == len(Cells[cell_id].times)-1 and Cells[cell_id].daughters:
+                    # daughter ids
+                    d1_id = Cells[cell_id].daughters[0]
+                    d2_id = Cells[cell_id].daughters[1]
+
+                    # both daughters should have been born at the same time.
+                    t_next = Cells[d1_id].times[0]
+
+                    # coordinates of the two daughters
+                    x_d1 = Cells[d1_id].x_positions[0]
+                    y_d1 = Cells[d1_id].y_positions[0]
+                    x_d2 = Cells[d2_id].x_positions[0]
+                    y_d2 = Cells[d2_id].y_positions[0]
+
+                    # get coordinates for the whole figure
+                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                    coordd1 = transFigure.transform(ax[t_next].transData.transform([x_d1, y_d1]))
+                    coordd2 = transFigure.transform(ax[t_next].transData.transform([x_d2, y_d2]))
+
+                    # create line and add it to plot for both
+                    for coord in [coordd1, coordd2]:
+                        line = mpl.lines.Line2D((coord1[0],coord[0]),(coord1[1],coord[1]),
+                                                transform=fig.transFigure,
+                                                color='white', lw=2, alpha=0.3, ls='dashed')
+                        # add it to plot
+                        fig.lines.append(line)
+
+        #         # this is for putting cell id on first time cell appears and when it divides
+        #         if n == 0 or n == len(Cells[cell_id].times)-1:
+        #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
+
+            # save image to segmentation subfolder
+            lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+            if not os.path.exists(lin_dir):
+                os.makedirs(lin_dir)
+            lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
+            lin_filepath = lin_dir + lin_filename
+            fig.savefig(lin_filepath, dpi=75)
+            plt.close()
+
+    if params['output'] == 'HDF5':
+        h5f.close()
+
+    # return the dictionary with all the cells
+    return Cells
+
+# finds lineages for all peaks in a fov
+def make_lineages_fov(fov_id, specs):
+    '''
+    For a given fov, create the lineages from the segmented images.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.make_lineage_chnl_stack
+    '''
+    ana_peak_ids = [] # channels to be analyzed
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 1: # 1 means analyze
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
+
+    # This is a list of tuples (fov_id, peak_id) to send to the Pool command
+    fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
+
+    # set up multiprocessing pool. will complete pool before going on
+    pool = Pool(processes=params['num_analyzers'])
+
+    # create the lineages for each peak individually
+    # the output is a list of dictionaries
+    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=4)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # looped version for debugging
+    # lineages = []
+    # for fov_and_peak_id in fov_and_peak_ids_list:
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
+
+    # combine all dictionaries into one dictionary
+    Cells = {} # create dictionary to hold all information
+    for cell_dict in lineages: # for all the other dictionaries in the list
+        Cells.update(cell_dict) # updates Cells with the entries in cell_dict
+
+    return Cells
+
+# Cell class and related functions
+class Cell():
+    '''
+    The Cell class is one cell that has been born. It is not neccesarily a cell that
+    has divided.
+    '''
+
+    # initialize (birth) the cell
+    def __init__(self, cell_id, region, t, parent_id=None):
+        '''The cell must be given a unique cell_id and passed the region
+        information from the segmentation
+
+        Parameters
+        __________
+
+        cell_id : str
+            cell_id is a string in the form fXpXtXrX
+            f is 3 digit FOV number
+            p is 4 digit peak number
+            t is 4 digit time point at time of birth
+            r is region label for that segmentation
+            Use the function create_cell_id to do return a proper string.
+
+        region : region properties object
+            Information about the labeled region from
+            skimage.measure.regionprops()
+
+        parent_id : str
+            id of the parent if there is one.
+            '''
+
+        # create all the attributes
+        # id
+        self.id = cell_id
+
+        # identification convenience
+        self.fov = int(cell_id.split('f')[1].split('p')[0])
+        self.peak = int(cell_id.split('p')[1].split('t')[0])
+        self.birth_label = int(cell_id.split('r')[1])
+
+        # parent id may be none
+        self.parent = parent_id
+
+        # daughters is updated when cell divides
+        # if this is none then the cell did not divide
+        self.daughters = None
+
+        # birth and division time
+        self.birth_time = t
+        self.division_time = None # filled out if cell divides
+
+        # the following information is on a per timepoint basis
+        self.times = [t]
+        self.labels = [region.label]
+        self.bboxes = [region.bbox]
+        self.areas = [region.area]
+        self.x_positions = [region.centroid[1]]
+        self.y_positions = [region.centroid[0]]
+        self.lengths = [region.major_axis_length]
+        self.widths = [region.minor_axis_length]
+
+        # these two are special, as they include information from the daugthers for division
+        # computed upon division
+        self.times_w_div = None
+        self.lengths_w_div = None
+
+        # this information is the "production" information that
+        # we want to extract at the end. Some of this is for convenience.
+        # This is only filled out if a cell divides.
+        self.sb = None
+        self.sd = None # this should be combined lengths of daughters
+        self.tau = None
+        self.alpha = None
+        self.tau_calc = None
+        self.sum_cov = None
+        self.septum_position = None
+
+    def grow(self, region, t):
+        '''Append data from a region to this cell.
+        use cell.times[-1] to get most current value'''
+
+        self.times.append(t)
+        self.labels.append(region.label)
+        self.bboxes.append(region.bbox)
+        self.areas.append(region.area)
+        self.x_positions.append(region.centroid[1])
+        self.y_positions.append(region.centroid[0])
+        self.lengths.append(region.major_axis_length)
+        self.widths.append(region.minor_axis_length)
+
+    def divide(self, daughter1, daughter2, t):
+        '''Divide the cell and update stats.
+        daugther1 and daugther2 are instances of the Cell class.
+        daughter1 is the daugther closer to the closed end.'''
+
+        # put the daugther ids into the cell
+        self.daughters = [daughter1.id, daughter2.id]
+
+        # give this guy a division time
+        self.division_time = daughter1.birth_time
+
+        # flesh out the stats for this cell
+        # size at birth
+        self.sb = self.lengths[0] * params['pxl2um']
+
+        # force the division length to be the combined lengths of the daughters
+        self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+
+        # generation time
+        self.tau = self.division_time - self.birth_time
+
+        # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
+        # include the data points from the daughters
+        self.times_w_div = np.append(self.times, self.division_time)
+        self.lengths_w_div = np.append(self.lengths, daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+        try:
+            with warnings.catch_warnings(): # ignore the warnings if it can't converge
+                warnings.simplefilter("ignore")
+                popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
+                                    p0=(self.sb, 1.0/self.tau))
+                alpha = popt[1]
+        except:
+            alpha = float('NaN')
+            pcov = float('Nan')
+
+        self.alpha = alpha
+        self.tau_calc = 1/alpha
+        self.sum_cov = np.sum(pcov)
+
+        # calculate the septum position as a number between 0 and 1
+        # which indicates the size of daughter closer to the closed end
+        # compared to the total size
+        self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
+
+    def print_info(self):
+        '''prints information about the cell'''
+        print('id = %s' % self.id)
+        print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
+        print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
+
+# take info and make string for cell id
+def create_cell_id(region, t, peak, fov):
+    '''Make a unique cell id string for a new cell'''
+    cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
+    cell_id = ''.join(cell_id)
+    return cell_id
+
+# function for a growing cell, used to calculate growth rate
+def cell_growth_func(t, sb, alpha):
+    return sb*2**(alpha*t)
+
+# functions for checking if a cell has divided or not
+# parameters for building lineages
+# amount of frames after which a cell is dropped because no
+# new regions linked to it
+lost_cell_time = 3
+
+# these parameters say the max and minimum ammount a cell is allowed
+# to grow by to link a new region to an existing cell
+max_growth_length = 1.2
+min_growth_length = 0.95
+max_growth_area = 1.2
+min_growth_area = 0.95
+
+# only cells with y positions below this value
+# will recieve the honor of becoming new cells,
+# unless they are daughters of current cells
+new_cell_y_cutoff = 200
+
+# this function should also take the variable t to
+# weight the allowed changes by the difference in time as well
+def check_growth_by_region(cell, region):
+    '''Checks to see if it makes sense
+    to grow a cell by a particular region'''
+    grow = True # default is say go ahead
+
+    # check if length is not too much longer
+    if cell.lengths[-1]*max_growth_length < region.major_axis_length:
+        return False
+
+    # check if it is not too short (cell should not shrink really)
+    if cell.lengths[-1]*min_growth_length > region.major_axis_length:
+        return False
+
+    # check if area is not too great
+    if cell.areas[-1]*max_growth_area < region.area:
+        return False
+
+    # check if area is not too small
+    if cell.lengths[-1]*min_growth_area > region.area:
+        return False
+
+    # check if y position of region is within
+    # the quarter positions of the bounding box
+    lower_quarter = cell.bboxes[-1][0] + (region.major_axis_length / 4)
+    upper_quarter = cell.bboxes[-1][2] - (region.major_axis_length / 4)
+    if lower_quarter > region.centroid[0] or upper_quarter < region.centroid[0]:
+        return False
+
+    return grow
+
+# see if a cell has reasonably divided
+def check_division(cell, region1, region2):
+    '''Checks to see if it makes sense to divide a
+    cell into two new cells based on two regions.
+
+    Return 0 if nothing should happend and regions ignored
+    Return 1 if cell should grow by region 1
+    Return 2 if cell should grow by region 2
+    Return 3 if cell should divide into the regions.'''
+
+    # see if either region just could be continued growth,
+    # if that is the case then just return
+    # these shouldn't return true if the cells are divided
+    # as they would be too small
+    if check_growth_by_region(cell, region1):
+        return 1
+
+    if check_growth_by_region(cell, region2):
+        return 2
+
+    # make sure combined size of daughters is not too big
+    combined_size = region1.major_axis_length + region2.major_axis_length
+    # check if length is not too much longer
+    if cell.lengths[-1]*max_growth_length < combined_size:
+        return 0
+    # and not too small
+    if cell.lengths[-1]*min_growth_length > combined_size:
+        return 0
+
+    # centroids of regions should be in the upper and lower half of the
+    # of the mother's bounding box, respectively
+    # bottom cell within top half of mother bounding box
+    if cell.bboxes[-1][0] > region1.centroid[0] or cell.y_positions[-1] < region1.centroid[0]:
+        return 0
+    # bottom region with bottom half of mother bounding box
+    if cell.y_positions[-1] > region2.centroid[0] or cell.bboxes[-1][2] < region2.centroid[0]:
+        return 0
+
+    # if you got this far then divide the mother
+    return 3
+
+### functions for pruning a dictionary of cells
+def find_cells_with_daughters(Cells):
+    '''Go through a dictionary of cells and return another dictionary
+    that contains just those with daughters, i.e., really divided'''
+
+    Divided_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].daughters:
+            Divided_Cells[cell_id] = Cells[cell_id]
+
+    return Divided_Cells
+
+def find_mother_cells(Cells):
+    '''Return only cells whose starting region label is 1.'''
+
+    Mother_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].birth_label == 1:
+            Mother_Cells[cell_id] = Cells[cell_id]
+
+    return Mother_Cells
+
+def find_complete_cells(Cells):
+    '''Go through a dictionary of cells and return another dictionary
+    that contains just those with a parent and daughters'''
+
+    Complete_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].daughters and Cells[cell_id].parent:
+            Complete_Cells[cell_id] = Cells[cell_id]
+
+    return Complete_Cells
+
 ### functions about converting dates and times
 ### Functions
-def days_to_hmsm(days):
-    hours = days * 24.
-    hours, hour = math.modf(hours)
-    mins = hours * 60.
-    mins, min = math.modf(mins)
-    secs = mins * 60.
-    secs, sec = math.modf(secs)
-    micro = round(secs * 1.e6)
-    return int(hour), int(min), int(sec), int(micro)
-
-def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-    days = sec + (micro / 1.e6)
-    days = min + (days / 60.)
-    days = hour + (days / 60.)
-    return days / 24.
-
-def date_to_jd(year,month,day):
-    if month == 1 or month == 2:
-        yearp = year - 1
-        monthp = month + 12
-    else:
-        yearp = year
-        monthp = month
-    # this checks where we are in relation to October 15, 1582, the beginning
-    # of the Gregorian calendar.
-    if ((year < 1582) or
-        (year == 1582 and month < 10) or
-        (year == 1582 and month == 10 and day < 15)):
-        # before start of Gregorian calendar
-        B = 0
-    else:
-        # after start of Gregorian calendar
-        A = math.trunc(yearp / 100.)
-        B = 2 - A + math.trunc(A / 4.)
-    if yearp < 0:
-        C = math.trunc((365.25 * yearp) - 0.75)
-    else:
-        C = math.trunc(365.25 * yearp)
-    D = math.trunc(30.6001 * (monthp + 1))
-    jd = B + C + D + day + 1720994.5
-    return jd
-
-def datetime_to_jd(date):
-    days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
-    return date_to_jd(date.year, date.month, days)
+# def days_to_hmsm(days):
+#     hours = days * 24.
+#     hours, hour = math.modf(hours)
+#     mins = hours * 60.
+#     mins, min = math.modf(mins)
+#     secs = mins * 60.
+#     secs, sec = math.modf(secs)
+#     micro = round(secs * 1.e6)
+#     return int(hour), int(min), int(sec), int(micro)
+#
+# def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
+#     days = sec + (micro / 1.e6)
+#     days = min + (days / 60.)
+#     days = hour + (days / 60.)
+#     return days / 24.
+#
+# def date_to_jd(year,month,day):
+#     if month == 1 or month == 2:
+#         yearp = year - 1
+#         monthp = month + 12
+#     else:
+#         yearp = year
+#         monthp = month
+#     # this checks where we are in relation to October 15, 1582, the beginning
+#     # of the Gregorian calendar.
+#     if ((year < 1582) or
+#         (year == 1582 and month < 10) or
+#         (year == 1582 and month == 10 and day < 15)):
+#         # before start of Gregorian calendar
+#         B = 0
+#     else:
+#         # after start of Gregorian calendar
+#         A = math.trunc(yearp / 100.)
+#         B = 2 - A + math.trunc(A / 4.)
+#     if yearp < 0:
+#         C = math.trunc((365.25 * yearp) - 0.75)
+#     else:
+#         C = math.trunc(365.25 * yearp)
+#     D = math.trunc(30.6001 * (monthp + 1))
+#     jd = B + C + D + day + 1720994.5
+#     return jd
+#
+# def datetime_to_jd(date):
+#     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
+#     return date_to_jd(date.year, date.month, days)
