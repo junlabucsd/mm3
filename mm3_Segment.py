@@ -165,8 +165,12 @@ if __name__ == "__main__":
 
         # convert the objects in the dictionary to dictionaries and save it to pickle and text
         # Complete_Cells_dict = {cell_id : vars(cell) for cell_id, cell in Complete_Cells.iteritems()}
+
+        # pickle version. 
         # with open(cell_dir + '/complete_cells_dict.pkl', 'wb') as cell_file:
         #     pickle.dump(Complete_Cells_dict, cell_file)
+
+        # The text file version of the dictionary is good for easy glancing
         # with open(cell_dir + '/complete_cells_dict.txt', 'w') as cell_file:
         #     pprint(Complete_Cells_dict, stream=cell_file)
 

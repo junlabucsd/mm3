@@ -89,7 +89,15 @@ def init_mm3_helpers(param_file_path):
         num_analyzers = cpu_count*2 - 2
     params['num_analyzers'] = num_analyzers
 
-    return
+    # useful folder shorthands for opening files
+    params['ana_dir'] = params['experiment_directory'] + params['analysis_directory']
+    params['hdf5_dir'] = params['ana_dir'] + 'hdf5/'
+    params['chnl_dir'] = params['ana_dir'] + 'channels/'
+    params['sub_dir'] = params['ana_dir'] + 'subtracted/'
+    params['seg_dir'] = params['ana_dir'] + 'segmented/'
+    params['cell_dir'] = params['ana_dir'] + 'cell_data/'
+
+    return params
 
 # finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
