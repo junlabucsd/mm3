@@ -1059,8 +1059,8 @@ def segment_image(image):
 
     # threshold distance image
     distance_thresh = np.zeros_like(distance)
-    distance_thresh[distance < 3] = 0
-    distance_thresh[distance >= 3] = 1
+    distance_thresh[distance < 2] = 0
+    distance_thresh[distance >= 2] = 1
 
     # do an extra opening on the distance
     distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
@@ -1128,7 +1128,7 @@ def segment_chnl_stack(fov_id, peak_id):
     pool = Pool(processes=params['num_analyzers'])
 
     # send the 3d array to multiprocessing
-    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=10)
+    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
 
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
@@ -1140,6 +1140,7 @@ def segment_chnl_stack(fov_id, peak_id):
 
     # stack them up along a time axis
     segmented_imgs = np.stack(segmented_imgs, axis=0)
+    segmented_imgs = segmented_imgs.astype('uint16')
 
     # save out the subtracted stack
     if params['output'] == 'TIFF':
@@ -1370,14 +1371,14 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
             ax[i].set_title(str(i), color='white')
 
-        # save image to segmentation subfolder
-        lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
-        if not os.path.exists(lin_dir):
-            os.makedirs(lin_dir)
-        lin_filename = params['experiment_name'] + '_xy%03d_p%04d_nolin.png' % (fov_id, peak_id)
-        lin_filepath = lin_dir + lin_filename
-        fig.savefig(lin_filepath, dpi=75)
-        plt.close()
+        # save just the segmented images
+        # lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+        # if not os.path.exists(lin_dir):
+        #     os.makedirs(lin_dir)
+        # lin_filename = params['experiment_name'] + '_xy%03d_p%04d_nolin.png' % (fov_id, peak_id)
+        # lin_filepath = lin_dir + lin_filename
+        # fig.savefig(lin_filepath, dpi=75)
+        # plt.close()
 
         # Annotate each cell with information
         for cell_id in Cells:
@@ -1482,7 +1483,7 @@ def make_lineages_fov(fov_id, specs):
 
     # create the lineages for each peak individually
     # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=4)
+    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
 
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit

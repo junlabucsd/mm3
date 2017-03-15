@@ -50,7 +50,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_empties = True # use precomputed empties
+    load_empties = False # use precomputed empties
     do_subtraction = True
 
     # get switches and parameters

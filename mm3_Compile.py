@@ -357,8 +357,8 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = True
-    load_channel_masks = True
+    load_metadata = False
+    load_channel_masks = False
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 3

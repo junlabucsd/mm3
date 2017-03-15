@@ -149,8 +149,8 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
         ones_array = np.ones_like(last_img)
         if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
             ax[-1].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
-        else: # otherwise show blue, means use for empty
-            ax[-1].imshow(np.dstack((ones_array*0.1, ones_array*0.1, ones_array)), alpha=0.25)
+        else: # otherwise show red, means don't analyze 
+            ax[-1].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
 
         # format
         ax = format_channel_plot(ax, peak_id)
@@ -198,7 +198,7 @@ def format_channel_plot(ax, peak_id):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = True
+    load_crosscorrs = False
 
     # get switches and parameters
     try:
@@ -335,8 +335,8 @@ if __name__ == "__main__":
         for peak_id, xcorrs in peaks.items():
             if xcorrs['full'] == True:
                 specs[fov_id][peak_id] = 1
-            else:
-                specs[fov_id][peak_id] = 0
+            else: # default to don't analyze
+                specs[fov_id][peak_id] = -1
 
     information('Starting channel picking.')
     # go through the fovs again, same as above
