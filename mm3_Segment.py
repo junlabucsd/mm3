@@ -18,6 +18,7 @@ try:
 except:
     import pickle
 import numpy as np
+from scipy.io import savemat
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -38,7 +39,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    do_segmentation = False # make or load segmentation?
+    do_segmentation = True # make or load segmentation?
     do_lineages = True # should lineages be made after segmentation?
 
     # get switches and parameters
@@ -48,7 +49,7 @@ if __name__ == "__main__":
         specify_fovs = False
         user_spec_fovs = []
         start_with_fov = -1
-        param_file = ""
+        param_file_path = ''
     except getopt.GetoptError:
         warning('No arguments detected (-f -s -o).')
 
@@ -72,7 +73,7 @@ if __name__ == "__main__":
 
     # Load the project parameters file
     if len(param_file_path) == 0:
-        raise ValueError("a parameter file must be specified (-f <filename>).")
+        raise ValueError("A parameter file must be specified (-f <filename>).")
     information ('Loading experiment parameters.')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     cell_dir = p['experiment_directory'] + p['analysis_directory'] + 'cell_data/'
 
     # create segmenteation and cell data folder if it doesn't exist
-    if not os.path.exists(seg_dir):
+    if not os.path.exists(seg_dir) and p['output'] == 'TIFF':
         os.makedirs(seg_dir)
     if not os.path.exists(cell_dir):
         os.makedirs(cell_dir)
@@ -107,7 +108,7 @@ if __name__ == "__main__":
     if start_with_fov > 0:
         fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
-    information("Found %d FOVs to process." % len(fov_id_list))
+    information("Processing %d FOVs." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
     if do_segmentation:
@@ -148,17 +149,30 @@ if __name__ == "__main__":
         # this returns only cells with a parent and daughters
         Complete_Cells = mm3.find_complete_cells(Cells)
 
-        # save the cell data
-        with open(cell_dir + '/all_cells.pkl', 'wb') as cell_file:
-            pickle.dump(Cells, cell_file)
+        ### save the cell data. Edit this for how you want the data
+
+        # All cell data (includes incomplete cells)
+        # with open(cell_dir + '/all_cells.pkl', 'wb') as cell_file:
+        #     pickle.dump(Cells, cell_file)
+
+        # Just the complete cells, those with mother and daugther
         with open(cell_dir + '/complete_cells.pkl', 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file)
 
+        # Same thing but save it to a mat file
+        # with open(cell_dir + '/complete_cells.mat', 'wb') as cell_file:
+        #     savemat(cell_file, Complete_Cells)
+
         # convert the objects in the dictionary to dictionaries and save it to pickle and text
-        Complete_Cells_dict = {cell_id : vars(cell) for cell_id, cell in Complete_Cells.iteritems()}
-        with open(cell_dir + '/complete_cells_dict.pkl', 'wb') as cell_file:
-            pickle.dump(Complete_Cells_dict, cell_file)
-        with open(cell_dir + '/complete_cells_dict.txt', 'w') as cell_file:
-            pprint(Complete_Cells_dict, stream=cell_file)
+        # Complete_Cells_dict = {cell_id : vars(cell) for cell_id, cell in Complete_Cells.iteritems()}
+
+        # pickle version.
+        # with open(cell_dir + '/complete_cells_dict.pkl', 'wb') as cell_file:
+        #     pickle.dump(Complete_Cells_dict, cell_file)
+
+        # The text file version of the dictionary is good for easy glancing
+        # with open(cell_dir + '/complete_cells_dict.txt', 'w') as cell_file:
+        #     pprint(Complete_Cells_dict, stream=cell_file)
+
 
         information("Finished curating and saving cell data.")
