@@ -365,24 +365,33 @@ if __name__ == "__main__":
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:")
+        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
+        # switches which may be overwritten
+        specify_fovs = False
+        user_spec_fovs = []
+        param_file_path = ''
     except getopt.GetoptError:
-        print('No arguments detected (-f).')
+        print('No arguments detected (-f -o).')
 
     # set parameters
     for opt, arg in opts:
         if opt == '-f':
             param_file_path = arg # parameter file path
+        if opt == '-o':
+            try:
+                specify_fovs = True
+                for fov_to_proc in arg.split(","):
+                    user_spec_fovs.append(int(fov_to_proc))
+            except:
+                warning("Couldn't convert argument to an integer:",arg)
+                raise ValueError
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
     if len(param_file_path) == 0:
         raise ValueError("a parameter file must be specified (-f <filename>).")
     information ('Loading experiment parameters.')
-    with open(param_file_path, 'r') as param_file:
-        p = yaml.safe_load(param_file) # load parameters into dictionary
-
-    mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
@@ -423,6 +432,17 @@ if __name__ == "__main__":
         found_files = glob.glob(TIFF_dir + '*.tif') # get all tiffs
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
+
+        # if user has specified only certain FOVs, filter for those
+        if specify_fovs:
+            information('Filetering TIFFs by FOV.')
+            fitered_files = []
+            for fov_id in user_spec_fovs:
+                fov_string = 'xy%02d' % fov_id # xy01
+                fitered_files += [ifile for ifile in found_files if fov_string1 in ifile]
+
+            found_files = fitered_files[:]
+            del fitered_files
 
         # get information for all these starting tiffs
         if len(found_files) > 0:

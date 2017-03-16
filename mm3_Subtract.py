@@ -130,7 +130,7 @@ if __name__ == "__main__":
         pass # just skip this part and go to subtraction
 
     else:
-        information("Calculated averaged empties.")
+        information("Calculating averaged empties.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             averaging_result = mm3.average_empties_stack(fov_id, specs)

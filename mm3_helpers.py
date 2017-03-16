@@ -1010,8 +1010,8 @@ def segment_image(image):
 
     # threshold distance image
     distance_thresh = np.zeros_like(distance)
-    distance_thresh[distance < 2] = 0
-    distance_thresh[distance >= 2] = 1
+    distance_thresh[distance < 3] = 0
+    distance_thresh[distance >= 3] = 1
 
     # do an extra opening on the distance
     distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
