@@ -842,23 +842,7 @@ def subtract_fov_stack(fov_id, specs):
 
     information('Subtracting peaks for FOV %d.' % fov_id)
 
-    # directories for saving
-    if params['output'] == 'TIFF':
-        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-        # # load the empty stack
-        # empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-        # empty_filepath = empty_dir + empty_filename
-        # with tiff.TiffFile(empty_filepath) as tif:
-        #     avg_empty_stack = tif.asarray()
-
-    # if params['output'] == 'HDF5':
-    #     hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
-    #     h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
-    #     avg_empty_stack = h5f['empty_channel'] # for HDF5 grab the dataset dictionary style
-
-    # feed dummy peak number to get empty
+    # load empty stack feed dummy peak number to get empty
     avg_empty_stack = load_stack(fov_id, 0, color='empty')
 
     # determine which peaks are to be analyzed
@@ -872,16 +856,6 @@ def subtract_fov_stack(fov_id, specs):
     # load images for the peak and get phase images
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
-
-        # if params['output'] == 'TIFF':
-        #     # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        #     channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        #     channel_filepath = chnl_dir + channel_filename
-        #     with tiff.TiffFile(channel_filepath) as tif:
-        #         image_data = tif.asarray()
-        #
-        # elif params['output'] == 'HDF5':
-        #     image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
         image_data = load_stack(fov_id, peak_id, color='c1')
 
@@ -907,8 +881,7 @@ def subtract_fov_stack(fov_id, specs):
         # save out the subtracted stack
         if params['output'] == 'TIFF':
             sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-            sub_filepath = sub_dir + sub_filename
-            tiff.imsave(sub_filepath, subtracted_stack, compress=3) # save it
+            tiff.imsave(params['sub_dir'] + sub_filename, subtracted_stack, compress=3) # save it
 
         if params['output'] == 'HDF5':
             h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
