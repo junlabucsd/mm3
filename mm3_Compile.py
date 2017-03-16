@@ -83,26 +83,15 @@ if __name__ == "__main__":
     information ('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # set up how to manage cores for multiprocessing
-    cpu_count = multiprocessing.cpu_count()
-    num_analyzers = cpu_count*2 - 2
-
-    # assign shorthand directory names
-    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
-    ana_dir = p['experiment_directory'] + p['analysis_directory']
-    chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
-    hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
-
     # create the subfolders if they don't
-    if not os.path.exists(ana_dir):
-        os.makedirs(ana_dir)
-
+    if not os.path.exists(p['ana_dir']):
+        os.makedirs(p['ana_dir'])
     if p['output'] == 'TIFF':
-        if not os.path.exists(chnl_dir):
-            os.makedirs(chnl_dir)
+        if not os.path.exists(p['chnl_dir']):
+            os.makedirs(p['chnl_dir'])
     elif p['output'] == 'HDF5':
-        if not os.path.exists(hdf5_dir):
-            os.makedirs(hdf5_dir)
+        if not os.path.exists(p['hdf5_dir']):
+            os.makedirs(p['hdf5_dir'])
 
     # declare information variables
     analyzed_imgs = {} # for storing get_params pool results.
@@ -111,14 +100,14 @@ if __name__ == "__main__":
     if load_metadata:
         information("Loading image parameters dictionary.")
 
-        with open(ana_dir + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
+        with open(p['ana_dir'] + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
             analyzed_imgs = pickle.load(tiff_metadata)
 
     else:
         information("Finding image parameters.")
 
         # get all the TIFFs in the folder
-        found_files = glob.glob(TIFF_dir + '*.tif') # get all tiffs
+        found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
@@ -140,7 +129,7 @@ if __name__ == "__main__":
             warning('No TIFF files found')
 
         # initialize pool for analyzing image metadata
-        pool = Pool(num_analyzers)
+        pool = Pool(p['num_analyzers'])
 
         # loop over images and get information
         for fn in found_files:
@@ -171,9 +160,9 @@ if __name__ == "__main__":
 
         # save metadata to a .pkl and a human readable txt file
         information('Saving metadata from analyzed images...')
-        with open(ana_dir + '/TIFF_metadata.pkl', 'wb') as tiff_metadata:
+        with open(p['ana_dir'] + '/TIFF_metadata.pkl', 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata)
-        with open(ana_dir + '/TIFF_metadata.txt', 'w') as tiff_metadata:
+        with open(p['ana_dir'] + '/TIFF_metadata.txt', 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
         information('Saved metadata from analyzed images.')
 
@@ -181,7 +170,7 @@ if __name__ == "__main__":
     if load_channel_masks:
         information("Loading channel masks dictionary.")
 
-        with open(ana_dir + '/channel_masks.pkl', 'r') as cmask_file:
+        with open(p['ana_dir'] + '/channel_masks.pkl', 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
 
     else:
@@ -191,9 +180,9 @@ if __name__ == "__main__":
         channel_masks = mm3.make_masks(analyzed_imgs)
 
         #save the channel mask dictionary to a pickle and a text file
-        with open(ana_dir + '/channel_masks.pkl', 'wb') as cmask_file:
+        with open(p['ana_dir'] + '/channel_masks.pkl', 'wb') as cmask_file:
             pickle.dump(channel_masks, cmask_file)
-        with open(ana_dir + '/channel_masks.txt', 'w') as cmask_file:
+        with open(p['ana_dir'] + '/channel_masks.txt', 'w') as cmask_file:
             pprint(channel_masks, stream=cmask_file)
 
         information("Channel masks saved.")

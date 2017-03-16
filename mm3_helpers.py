@@ -42,12 +42,10 @@ from multiprocessing import Pool
 # Plotting for debug
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 font = {'family' : 'sans-serif',
         'weight' : 'normal',
         'size'   : 12}
 mpl.rc('font', **font)
-mpl.rcParams['figure.figsize'] = 10, 10
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -66,7 +64,7 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-# supress the warning this always gives
+# supress the warning tifffile always gives
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import tifffile as tiff
@@ -81,13 +79,7 @@ def init_mm3_helpers(param_file_path):
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
-    params['num_analyzers'] = num_analyzers
+    params['num_analyzers'] = cpu_count*2 - 2
 
     # useful folder shorthands for opening files
     params['TIFF_dir'] = params['experiment_directory'] + params['image_directory']
