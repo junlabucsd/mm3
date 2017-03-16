@@ -237,10 +237,10 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
         channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
 
         # save a different time stack for all colors
-        for color_index in range(start=1, stop=channel_stack.shape[3]+1):
+        for color_index in range(channel_stack.shape[3]):
             # this is the filename for the channel
             # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index)
+            channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1)
             # save stack
             tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=tif_compress)
 
@@ -338,11 +338,11 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
             channel_stack = mm3.cut_slice(image_fov_stack, channel_loc)
 
             # save a different dataset  for all colors
-            for color_index in range(start=1, stop=channel_stack.shape[3]+1):
+            for color_index in range(channel_stack.shape[3]):
 
                 # create the dataset for the image. Review docs for these options.
-                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index),
-                                data=channel_stack[:,:,:,color_index],
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
+                                data=channel_stack[:,:,:,color_index-1],
                                 chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
@@ -361,7 +361,7 @@ if __name__ == "__main__":
     load_channel_masks = False
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 3
+    tif_compress = 4
 
     # get switches and parameters
     try:

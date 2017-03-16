@@ -117,14 +117,8 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     for n, peak_id in enumerate(sorted_peaks, start=1):
         peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
-        # load image data needed
-        if p['output'] == 'TIFF':
-            channel_filename = p['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-            channel_filepath = chnl_dir + channel_filename # chnl_dir read from scope above
-            with tiff.TiffFile(channel_filepath) as tif:
-                image_data = tif.asarray()
-        elif p['output'] == 'HDF5':
-            image_data = h5f['channel_%04d' % peak_id]['p%04d_c0' % peak_id]
+        # load data for figure
+        image_data = mm3.load_stack(fov_id, peak_id, color='c1')
 
         first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
         last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
@@ -149,7 +143,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
         ones_array = np.ones_like(last_img)
         if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
             ax[-1].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
-        else: # otherwise show red, means don't analyze 
+        else: # otherwise show red, means don't analyze
             ax[-1].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
 
         # format
@@ -291,7 +285,7 @@ if __name__ == "__main__":
             for peak_id in sorted(channel_masks[fov_id].keys()):
                 information("Calculating cross correlations for peak %d." % peak_id)
 
-                # # linear loop
+                # linear loop
                 # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
 
                 # multiprocessing verion
