@@ -1,9 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-def warning(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -70,6 +66,13 @@ with warnings.catch_warnings():
     import tifffile as tiff
 
 ### functions ###########################################################
+# alert the use what is up
+def warning(*objs):
+    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
+
+def information(*objs):
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
+
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
