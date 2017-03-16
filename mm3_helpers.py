@@ -136,7 +136,7 @@ def load_stack(fov_id, peak_id, color='c1'):
                 img_stack = tif.asarray()
 
         if params['output'] == 'HDF5':
-            with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+') as h5f:
+            with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
                 img_stack = h5f['empty_channel'][:]
 
         return img_stack
@@ -156,7 +156,7 @@ def load_stack(fov_id, peak_id, color='c1'):
             img_stack = tif.asarray()
 
     if params['output'] == 'HDF5':
-        with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+') as h5f:
+        with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
             # normal naming
             # need to use [:] to get a copy, else it references the closed hdf5 dataset
             img_stack = h5f['channel_%04d/p%04d_%s' % (peak_id, peak_id, color)][:]
@@ -651,9 +651,9 @@ def channel_xcorr(fov_id, peak_id):
     '''
 
     # load the phase contrast images
-    image_data = load_stack(fov_id, peak_id)
+    image_data = load_stack(fov_id, peak_id, color='c1')
 
-    # just use the first plane, which should be the phase images
+    # just use the first plane just in case there are many colors (shouldn't be)
     if len(image_data.shape) > 3: # if there happen to be multiple planes
         image_data = image_data[:,:,:,0]
 
@@ -698,14 +698,6 @@ def average_empties_stack(fov_id, specs):
 
     information("Creating average empty channel for FOV %d." % fov_id)
 
-    # if params['output'] == 'TIFF':
-    #     chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-    #     empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-
-    # if params['output'] == 'HDF5':
-    #     hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
-    #     h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
-
     # get peak ids of empty channels for this fov
     empty_peak_ids = []
     for peak_id, spec in specs[fov_id].items():
@@ -724,16 +716,7 @@ def average_empties_stack(fov_id, specs):
         peak_id = empty_peak_ids[0]
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
-        # # copy that tiff stack with a new name as empty
-        # if params['output'] == 'TIFF':
-        #     # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        #     channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        #     with tiff.TiffFile(chnl_dir + channel_filename) as tif:
-        #         avg_empty_stack = tif.asarray()
-        #
-        # elif params['output'] == 'HDF5':
-        #     avg_empty_stack = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
-
+        # load the one phase contrast as the empties
         avg_empty_stack = load_stack(fov_id, peak_id, color='c1')
 
         # get just the phase data if it is multidimensional (it shouldn't be)
@@ -745,17 +728,7 @@ def average_empties_stack(fov_id, specs):
         # load the image stacks into memory
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
-            # load stack
-            # if params['output'] == 'TIFF':
-            #     channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-            #     channel_filepath = chnl_dir + channel_filename
-            #     with tiff.TiffFile(channel_filepath) as tif:
-            #         image_data = tif.asarray()
-            #
-            # elif params['output'] == 'HDF5':
-            #     image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
-
-            # load data
+            # load data and append to list
             image_data = load_stack(fov_id, peak_id, color='c1')
 
             # just get phase data and put it in list
@@ -1113,22 +1086,7 @@ def segment_chnl_stack(fov_id, peak_id):
 
     information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
 
-    # load images for either TIFF or HDF5
-    # if params['output'] == 'TIFF':
-    #     sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-    #     seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
-    #
-    #     # load the subtracted stack
-    #     sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-    #     sub_filepath = sub_dir + sub_filename
-    #     with tiff.TiffFile(sub_filepath) as tif:
-    #         sub_stack = tif.asarray()
-
-    # if params['output'] == 'HDF5':
-    #     hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
-    #     h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
-    #     sub_stack = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
-
+    # load subtracted images
     sub_stack = load_stack(fov_id, peak_id, color='sub')
 
     # set up multiprocessing pool to do segmentation. Will do everything before going on.
@@ -1198,20 +1156,7 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
 
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
-    # # directories for loading and saving images
-    # if params['output'] == 'TIFF':
-    #     # Segmented images
-    #     seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
-    #     seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-    #     seg_filepath = seg_dir + seg_filename
-    #     with tiff.TiffFile(seg_filepath) as tif:
-    #         image_data_seg = tif.asarray()
-    #
-    # if params['output'] == 'HDF5':
-    #     hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
-    #     h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
-    #     image_data_seg = h5f['channel_%04d/p%04d_seg' % (peak_id, peak_id)]
-
+    # load segmented data
     image_data_seg = load_stack(fov_id, peak_id, color='seg')
 
     # Calculate all data for all time points.
@@ -1333,22 +1278,12 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
     if print_lineages:
         information('Creating lineage image.')
 
-        # # Subtracted images needed for making lineage graphs
-        # if params['output'] == 'TIFF':
-        #     sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-        #     sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-        #     sub_filepath = sub_dir + sub_filename
-        #     with tiff.TiffFile(sub_filepath) as tif:
-        #         image_data_sub = tif.asarray()
-        #
-        # if params['output'] == 'HDF5':
-        #     image_data_sub = h5f['channel_%04d/p%04d_sub' % (peak_id, peak_id)]
-
+        # load subtracted data
         image_data_sub = load_stack(fov_id, peak_id, color='sub')
 
         n_imgs = len(regions_by_time)
         image_indicies = range(n_imgs)
-qu
+
         # Color map for good label colors
         cmap = plt.cm.jet
         cmap.set_under(color='black')
@@ -1462,9 +1397,6 @@ qu
             lin_filepath = lin_dir + lin_filename
             fig.savefig(lin_filepath, dpi=75)
             plt.close()
-
-    # if params['output'] == 'HDF5':
-    #     h5f.close()
 
     # return the dictionary with all the cells
     return Cells

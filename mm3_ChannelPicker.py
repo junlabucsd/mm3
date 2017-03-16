@@ -288,7 +288,7 @@ if __name__ == "__main__":
                 # linear loop
                 # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
 
-                # multiprocessing verion
+                # # multiprocessing verion
                 crosscorrs[fov_id][peak_id] = pool.apply_async(mm3.channel_xcorr,
                                                                args=(fov_id, peak_id,))
 

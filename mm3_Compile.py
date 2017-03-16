@@ -342,7 +342,7 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
 
                 # create the dataset for the image. Review docs for these options.
                 h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
-                                data=channel_stack[:,:,:,color_index-1],
+                                data=channel_stack[:,:,:,color_index],
                                 chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
