@@ -240,7 +240,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks):
         for color_index in range(channel_stack.shape[3]):
             # this is the filename for the channel
             # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index)
+            channel_filename = chnl_dir + p['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1)
             # save stack
             tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=tif_compress)
 
@@ -341,7 +341,7 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
             for color_index in range(channel_stack.shape[3]):
 
                 # create the dataset for the image. Review docs for these options.
-                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index),
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
                                 data=channel_stack[:,:,:,color_index],
                                 chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
@@ -357,11 +357,11 @@ def hdf5_stack_slice_and_write(images_to_write, channels_masks):
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = True
-    load_channel_masks = True
+    load_metadata = False
+    load_channel_masks = False
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 3
+    tif_compress = 4
 
     # get switches and parameters
     try:
