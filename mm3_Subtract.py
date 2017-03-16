@@ -55,16 +55,18 @@ if __name__ == "__main__":
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:s:")
+        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
         start_with_fov = -1
         param_file = ""
     except getopt.GetoptError:
-        warning('No arguments detected (-f -s -o).')
+        warning('No arguments detected (-f -o).')
 
     for opt, arg in opts:
+        if opt == '-f':
+            param_file_path = arg # parameter file path
         if opt == '-o':
             try:
                 specify_fovs = True
@@ -73,23 +75,12 @@ if __name__ == "__main__":
             except:
                 warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-        if opt == '-s':
-            try:
-                start_with_fov = int(arg)
-            except:
-                warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt == '-f':
-            param_file_path = arg # parameter file path
 
     # Load the project parameters file
     if len(param_file_path) == 0:
-        raise ValueError("a parameter file must be specified (-f <filename>).")
+        raise ValueError("A parameter file must be specified (-f <filename>).")
     information ('Loading experiment parameters.')
-    with open(param_file_path, 'r') as param_file:
-        p = yaml.safe_load(param_file) # load parameters into dictionary
-
-    mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     # assign shorthand directory names and create folders if they do not exist
     ana_dir = p['experiment_directory'] + p['analysis_directory']
@@ -119,8 +110,6 @@ if __name__ == "__main__":
     # remove fovs if the user specified so
     if specify_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
-    if start_with_fov > 0:
-        fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
     information("Found %d FOVs to process." % len(fov_id_list))
 
@@ -141,10 +130,9 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             subtraction_result = mm3.subtract_fov_stack(fov_id, specs)
+        information("Finished subtraction.")
 
     # Else just end, they only wanted to do empty averaging.
     else:
         information("Skipping subtraction.")
         pass
-
-    information("Finished.")
