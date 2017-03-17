@@ -43,12 +43,12 @@ with warnings.catch_warnings():
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
-if platform == "linux" or platform == "linux2":
+if sys.platform == "linux" or sys.platform == "linux2":
     # linux
     import gevent_inotifyx as inotify
     from gevent.queue import Queue as gQueue
     use_inotify = True
-elif platform == "darwin":
+elif sys.platform == "darwin":
     # OS X
     from watchdog.observers import Observer
     from watchdog.events import PatternMatchingEventHandler
@@ -107,6 +107,103 @@ class tif_sentinal(PatternMatchingEventHandler):
     def on_created(self, event):
         self.process(event)
 
+
+def process_FOV_images(fov_id, filenames, channel_masks, specs):
+    '''
+    Process images from one FOV, from opening to segmentation.
+    '''
+
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # make arrays for filenames and times
+    image_filenames = []
+    image_times = [] # times is still an integer but may be indexed arbitrarily
+    image_jds = [] # jds = julian dates (times)
+
+    # go through images and get raw and metadata.
+    for filename in filenames:
+        # load image
+        with tiff.TiffFile(params['TIFF_dir'] + filename) as tif:
+            image_data = tif.asarray()
+
+        # channel finding was also done on images after orientation was fixed
+        image_data = mm3.fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        #change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+        # Get the metadata (but skip finding channels)
+        if params['TIFF_source'] == 'elements':
+            image_metadata = mm3.get_tif_metadata_elements(tif)
+        elif params['TIFF_source'] == 'nd2ToTIFF':
+            image_metadata = mm3.get_tif_metadata_nd2ToTIFF(tif)
+
+        # add information to metadata arrays
+        image_filenames.append(image_name)
+        image_times.append(image_metadata['t'])
+        image_jds.append(image_metadata['jd'])
+
+    # concatenate the list into one big stack.
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
+
+    # slice out different channels
+    channel_stacks = {} # dictionary with keys as peak_id, values as image stacks
+    for peak_id, channel_loc in channel_masks[fov_id].iteritems():
+        # slice out channel and put in dictionary
+        channel_stacks[peak_id] = cut_slice(image_fov_stack, channel_loc)
+
+    # go through specs file and find empty and analysis channels.
+    empty_peak_ids = []
+    ana_peak_ids = []
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 0: # 0 means it should be used for empty
+            empty_peak_ids.append(peak_id)
+        if spec == 1: # 0 means it should be used for empty, -1 is ignore
+            ana_peak_ids.append(peak_id)
+    empty_peak_ids = sorted(empty_peak_ids) # sort for repeatability
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+
+
+    # open up the HDF5 for this FOV, keep it open till the end.
+    hf5 = h5py.File(p['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+
+    # # put segmented channel in correct group
+    # h5g = h5f['channel_%04d' % peak_id]
+
+    # Slice out the channels from the TIFFs
+    # must have been sent the channel_masks file.
+    # could also use the specs file to only analyze channels that have cells in them...
+
+    h5f['channel_%04d/p%04d_%s' % (peak_id, peak_id, color)]
+
+    # you have to resize the hdf5 dataset before adding data
+    h5ds.resize(h5si.shape[0] + 1, axis = 0) # add a space fow new images
+    # h5ds.flush()
+    h5ds[-1] = subtracted_image
+    # h5ds.flush()
+
+
+    # Send them emtpy channels for averaging
+
+    # Subtract the averaged empty from the others
+
+    # Segment them.
+
+    # We're done here
+    hf5.close()
+
+    return
+
 # __main__ executes when running the script from the shell
 if __name__ == "__main__":
 
@@ -150,9 +247,10 @@ if __name__ == "__main__":
     # first determine known files
     processed_files = []
     # you can do this by looping through the HDF5 files and looking at the list 'filenames'
-    with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
-        # need to use [:] to get a copy, else it references the closed hdf5 dataset
-        processed_files += h5f[u'filenames'][:]
+    for fov_id in fov_id_list:
+        with h5py.File(p['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
+            # add all processed files to a big list
+            processed_files += [str(filename) for filename in h5f[u'filenames']]
 
     # Filter for known and unknown files. found_files should be > processed_files
     # known files are both in found_files and processed_files. Sort by time
@@ -160,32 +258,34 @@ if __name__ == "__main__":
 
     # unknown files
     unknown_files = sorted(found_files.difference(processed_files))
-    # Filter for known and unknown files
-    # Add known files to the list
 
-    # Add unknown files to the to be analyzed list
+    del processed_files
+    del found_files # clear up some memories
 
     ### Now begin loop
-    # Start with analysis of unknown files.
     # Organize images by FOV.
+    images_by_fov = {}
+    for fov_id in fov_id_list:
+        fov_string = 'xy%02d' % fov_id # xy01
+        images_by_fov[fov_id] = [filename for filename in unknown_files
+                                 if fov_string in filename]
 
-    # Send that batch of images to a function for processing.
-    # This should be the multiprocessing step.
+    # # pool for analyzing each FOV image list
+    # pool = Pool(p['num_analyzers'])
 
-    # Within that function.
+    # loop over images and get information
+    for fov_id, filenames in images_by_fov.items():
 
-    # Get the metadata (but skip finding channels)
-    # --> get_tif_params in mm3_Compile. maybe move to mm3_Helpers
 
-    # Slice out the channels from the TIFFs
-    # must have been sent the channel_masks file.
-    # could also use the specs file to only analyze channels that have cells in them...
 
-    # Send them emtpy channels for averaging
 
-    # Subtrat the averaged empty from the others
+    mm3.information('Analyzing images per FOV.')
 
-    # Segment them.
+    # pool.close()
+    # pool.join() # wait until analysis for every FOV is finished.
+
+
+
 
     # All of that should have been done in a pool for all FOVs, wait for that pool to finish.
 

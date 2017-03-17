@@ -354,8 +354,8 @@ def get_tif_metadata_nd2ToTIFF(tif):
         tif: TIFF file object from which data will be extracted
     Returns:
         dictionary of values:
-            'fov': -1,
-            't' : -1,
+            'fov': int,
+            't' : int,
             'jdn' (float)
             'x' (float)
             'y' (float)

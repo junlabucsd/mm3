@@ -49,7 +49,7 @@ if __name__ == "__main__":
     # hardcoded parameters
     load_metadata = False
     load_channel_masks = False
-    t_end = 550 # only analyze images up until this point
+    t_end = 575 # only analyze images up until this t point
 
     # get switches and parameters
     try:
