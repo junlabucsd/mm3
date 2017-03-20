@@ -505,9 +505,15 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         h5f.attrs.create('peaks', sorted(channel_masks[fov_id].keys()))
 
         # this is for things that change across time, for these create a dataset
-        h5ds = h5f.create_dataset(u'filenames', data=image_filenames, maxshape=(None), dtype='S100')
-        h5ds = h5f.create_dataset(u'times', data=image_times, maxshape=(None))
-        h5ds = h5f.create_dataset(u'times_jd', data=image_jds, maxshape=(None))
+        h5ds = h5f.create_dataset(u'filenames', data=np.expand_dims(image_filenames, 1),
+                                  chunks=True, maxshape=(None, 1), dtype='S100',
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times', data=np.expand_dims(image_times, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times_jd', data=np.expand_dims(image_jds, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
 
         # cut out the channels as per channel masks for this fov
         for peak, channel_loc in channel_masks[fov_id].iteritems():
@@ -998,6 +1004,11 @@ def average_empties_stack(fov_id, specs):
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+
+        # delete the dataset if it exists (important for debug)
+        if 'empty_channel' in h5f:
+            del h5f[u'empty_channel']
+
         # the empty channel should be it's own dataset
         h5ds = h5f.create_dataset(u'empty_channel',
                         data=avg_empty_stack,
@@ -1196,6 +1207,70 @@ def subtract_phase(image_pair):
     return channel_subtracted
 
 ### functions that deal with segmentation and lineages
+# Do segmentation for an channel time stack
+def segment_chnl_stack(fov_id, peak_id):
+    '''
+    For a given fov and peak (channel), do segmentation for all images in the
+    subtracted .tif stack.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.segment_image
+    '''
+
+    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # load subtracted images
+    sub_stack = load_stack(fov_id, peak_id, color='sub')
+
+    # set up multiprocessing pool to do segmentation. Will do everything before going on.
+    pool = Pool(processes=params['num_analyzers'])
+
+    # send the 3d array to multiprocessing
+    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # image by image for debug
+    # segmented_imgs = []
+    # for sub_image in sub_stack:
+    #     segmented_imgs.append(segment_image(sub_image))
+
+    # stack them up along a time axis
+    segmented_imgs = np.stack(segmented_imgs, axis=0)
+    segmented_imgs = segmented_imgs.astype('uint16')
+
+    # save out the subtracted stack
+    if params['output'] == 'TIFF':
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        tiff.imsave(params['seg_dir'] + seg_filename,
+                    segmented_imgs.astype('uint16'), compress=4)
+
+    if params['output'] == 'HDF5':
+        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+
+        # put segmented channel in correct group
+        h5g = h5f['channel_%04d' % peak_id]
+
+        # delete the dataset if it exists (important for debug)
+        if 'p%04d_seg' % peak_id in h5g:
+            del h5g['p%04d_seg' % peak_id]
+
+        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
+                        data=segmented_imgs,
+                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+        h5f.close()
+
+    information("Saved segmented channel %d." % peak_id)
+
+    return True
+
+# segmentation algorithm
 def segment_image(image):
     '''Segments a subtracted image and returns a labeled image
 
@@ -1283,68 +1358,6 @@ def segment_image(image):
 
     return labeled_image
 
-# Do segmentation for an channel time stack
-def segment_chnl_stack(fov_id, peak_id):
-    '''
-    For a given fov and peak (channel), do segmentation for all images in the
-    subtracted .tif stack.
-
-    Called by
-    mm3_Segment.py
-
-    Calls
-    mm3.segment_image
-    '''
-
-    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
-
-    # load subtracted images
-    sub_stack = load_stack(fov_id, peak_id, color='sub')
-
-    # set up multiprocessing pool to do segmentation. Will do everything before going on.
-    pool = Pool(processes=params['num_analyzers'])
-
-    # send the 3d array to multiprocessing
-    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
-
-    # # image by image for debug
-    # segmented_imgs = []
-    # for sub_image in sub_stack:
-    #     segmented_imgs.append(segment_image(sub_image))
-
-    # stack them up along a time axis
-    segmented_imgs = np.stack(segmented_imgs, axis=0)
-    segmented_imgs = segmented_imgs.astype('uint16')
-
-    # save out the subtracted stack
-    if params['output'] == 'TIFF':
-        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-        tiff.imsave(params['seg_dir'] + seg_filename,
-                    segmented_imgs.astype('uint16'), compress=4)
-
-    if params['output'] == 'HDF5':
-        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
-
-        # put segmented channel in correct group
-        h5g = h5f['channel_%04d' % peak_id]
-
-        # delete the dataset if it exists (important for debug)
-        if 'p%04d_seg' % peak_id in h5g:
-            del h5g['p%04d_seg' % peak_id]
-
-        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
-                        data=segmented_imgs,
-                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        compression="gzip", shuffle=True, fletcher32=True)
-        h5f.close()
-
-    information("Saved segmented channel %d." % peak_id)
-
-    return True
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):

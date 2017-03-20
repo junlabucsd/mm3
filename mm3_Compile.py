@@ -21,6 +21,8 @@ from multiprocessing import Pool
 import numpy as np
 import warnings
 import h5py
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
 
 # user modules
 # realpath() will make your script run, even if you symlink it
