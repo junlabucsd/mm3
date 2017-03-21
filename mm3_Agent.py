@@ -8,7 +8,6 @@ import time
 import inspect
 import getopt
 import yaml
-import traceback
 import glob
 from pprint import pprint # for human readable file output
 try:
@@ -20,6 +19,9 @@ from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
 import h5py
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
+import signal
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -42,17 +44,6 @@ with warnings.catch_warnings():
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
-
-if sys.platform == "linux" or sys.platform == "linux2":
-    # linux
-    import gevent_inotifyx as inotify
-    from gevent.queue import Queue as gQueue
-    use_inotify = True
-elif sys.platform == "darwin":
-    # OS X
-    from watchdog.observers import Observer
-    from watchdog.events import PatternMatchingEventHandler
-    use_watchdog = True
 
 # class which responds to file addition events and saves their file names
 class tif_sentinal(PatternMatchingEventHandler):
@@ -107,7 +98,12 @@ class tif_sentinal(PatternMatchingEventHandler):
     def on_created(self, event):
         self.process(event)
 
+# define function for exting the loop
+def signal_handler(signal, frame):
+    global interrupted
+    interrupted = True
 
+# Function for processing the images in one FOV
 def process_FOV_images(fov_id, filenames, channel_masks, specs):
     '''
     Process images from one FOV, from opening to segmentation.
@@ -323,6 +319,18 @@ if __name__ == "__main__":
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     ### Pre watching loop
+    # start the event watcher
+    event_handler = tif_sentinal()
+    # obsever is the class from watchdog which gets system events.
+    observer = Observer()
+    # schedule the sentinal. recursive means look in subfolders in path too
+    observer.schedule(event_handler, p['TIFF_dir'], recursive=True)
+    observer.start() # start it up
+
+    # start looking for interupts
+    signal.signal(signal.SIGINT, signal_handler)
+    interrupted = False
+
     # intialize known files list and files to be analyzed list
     # get all the TIFFs in the folder
     found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
@@ -352,40 +360,56 @@ if __name__ == "__main__":
     del found_files
 
     ### Now begin watching loop
-    # Organize images by FOV.
-    images_by_fov = {}
-    for fov_id in fov_id_list:
-        fov_string = 'xy%02d' % fov_id # xy01
-        images_by_fov[fov_id] = [filename for filename in unknown_files
-                                 if fov_string in filename]
+    while True:
+        # Organize images by FOV.
+        images_by_fov = {}
+        for fov_id in fov_id_list:
+            fov_string = 'xy%02d' % fov_id # xy01
+            images_by_fov[fov_id] = [filename for filename in unknown_files
+                                     if fov_string in filename]
 
-    # pool for analyzing each FOV image list
-    pool = Pool(p['num_analyzers'])
+        # pool for analyzing each FOV image list
+        pool = Pool(p['num_analyzers'])
 
-    # loop over fovs and send to processing
-    process_results = {}
-    for fov_id, filenames in images_by_fov.items():
-        # only send files to processing if there are more than 10 images to process
-        if len(filenames) > 10:
-            mm3.information('Analyzing %d images for FOV %d.' % (len(filenames), fov_id))
-            # send to multiprocessing
-            process_results[fov_id] = pool.apply_async(process_FOV_images,
-                                      args=(fov_id, filenames, channel_masks, specs))
-            #process_FOV_images(fov_id, filenames, channel_masks, specs)
+        # loop over fovs and send to processing
+        process_results = {}
+        for fov_id, filenames in images_by_fov.items():
+            # only send files to processing if there are more than x images
+            if len(filenames) >= 5:
+                mm3.information('Analyzing %d images for FOV %d.' % (len(filenames), fov_id))
+                # send to multiprocessing
+                process_results[fov_id] = pool.apply_async(process_FOV_images,
+                                          args=(fov_id, filenames, channel_masks, specs))
+                #process_FOV_images(fov_id, filenames, channel_masks, specs)
 
-    pool.close()
-    pool.join() # wait until analysis for every FOV is finished.
+        pool.close()
+        pool.join() # wait until analysis for every FOV is finished.
 
-    # move the analyzed files, if the results were successful, to the analyzed list.
-    for fov_id, result in process_results.iteritems():
-        # if result was good, add files to known files and remove them from unknown files
-        if result.successful():
-            mm3.information('Processing successful for FOV %d' % fov_id)
-            for filename in result.get():
-                known_files.append(filename)
-                unknown_files.remove(filename)
-        else:
-            mm3.warning('Processing failed for FOV %d' % fov_id)
+        # move the analyzed files, if the results were successful, to the analyzed list.
+        for fov_id, result in process_results.iteritems():
+            # if result was good, add files to known files and remove them from unknown files
+            if result.successful():
+                mm3.information('Processing successful for FOV %d.' % fov_id)
+                for filename in result.get():
+                    known_files.append(filename)
+                    unknown_files.remove(filename)
+            else:
+                mm3.warning('Processing failed for FOV %d.' % fov_id)
 
-    # Check to see if new files have been added to the TIFF folder and put them in the known files
-    # list
+        # Check to see if new files have been added to the TIFF folder
+        # add them to the unknown files if so.
+        file_events = event_handler.get_buffer()
+        for filename in file_events:
+            if filename not in known_files:
+                unknown_files.append(filename)
+        unknown_files = sorted(unknown_files)
+
+        mm3.information('Found %d more files.' % len(unknown_files))
+
+        # Check if we should stop the loop.
+        if interrupted:
+            mm3.information('Killing loop.')
+            break
+
+        # wait for 10 seconds before starting anew.
+        time.sleep(10)
