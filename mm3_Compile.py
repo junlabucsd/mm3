@@ -8,7 +8,6 @@ import time
 import inspect
 import getopt
 import yaml
-import traceback
 import glob
 import re
 from pprint import pprint # for human readable file output

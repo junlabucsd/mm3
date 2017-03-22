@@ -1358,7 +1358,6 @@ def segment_image(image):
 
     return labeled_image
 
-
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
     '''
@@ -1739,8 +1738,9 @@ class Cell():
         # this information is the "production" information that
         # we want to extract at the end. Some of this is for convenience.
         # This is only filled out if a cell divides.
-        self.sb = None
-        self.sd = None # this should be combined lengths of daughters
+        self.sb = None # in um
+        self.sd = None # this should be combined lengths of daughters, in um
+        self.delta = None
         self.tau = None
         self.alpha = None
         self.tau_calc = None
@@ -1778,6 +1778,9 @@ class Cell():
         # force the division length to be the combined lengths of the daughters
         self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
 
+        # delta is here for convinience
+        self.delta = self.sd - self.sb
+
         # generation time
         self.tau = self.division_time - self.birth_time
 
@@ -1788,15 +1791,15 @@ class Cell():
         try:
             with warnings.catch_warnings(): # ignore the warnings if it can't converge
                 warnings.simplefilter("ignore")
-                popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
-                                    p0=(self.sb, 1.0/self.tau))
-                alpha = popt[1]
+                popt, pcov = curve_fit(cell_growth_func, self.times_w_div - self.birth_time,
+                                       np.log(self.lengths_w_div),
+                                       p0=(np.log(self.sb), np.log(2)/self.tau))
+                elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
         except:
-            alpha = float('NaN')
+            elong_rate = float('NaN')
             pcov = float('Nan')
 
-        self.alpha = alpha
-        self.tau_calc = 1/alpha
+        self.elong_rate = elong_rate
         self.sum_cov = np.sum(pcov)
 
         # calculate the septum position as a number between 0 and 1
@@ -1818,8 +1821,16 @@ def create_cell_id(region, t, peak, fov):
     return cell_id
 
 # function for a growing cell, used to calculate growth rate
-def cell_growth_func(t, sb, alpha):
-    return sb*2**(alpha*t)
+def cell_growth_func(t, sb, elong_rate):
+    '''
+    Assumes you have taken log of the data.
+    It also allows the size at birth to be a free parameter, rather than fixed
+    at the actual size at birth (but still uses that as a guess)
+    Assumes natural log, not base 2 (though I think that makes less sense)
+
+    old form: sb*2**(alpha*t)
+    '''
+    return sb+elong_rate*t
 
 # functions for checking if a cell has divided or not
 # parameters for building lineages
@@ -1952,7 +1963,7 @@ def organize_cells_by_channel(Cells, specs):
     for fov_id in specs.keys():
         Cells_by_peak[fov_id] = {}
         for peak_id, spec in specs[fov_id].items():
-            # only make a space for cells
+            # only make a space for channels that are analyized
             if spec == 1:
                 Cells_by_peak[fov_id][peak_id] = {}
 
