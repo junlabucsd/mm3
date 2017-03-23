@@ -81,9 +81,9 @@ if __name__ == "__main__":
     # Create folders for subtracted info if they don't exist
     if p['output'] == 'TIFF':
         if not os.path.exists(p['empty_dir']):
-            os.makedirs(empty_dir)
+            os.makedirs(p['empty_dir'])
         if not os.path.exists(p['sub_dir']):
-            os.makedirs(sub_dir)
+            os.makedirs(p['sub_dir'])
 
     # load specs file
     with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:

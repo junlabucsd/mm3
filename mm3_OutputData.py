@@ -108,6 +108,8 @@ if __name__ == "__main__":
         Cells_df = pd.DataFrame(Cells_dict).transpose() # columns as data types
         # organize the order of the rows
         Cells_df = Cells_df.sort(columns=['fov', 'peak', 'birth_time', 'birth_label'])
+        # in future releases this should be:
+        # Cells_df = Cells_df.sort_values(by=['fov', 'peak', 'birth_time', 'birth_label'])
 
         # deal with the daughters, put them in two columns
         Cells_df['daughter1'], Cells_df['daughter2'] = Cells_df['daughters'].astype(str).str.split(' ', 1).str
