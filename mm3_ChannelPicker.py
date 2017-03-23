@@ -174,7 +174,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     # enter user input
     # ask the user to correct cell/nocell calls
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
-    raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPress enter when done and go to the next FOV (do not close window).") # raw input waits for enter key
+    print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.") # raw input waits for enter key
     fig.canvas.mpl_disconnect(cells_handler)
 
     plt.close()
