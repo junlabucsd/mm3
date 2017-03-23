@@ -1,9 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-def warning(*objs):
-    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -55,96 +51,73 @@ if __name__ == "__main__":
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:s:")
+        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
         start_with_fov = -1
         param_file = ""
     except getopt.GetoptError:
-        warning('No arguments detected (-f -s -o).')
+        mm3.warning('No arguments detected (-f -o).')
 
     for opt, arg in opts:
+        if opt == '-f':
+            param_file_path = arg # parameter file path
         if opt == '-o':
             try:
                 specify_fovs = True
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
-                warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-        if opt == '-s':
-            try:
-                start_with_fov = int(arg)
-            except:
-                warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt == '-f':
-            param_file_path = arg # parameter file path
 
     # Load the project parameters file
     if len(param_file_path) == 0:
-        raise ValueError("a parameter file must be specified (-f <filename>).")
-    information ('Loading experiment parameters.')
-    with open(param_file_path, 'r') as param_file:
-        p = yaml.safe_load(param_file) # load parameters into dictionary
+        raise ValueError("A parameter file must be specified (-f <filename>).")
+    mm3.information ('Loading experiment parameters.')
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    mm3.init_mm3_helpers(param_file_path) # initialized the helper library
-
-    # assign shorthand directory names and create folders if they do not exist
-    ana_dir = p['experiment_directory'] + p['analysis_directory']
-
+    # Create folders for subtracted info if they don't exist
     if p['output'] == 'TIFF':
-        chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
-        empty_dir = p['experiment_directory'] + p['analysis_directory'] + 'empties/'
-        sub_dir = p['experiment_directory'] + p['analysis_directory'] + 'subtracted/'
-        if not os.path.exists(empty_dir):
+        if not os.path.exists(p['empty_dir']):
             os.makedirs(empty_dir)
-        if not os.path.exists(sub_dir):
+        if not os.path.exists(p['sub_dir']):
             os.makedirs(sub_dir)
-    elif p['output'] == 'HDF5':
-        hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
 
     # load specs file
-    try:
-        with open(ana_dir + '/specs.pkl', 'r') as specs_file:
-            specs = pickle.load(specs_file)
-    except:
-        warning('Could not load specs file.')
-        raise ValueError
+    with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+        specs = pickle.load(specs_file)
 
-    # make list of FOVs to process (keys of channel_mask file)
+    # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # remove fovs if the user specified so
     if specify_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
-    if start_with_fov > 0:
-        fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
-    information("Found %d FOVs to process." % len(fov_id_list))
+    mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Make average empty channels ###############################################################
     if load_empties:
-        information("Loading precalculated empties.")
+        mm3.information("Loading precalculated empties.")
         pass # just skip this part and go to subtraction
 
     else:
-        information("Calculated averaged empties.")
+        mm3.information("Calculating averaged empties.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             averaging_result = mm3.average_empties_stack(fov_id, specs)
 
     ### Subtract ##################################################################################
     if do_subtraction:
-        information("Subtracting channels.")
+        mm3.information("Subtracting channels.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
             subtraction_result = mm3.subtract_fov_stack(fov_id, specs)
+        mm3.information("Finished subtraction.")
 
     # Else just end, they only wanted to do empty averaging.
     else:
-        information("Skipping subtraction.")
+        mm3.information("Skipping subtraction.")
         pass
-
-    information("Finished.")

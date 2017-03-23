@@ -193,19 +193,21 @@ def format_channel_plot(ax, peak_id):
 if __name__ == "__main__":
     # hardcoded parameters
     load_crosscorrs = False
+    do_picking = True
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:s:")
+        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
-        start_with_fov = -1
-        param_file = ""
+        param_file_path = ''
     except getopt.GetoptError:
-        warning('No arguments detected (-f -s -o).')
+        warning('No arguments detected (-f -o).')
 
     for opt, arg in opts:
+        if opt == '-f':
+            param_file_path = arg # parameter file path
         if opt == '-o':
             try:
                 specify_fovs = True
@@ -214,14 +216,6 @@ if __name__ == "__main__":
             except:
                 warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-        if opt == '-s':
-            try:
-                start_with_fov = int(arg)
-            except:
-                warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt == '-f':
-            param_file_path = arg # parameter file path
 
     # Load the project parameters file
     if len(param_file_path) == 0:
@@ -255,8 +249,6 @@ if __name__ == "__main__":
     # remove fovs if the user specified so
     if specify_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
-    if start_with_fov > 0:
-        fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
     information("Found %d FOVs to process." % len(fov_id_list))
 
@@ -317,31 +309,33 @@ if __name__ == "__main__":
             pickle.dump(crosscorrs, xcorrs_file)
         with open(ana_dir + "/crosscorrs.txt", 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
+        information("Wrote cross correlations files.")
 
     ### User selection (channel picking) #####################################################
-    information('Initializing specifications file.')
-    # nested dictionary of {fov : {peak : spec ...}) for if channel should
-    # be analyzed, used for empty, or ignored.
-    specs = {}
-    # update dictionary on initial guess from cross correlations
-    for fov_id, peaks in crosscorrs.items():
-        specs[fov_id] = {}
-        for peak_id, xcorrs in peaks.items():
-            if xcorrs['full'] == True:
-                specs[fov_id][peak_id] = 1
-            else: # default to don't analyze
-                specs[fov_id][peak_id] = -1
+    if do_picking:
+        information('Initializing specifications file.')
+        # nested dictionary of {fov : {peak : spec ...}) for if channel should
+        # be analyzed, used for empty, or ignored.
+        specs = {}
+        # update dictionary on initial guess from cross correlations
+        for fov_id, peaks in crosscorrs.items():
+            specs[fov_id] = {}
+            for peak_id, xcorrs in peaks.items():
+                if xcorrs['full'] == True:
+                    specs[fov_id][peak_id] = 1
+                else: # default to don't analyze
+                    specs[fov_id][peak_id] = -1
 
-    information('Starting channel picking.')
-    # go through the fovs again, same as above
-    for fov_id in fov_id_list:
-        specs = fov_choose_channels_UI(fov_id, crosscorrs, specs)
+        information('Starting channel picking.')
+        # go through the fovs again, same as above
+        for fov_id in fov_id_list:
+            specs = fov_choose_channels_UI(fov_id, crosscorrs, specs)
 
-    # write specfications to pickle and text
-    information("Writing specifications file.")
-    with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
-        pickle.dump(specs, specs_file)
-    with open(ana_dir + "/specs.txt", 'w') as specs_file:
-        pprint(specs, stream=specs_file)
+        # write specfications to pickle and text
+        information("Writing specifications file.")
+        with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
+            pickle.dump(specs, specs_file)
+        with open(ana_dir + "/specs.txt", 'w') as specs_file:
+            pprint(specs, stream=specs_file)
 
-    information("Finished.")
+        information("Finished.")
