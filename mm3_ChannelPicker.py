@@ -18,6 +18,7 @@ try:
 except:
     import pickle
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from skimage.exposure import rescale_intensity # for displaying in GUI
 import multiprocessing
@@ -174,7 +175,11 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     # enter user input
     # ask the user to correct cell/nocell calls
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
-    raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPress enter when done and go to the next FOV (do not close window).") # raw input waits for enter key
+    # matplotlib has difefrent behavior for interactions in different versions.
+    if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
+    else:
+        print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
     fig.canvas.mpl_disconnect(cells_handler)
 
     plt.close()
@@ -192,7 +197,7 @@ def format_channel_plot(ax, peak_id):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = False
+    load_crosscorrs = True
     do_picking = True
 
     # get switches and parameters
