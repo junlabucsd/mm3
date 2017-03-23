@@ -501,7 +501,8 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         h5f.attrs.create('stage_x_loc', x_loc)
         h5f.attrs.create('stage_y_loc', y_loc)
         h5f.attrs.create('image_shape', image_shape)
-        h5f.attrs.create('planes', image_planes)
+        # encoding is because HDF5 has problems with numpy unicode
+        h5f.attrs.create('planes', [plane.encode('utf8') for plane in image_planes])
         h5f.attrs.create('peaks', sorted(channel_masks[fov_id].keys()))
 
         # this is for things that change across time, for these create a dataset
@@ -541,7 +542,7 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
 
-                h5ds.attrs.create('plane', image_planes[color_index])
+                h5ds.attrs.create('plane', image_planes[color_index].encode('utf8'))
 
                 # write the data even though we have more to write (free up memory)
                 h5f.flush()
@@ -1324,11 +1325,11 @@ def segment_image(image):
 
     # threshold distance image
     distance_thresh = np.zeros_like(distance)
-    distance_thresh[distance < 3] = 0
-    distance_thresh[distance >= 3] = 1
+    distance_thresh[distance < 2] = 0
+    distance_thresh[distance >= 2] = 1
 
     # do an extra opening on the distance
-    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
+    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(1))
 
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance_opened)
@@ -1337,7 +1338,7 @@ def segment_image(image):
     # could have used try/except but remove_small_objects loves to issue warnings.
     cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
     if label_num > 1:
-        cleared = morphology.remove_small_objects(cleared, min_size=50)
+        cleared = morphology.remove_small_objects(cleared, min_size=20)
     else:
         # if there are no labels, then just return the cleared image as it is zero
         return cleared # should be zero image if there was only 1 label
@@ -1348,7 +1349,7 @@ def segment_image(image):
     # label using the random walker (diffusion watershed) algorithm
     try:
         # set anything outside of OTSU threshold to -1 so it will not be labeled
-        markers[threshholded == 0] = -1
+        markers[morph == 0] = -1
         # here is the main algorithm
         labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
@@ -1357,6 +1358,50 @@ def segment_image(image):
         return cleared # this should just be a zero array
 
     return labeled_image
+
+# finds lineages for all peaks in a fov
+def make_lineages_fov(fov_id, specs):
+    '''
+    For a given fov, create the lineages from the segmented images.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.make_lineage_chnl_stack
+    '''
+    ana_peak_ids = [] # channels to be analyzed
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 1: # 1 means analyze
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
+
+    # This is a list of tuples (fov_id, peak_id) to send to the Pool command
+    fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
+
+    # set up multiprocessing pool. will complete pool before going on
+    pool = Pool(processes=params['num_analyzers'])
+
+    # create the lineages for each peak individually
+    # the output is a list of dictionaries
+    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # looped version for debugging
+    # lineages = []
+    # for fov_and_peak_id in fov_and_peak_ids_list:
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
+
+    # combine all dictionaries into one dictionary
+    Cells = {} # create dictionary to hold all information
+    for cell_dict in lineages: # for all the other dictionaries in the list
+        Cells.update(cell_dict) # updates Cells with the entries in cell_dict
+
+    return Cells
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
@@ -1625,49 +1670,6 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
     # return the dictionary with all the cells
     return Cells
 
-# finds lineages for all peaks in a fov
-def make_lineages_fov(fov_id, specs):
-    '''
-    For a given fov, create the lineages from the segmented images.
-
-    Called by
-    mm3_Segment.py
-
-    Calls
-    mm3.make_lineage_chnl_stack
-    '''
-    ana_peak_ids = [] # channels to be analyzed
-    for peak_id, spec in specs[fov_id].items():
-        if spec == 1: # 1 means analyze
-            ana_peak_ids.append(peak_id)
-    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
-
-    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
-
-    # This is a list of tuples (fov_id, peak_id) to send to the Pool command
-    fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
-
-    # set up multiprocessing pool. will complete pool before going on
-    pool = Pool(processes=params['num_analyzers'])
-
-    # create the lineages for each peak individually
-    # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
-
-    # # looped version for debugging
-    # lineages = []
-    # for fov_and_peak_id in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
-
-    # combine all dictionaries into one dictionary
-    Cells = {} # create dictionary to hold all information
-    for cell_dict in lineages: # for all the other dictionaries in the list
-        Cells.update(cell_dict) # updates Cells with the entries in cell_dict
-
-    return Cells
 
 # Cell class and related functions
 class Cell():
@@ -1742,8 +1744,6 @@ class Cell():
         self.sd = None # this should be combined lengths of daughters, in um
         self.delta = None
         self.tau = None
-        self.alpha = None
-        self.tau_calc = None
         self.sum_cov = None
         self.septum_position = None
 

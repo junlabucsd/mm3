@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # hardcoded parameters
     load_metadata = False
     load_channel_masks = False
-    t_end = 575 # only analyze images up until this t point
+    t_end = None # only analyze images up until this t point
 
     # get switches and parameters
     try:
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         mm3.information("Loading images for FOV %03d." % fov)
 
         # get filenames just for this fov along with the julian date of acquistion
-        send_to_write = [[k, v['jd']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
+        send_to_write = [[k, v['t']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
 
         # sort the filenames by jdn
         send_to_write = sorted(send_to_write, key=lambda time: time[1])
