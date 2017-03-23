@@ -1,9 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-def warning(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -42,12 +38,10 @@ from multiprocessing import Pool
 # Plotting for debug
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 font = {'family' : 'sans-serif',
         'weight' : 'normal',
         'size'   : 12}
 mpl.rc('font', **font)
-mpl.rcParams['figure.figsize'] = 10, 10
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -66,12 +60,19 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-# supress the warning this always gives
+# supress the warning tifffile always gives
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import tifffile as tiff
 
 ### functions ###########################################################
+# alert the use what is up
+def warning(*objs):
+    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
+
+def information(*objs):
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
+
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
@@ -81,15 +82,10 @@ def init_mm3_helpers(param_file_path):
 
     # set up how to manage cores for multiprocessing
     cpu_count = multiprocessing.cpu_count()
-    if cpu_count == 32:
-        num_analyzers = 20
-    elif cpu_count == 8:
-        num_analyzers = 14
-    else:
-        num_analyzers = cpu_count*2 - 2
-    params['num_analyzers'] = num_analyzers
+    params['num_analyzers'] = cpu_count*2 - 2
 
     # useful folder shorthands for opening files
+    params['TIFF_dir'] = params['experiment_directory'] + params['image_directory']
     params['ana_dir'] = params['experiment_directory'] + params['analysis_directory']
     params['hdf5_dir'] = params['ana_dir'] + 'hdf5/'
     params['chnl_dir'] = params['ana_dir'] + 'channels/'
@@ -162,6 +158,79 @@ def load_stack(fov_id, peak_id, color='c1'):
             img_stack = h5f['channel_%04d/p%04d_%s' % (peak_id, peak_id, color)][:]
 
     return img_stack
+
+### Functions for dealing with raw TIFF images
+# get params is the major function which processes raw TIFF images
+def get_tif_params(image_filename, find_channels=True):
+    '''This is a damn important function for getting the information
+    out of an image. It loads a tiff file, pulls out the image data, and the metadata,
+    including the location of the channels if flagged.
+
+    it returns a dictionary like this for each image:
+
+    'filename': image_filename,
+    'fov' : image_metadata['fov'], # fov id
+    't' : image_metadata['t'], # time point
+    'jdn' : image_metadata['jdn'], # absolute julian time
+    'x' : image_metadata['x'], # x position on stage [um]
+    'y' : image_metadata['y'], # y position on stage [um]
+    'plane_names' : image_metadata['plane_names'] # list of plane names
+    'channels': cp_dict, # dictionary of channel locations
+
+    Called by
+    mm3_Compile.py __main__
+
+    Calls
+    mm3.extract_metadata
+    mm3.find_channels
+    '''
+
+    try:
+        # open up file and get metadata
+        with tiff.TiffFile(params['TIFF_dir'] + image_filename) as tif:
+            image_data = tif.asarray()
+
+            if params['TIFF_source'] == 'elements':
+                image_metadata = get_tif_metadata_elements(tif)
+            elif params['TIFF_source'] == 'nd2ToTIFF':
+                image_metadata = get_tif_metadata_nd2ToTIFF(tif)
+
+        # look for channels if flagged
+        if find_channels:
+            # fix the image orientation and get the number of planes
+            image_data = fix_orientation(image_data)
+
+            # if the image data has more than 1 plane restrict image_data to phase,
+            # which should have highest mean pixel data
+            if len(image_data.shape) > 2:
+                ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                image_data = image_data[ph_index]
+
+            # get shape of single plane
+            img_shape = [image_data.shape[0], image_data.shape[1]]
+
+            # find channels on the processed image
+            chnl_loc_dict = find_channel_locs(image_data)
+
+        information('Analyzed %s' % image_filename)
+
+        # return the file name, the data for the channels in that image, and the metadata
+        return {'filepath': params['TIFF_dir'] + image_filename,
+                'fov' : image_metadata['fov'], # fov id
+                't' : image_metadata['t'], # time point
+                'jd' : image_metadata['jd'], # absolute julian time
+                'x' : image_metadata['x'], # x position on stage [um]
+                'y' : image_metadata['y'], # y position on stage [um]
+                'planes' : image_metadata['planes'], # list of plane names
+                'shape' : img_shape, # image shape x y in pixels
+                'channels' : chnl_loc_dict} # dictionary of channel locations
+
+    except:
+        warning('Failed get_params for ' + image_filename.split("/")[-1])
+        print(sys.exc_info()[0])
+        print(sys.exc_info()[1])
+        print(traceback.print_tb(sys.exc_info()[2]))
+        return {'filepath': TIFF_dir + image_filename, 'analyze_success': False}
 
 # finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
@@ -285,8 +354,8 @@ def get_tif_metadata_nd2ToTIFF(tif):
         tif: TIFF file object from which data will be extracted
     Returns:
         dictionary of values:
-            'fov': -1,
-            't' : -1,
+            'fov': int,
+            't' : int,
             'jdn' (float)
             'x' (float)
             'y' (float)
@@ -302,6 +371,183 @@ def get_tif_metadata_nd2ToTIFF(tif):
     idata = json.loads(idata.decode('utf-8'))
 
     return idata
+
+# slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
+def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
+    '''Writes out 4D stacks of TIFF images per channel.
+    Loads all tiffs from and FOV into memory and then slices all time points at once.
+
+    Called by
+    __main__
+    '''
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # go through list of images and get the file path
+    for n, image in enumerate(images_to_write):
+        # analyzed_imgs dictionary will be found in main scope. [0] is the key, [1] is jd
+        image_params = analyzed_imgs[image[0]]
+
+        information("Loading %s." % image_params['filepath'].split('/')[-1])
+
+        if n == 1:
+            # declare identification variables for saving using first image
+            fov_id = image_params['fov']
+
+        # load the tif and store it in array
+        with tiff.TiffFile(image_params['filepath']) as tif:
+            image_data = tif.asarray()
+
+        # channel finding was also done on images after orientation was fixed
+        image_data = fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        #change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+    # concatenate the list into one big ass stack
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
+
+    # cut out the channels as per channel masks for this fov
+    for peak, channel_loc in channel_masks[fov_id].iteritems():
+        #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+        information('Slicing and saving channel peak %d.' % peak)
+
+        # slice out channel.
+        # The function should recognize the shape length as 4 and cut all time points
+        channel_stack = cut_slice(image_fov_stack, channel_loc)
+
+        # save a different time stack for all colors
+        for color_index in range(channel_stack.shape[3]):
+            # this is the filename for the channel
+            # # chnl_dir and p will be looked for in the scope above (__main__)
+            channel_filename = params['chnl_dir'] + params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1)
+            # save stack
+            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
+
+    return
+
+# same thing but do it for hdf5
+def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
+    '''Writes out 4D stacks of TIFF images to an HDF5 file.
+
+    Called by
+    __main__
+    '''
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # make arrays for filenames and times
+    image_filenames = []
+    image_times = [] # times is still an integer but may be indexed arbitrarily
+    image_jds = [] # jds = julian dates (times)
+
+    # go through list of images, load and fix them, and create arrays of metadata
+    for n, image in enumerate(images_to_write):
+        image_name = image[0] # [0] is the key, [1] is jd
+
+        # analyzed_imgs dictionary will be found in main scope.
+        image_params = analyzed_imgs[image_name]
+        information("Loading %s." % image_params['filepath'].split('/')[-1])
+
+        # add information to metadata arrays
+        image_filenames.append(image_name)
+        image_times.append(image_params['t'])
+        image_jds.append(image_params['jd'])
+
+        # declare identification variables for saving using first image
+        if n == 1:
+            # same across fov
+            fov_id = image_params['fov']
+            x_loc = image_params['x']
+            y_loc = image_params['y']
+            image_shape = image_params['shape']
+            image_planes = image_params['planes']
+
+        # load the tif and store it in array
+        with tiff.TiffFile(image_params['filepath']) as tif:
+            image_data = tif.asarray()
+
+        # channel finding was also done on images after orientation was fixed
+        image_data = fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        #change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+    # concatenate the list into one big ass stack
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
+
+    # create the HDF5 file for the FOV, first time this is being done.
+    with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'w', libver='earliest') as h5f:
+
+        # add in metadata for this FOV
+        # these attributes should be common for all channel
+        h5f.attrs.create('fov_id', fov_id)
+        h5f.attrs.create('stage_x_loc', x_loc)
+        h5f.attrs.create('stage_y_loc', y_loc)
+        h5f.attrs.create('image_shape', image_shape)
+        # encoding is because HDF5 has problems with numpy unicode
+        h5f.attrs.create('planes', [plane.encode('utf8') for plane in image_planes])
+        h5f.attrs.create('peaks', sorted(channel_masks[fov_id].keys()))
+
+        # this is for things that change across time, for these create a dataset
+        h5ds = h5f.create_dataset(u'filenames', data=np.expand_dims(image_filenames, 1),
+                                  chunks=True, maxshape=(None, 1), dtype='S100',
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times', data=np.expand_dims(image_times, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times_jd', data=np.expand_dims(image_jds, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
+
+        # cut out the channels as per channel masks for this fov
+        for peak, channel_loc in channel_masks[fov_id].iteritems():
+            #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+            information('Slicing and saving channel peak %d.' % peak)
+
+            # create group for this channel
+            h5g = h5f.create_group('channel_%04d' % peak)
+
+            # add attribute for peak_id, channel location
+            h5g.attrs.create('peak_id', peak)
+            h5g.attrs.create('channel_loc', channel_loc)
+
+            # slice out channel.
+            # The function should recognize the shape length as 4 and cut all time points
+            channel_stack = cut_slice(image_fov_stack, channel_loc)
+
+            # save a different dataset  for all colors
+            for color_index in range(channel_stack.shape[3]):
+
+                # create the dataset for the image. Review docs for these options.
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
+                                data=channel_stack[:,:,:,color_index],
+                                chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
+                                maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+
+                h5ds.attrs.create('plane', image_planes[color_index].encode('utf8'))
+
+                # write the data even though we have more to write (free up memory)
+                h5f.flush()
+
+    return
 
 # finds the location of channels in a tif
 def find_channel_locs(image_data):
@@ -759,6 +1005,11 @@ def average_empties_stack(fov_id, specs):
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+
+        # delete the dataset if it exists (important for debug)
+        if 'empty_channel' in h5f:
+            del h5f[u'empty_channel']
+
         # the empty channel should be it's own dataset
         h5ds = h5f.create_dataset(u'empty_channel',
                         data=avg_empty_stack,
@@ -842,23 +1093,7 @@ def subtract_fov_stack(fov_id, specs):
 
     information('Subtracting peaks for FOV %d.' % fov_id)
 
-    # directories for saving
-    if params['output'] == 'TIFF':
-        chnl_dir = params['experiment_directory'] + params['analysis_directory'] + 'channels/'
-        empty_dir = params['experiment_directory'] + params['analysis_directory'] + 'empties/'
-        sub_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-        # # load the empty stack
-        # empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-        # empty_filepath = empty_dir + empty_filename
-        # with tiff.TiffFile(empty_filepath) as tif:
-        #     avg_empty_stack = tif.asarray()
-
-    # if params['output'] == 'HDF5':
-    #     hdf5_dir = params['experiment_directory'] + params['analysis_directory'] + 'hdf5/'
-    #     h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r+')
-    #     avg_empty_stack = h5f['empty_channel'] # for HDF5 grab the dataset dictionary style
-
-    # feed dummy peak number to get empty
+    # load empty stack feed dummy peak number to get empty
     avg_empty_stack = load_stack(fov_id, 0, color='empty')
 
     # determine which peaks are to be analyzed
@@ -872,16 +1107,6 @@ def subtract_fov_stack(fov_id, specs):
     # load images for the peak and get phase images
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
-
-        # if params['output'] == 'TIFF':
-        #     # channel_filename = params['experiment_name'] + '_xy%03d_p%04d.tif' % (fov_id, peak_id)
-        #     channel_filename = params['experiment_name'] + '_xy%03d_p%04d_c0.tif' % (fov_id, peak_id)
-        #     channel_filepath = chnl_dir + channel_filename
-        #     with tiff.TiffFile(channel_filepath) as tif:
-        #         image_data = tif.asarray()
-        #
-        # elif params['output'] == 'HDF5':
-        #     image_data = h5f['channel_%04d/p%04d_c0' % (peak_id, peak_id)]
 
         image_data = load_stack(fov_id, peak_id, color='c1')
 
@@ -907,8 +1132,7 @@ def subtract_fov_stack(fov_id, specs):
         # save out the subtracted stack
         if params['output'] == 'TIFF':
             sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-            sub_filepath = sub_dir + sub_filename
-            tiff.imsave(sub_filepath, subtracted_stack, compress=3) # save it
+            tiff.imsave(params['sub_dir'] + sub_filename, subtracted_stack, compress=4) # save it
 
         if params['output'] == 'HDF5':
             h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
@@ -984,6 +1208,70 @@ def subtract_phase(image_pair):
     return channel_subtracted
 
 ### functions that deal with segmentation and lineages
+# Do segmentation for an channel time stack
+def segment_chnl_stack(fov_id, peak_id):
+    '''
+    For a given fov and peak (channel), do segmentation for all images in the
+    subtracted .tif stack.
+
+    Called by
+    mm3_Segment.py
+
+    Calls
+    mm3.segment_image
+    '''
+
+    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # load subtracted images
+    sub_stack = load_stack(fov_id, peak_id, color='sub')
+
+    # set up multiprocessing pool to do segmentation. Will do everything before going on.
+    pool = Pool(processes=params['num_analyzers'])
+
+    # send the 3d array to multiprocessing
+    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
+
+    pool.close() # tells the process nothing more will be added.
+    pool.join() # blocks script until everything has been processed and workers exit
+
+    # # image by image for debug
+    # segmented_imgs = []
+    # for sub_image in sub_stack:
+    #     segmented_imgs.append(segment_image(sub_image))
+
+    # stack them up along a time axis
+    segmented_imgs = np.stack(segmented_imgs, axis=0)
+    segmented_imgs = segmented_imgs.astype('uint16')
+
+    # save out the subtracted stack
+    if params['output'] == 'TIFF':
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        tiff.imsave(params['seg_dir'] + seg_filename,
+                    segmented_imgs.astype('uint16'), compress=4)
+
+    if params['output'] == 'HDF5':
+        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+
+        # put segmented channel in correct group
+        h5g = h5f['channel_%04d' % peak_id]
+
+        # delete the dataset if it exists (important for debug)
+        if 'p%04d_seg' % peak_id in h5g:
+            del h5g['p%04d_seg' % peak_id]
+
+        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
+                        data=segmented_imgs,
+                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+        h5f.close()
+
+    information("Saved segmented channel %d." % peak_id)
+
+    return True
+
+# segmentation algorithm
 def segment_image(image):
     '''Segments a subtracted image and returns a labeled image
 
@@ -1041,7 +1329,7 @@ def segment_image(image):
     distance_thresh[distance >= 2] = 1
 
     # do an extra opening on the distance
-    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
+    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(1))
 
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance_opened)
@@ -1050,7 +1338,7 @@ def segment_image(image):
     # could have used try/except but remove_small_objects loves to issue warnings.
     cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
     if label_num > 1:
-        cleared = morphology.remove_small_objects(cleared, min_size=50)
+        cleared = morphology.remove_small_objects(cleared, min_size=20)
     else:
         # if there are no labels, then just return the cleared image as it is zero
         return cleared # should be zero image if there was only 1 label
@@ -1061,7 +1349,7 @@ def segment_image(image):
     # label using the random walker (diffusion watershed) algorithm
     try:
         # set anything outside of OTSU threshold to -1 so it will not be labeled
-        markers[threshholded == 0] = -1
+        markers[morph == 0] = -1
         # here is the main algorithm
         labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
@@ -1071,68 +1359,49 @@ def segment_image(image):
 
     return labeled_image
 
-# Do segmentation for an channel time stack
-def segment_chnl_stack(fov_id, peak_id):
+# finds lineages for all peaks in a fov
+def make_lineages_fov(fov_id, specs):
     '''
-    For a given fov and peak (channel), do segmentation for all images in the
-    subtracted .tif stack.
+    For a given fov, create the lineages from the segmented images.
 
     Called by
     mm3_Segment.py
 
     Calls
-    mm3.segment_image
+    mm3.make_lineage_chnl_stack
     '''
+    ana_peak_ids = [] # channels to be analyzed
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 1: # 1 means analyze
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
-    information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
+    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
 
-    # load subtracted images
-    sub_stack = load_stack(fov_id, peak_id, color='sub')
+    # This is a list of tuples (fov_id, peak_id) to send to the Pool command
+    fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
 
-    # set up multiprocessing pool to do segmentation. Will do everything before going on.
+    # set up multiprocessing pool. will complete pool before going on
     pool = Pool(processes=params['num_analyzers'])
 
-    # send the 3d array to multiprocessing
-    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
+    # create the lineages for each peak individually
+    # the output is a list of dictionaries
+    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
 
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
 
-    # # image by image for debug
-    # segmented_imgs = []
-    # for sub_image in sub_stack:
-    #     segmented_imgs.append(segment_image(sub_image))
+    # # looped version for debugging
+    # lineages = []
+    # for fov_and_peak_id in fov_and_peak_ids_list:
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
 
-    # stack them up along a time axis
-    segmented_imgs = np.stack(segmented_imgs, axis=0)
-    segmented_imgs = segmented_imgs.astype('uint16')
+    # combine all dictionaries into one dictionary
+    Cells = {} # create dictionary to hold all information
+    for cell_dict in lineages: # for all the other dictionaries in the list
+        Cells.update(cell_dict) # updates Cells with the entries in cell_dict
 
-    # save out the subtracted stack
-    if params['output'] == 'TIFF':
-        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-        tiff.imsave(params['seg_dir'] + seg_filename,
-                    segmented_imgs.astype('uint16'), compress=3)
-
-    if params['output'] == 'HDF5':
-        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
-
-        # put segmented channel in correct group
-        h5g = h5f['channel_%04d' % peak_id]
-
-        # delete the dataset if it exists (important for debug)
-        if 'p%04d_seg' % peak_id in h5g:
-            del h5g['p%04d_seg' % peak_id]
-
-        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
-                        data=segmented_imgs,
-                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        compression="gzip", shuffle=True, fletcher32=True)
-        h5f.close()
-
-    information("Saved segmented channel %d." % peak_id)
-
-    return True
+    return Cells
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
@@ -1401,49 +1670,6 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
     # return the dictionary with all the cells
     return Cells
 
-# finds lineages for all peaks in a fov
-def make_lineages_fov(fov_id, specs):
-    '''
-    For a given fov, create the lineages from the segmented images.
-
-    Called by
-    mm3_Segment.py
-
-    Calls
-    mm3.make_lineage_chnl_stack
-    '''
-    ana_peak_ids = [] # channels to be analyzed
-    for peak_id, spec in specs[fov_id].items():
-        if spec == 1: # 1 means analyze
-            ana_peak_ids.append(peak_id)
-    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
-
-    information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
-
-    # This is a list of tuples (fov_id, peak_id) to send to the Pool command
-    fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
-
-    # set up multiprocessing pool. will complete pool before going on
-    pool = Pool(processes=params['num_analyzers'])
-
-    # create the lineages for each peak individually
-    # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
-
-    # # looped version for debugging
-    # lineages = []
-    # for fov_and_peak_id in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
-
-    # combine all dictionaries into one dictionary
-    Cells = {} # create dictionary to hold all information
-    for cell_dict in lineages: # for all the other dictionaries in the list
-        Cells.update(cell_dict) # updates Cells with the entries in cell_dict
-
-    return Cells
 
 # Cell class and related functions
 class Cell():
@@ -1514,11 +1740,10 @@ class Cell():
         # this information is the "production" information that
         # we want to extract at the end. Some of this is for convenience.
         # This is only filled out if a cell divides.
-        self.sb = None
-        self.sd = None # this should be combined lengths of daughters
+        self.sb = None # in um
+        self.sd = None # this should be combined lengths of daughters, in um
+        self.delta = None
         self.tau = None
-        self.alpha = None
-        self.tau_calc = None
         self.sum_cov = None
         self.septum_position = None
 
@@ -1553,6 +1778,9 @@ class Cell():
         # force the division length to be the combined lengths of the daughters
         self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
 
+        # delta is here for convinience
+        self.delta = self.sd - self.sb
+
         # generation time
         self.tau = self.division_time - self.birth_time
 
@@ -1563,15 +1791,15 @@ class Cell():
         try:
             with warnings.catch_warnings(): # ignore the warnings if it can't converge
                 warnings.simplefilter("ignore")
-                popt, pcov = curve_fit(cell_growth_func, self.times_w_div, self.lengths_w_div,
-                                    p0=(self.sb, 1.0/self.tau))
-                alpha = popt[1]
+                popt, pcov = curve_fit(cell_growth_func, self.times_w_div - self.birth_time,
+                                       np.log(self.lengths_w_div),
+                                       p0=(np.log(self.sb), np.log(2)/self.tau))
+                elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
         except:
-            alpha = float('NaN')
+            elong_rate = float('NaN')
             pcov = float('Nan')
 
-        self.alpha = alpha
-        self.tau_calc = 1/alpha
+        self.elong_rate = elong_rate
         self.sum_cov = np.sum(pcov)
 
         # calculate the septum position as a number between 0 and 1
@@ -1593,8 +1821,16 @@ def create_cell_id(region, t, peak, fov):
     return cell_id
 
 # function for a growing cell, used to calculate growth rate
-def cell_growth_func(t, sb, alpha):
-    return sb*2**(alpha*t)
+def cell_growth_func(t, sb, elong_rate):
+    '''
+    Assumes you have taken log of the data.
+    It also allows the size at birth to be a free parameter, rather than fixed
+    at the actual size at birth (but still uses that as a guess)
+    Assumes natural log, not base 2 (though I think that makes less sense)
+
+    old form: sb*2**(alpha*t)
+    '''
+    return sb+elong_rate*t
 
 # functions for checking if a cell has divided or not
 # parameters for building lineages
@@ -1727,7 +1963,7 @@ def organize_cells_by_channel(Cells, specs):
     for fov_id in specs.keys():
         Cells_by_peak[fov_id] = {}
         for peak_id, spec in specs[fov_id].items():
-            # only make a space for cells
+            # only make a space for channels that are analyized
             if spec == 1:
                 Cells_by_peak[fov_id][peak_id] = {}
 
@@ -1736,7 +1972,6 @@ def organize_cells_by_channel(Cells, specs):
         Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
 
     return Cells_by_peak
-
 
 ### functions for additional cell centric analysis
 # finds total and average intenstiy timepoint in cells
