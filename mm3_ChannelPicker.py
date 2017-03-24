@@ -1,9 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-def warning(*objs):
-    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -21,6 +17,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from skimage.exposure import rescale_intensity # for displaying in GUI
+from scipy.misc import imresize
 import multiprocessing
 from multiprocessing import Pool
 import warnings
@@ -50,7 +47,7 @@ import mm3_helpers as mm3
 
 ### functions
 # funtion which makes the UI plot
-def fov_choose_channels_UI(fov_id, crosscorrs, specs):
+def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     '''Creates a plot with the channels with guesses for empties and full channels,
     and requires the user to choose which channels to use for analysis and which to
     average for empties and subtraction.
@@ -69,7 +66,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
 
     '''
 
-    information("Starting channel picking for FOV %d." % fov_id)
+    mm3.information("Starting channel picking for FOV %d." % fov_id)
 
     # define functions here so they have access to variables
     # for UI. change specification of channel
@@ -85,26 +82,27 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
         if specs[fov_id][peak_id] == 1:
             specs[fov_id][peak_id] = 0
             ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array*0.1, ones_array)), alpha=0.25)
-            #information("peak %d now set to empty." % peak_id)
+            #mm3.information("peak %d now set to empty." % peak_id)
 
         # if it says empty, change to don't analyze
         elif specs[fov_id][peak_id] == 0:
             specs[fov_id][peak_id] = -1
             ax[ax_id].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
-            #information("peak %d now set to ignore." % peak_id)
+            #mm3.information("peak %d now set to ignore." % peak_id)
 
         # if it says don't analyze, change to analyze
         elif specs[fov_id][peak_id] == -1:
             specs[fov_id][peak_id] = 1
             ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
-            #information("peak %d now set to analyze." % peak_id)
+            #mm3.information("peak %d now set to analyze." % peak_id)
 
         plt.draw()
-
         return
 
     # set up figure for user assited choosing
-    fig = plt.figure(figsize=(20,13))
+    n_peaks = len(specs[fov_id].keys())
+    fig = plt.figure(figsize=(int(n_peaks/2), 12))
+    fig.set_size_inches(int(n_peaks/2),12)
     ax = [] # for axis handles
 
     # plot the peaks peak by peak using sorted list
@@ -112,36 +110,35 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
     npeaks = len(sorted_peaks)
     last_imgs = [] # list that holds last images for updating figure
 
-    if p['output'] == 'HDF5':
-        h5f = h5py.File(hdf5_dir + 'xy%03d.hdf5' % fov_id, 'r')
-
     for n, peak_id in enumerate(sorted_peaks, start=1):
         peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
         # load data for figure
-        image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+        # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
 
-        first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
-        last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
-        last_imgs.append(last_img) # append for updating later
-        del image_data # clear memory (maybe)
+        # first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        # last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
+        last_imgs.append(UI_images[fov_id][peak_id]['last']) # append for updating later
+        # del image_data # clear memory (maybe)
 
         # append an axis handle to ax list while adding a subplot to the figure which has a
         # column for each peak and 3 rows
 
         # plot the first image in each channel in top row
         ax.append(fig.add_subplot(3, npeaks, n))
-        ax[-1].imshow(first_img, cmap=plt.cm.gray, interpolation='nearest')
+        ax[-1].imshow(UI_images[fov_id][peak_id]['first'],
+                      cmap=plt.cm.gray, interpolation='nearest')
         ax = format_channel_plot(ax, peak_id) # format axis and title
         if n == 1:
             ax[-1].set_ylabel("first time point")
 
         # plot middle row using last time point with highlighting for empty/full
         ax.append(fig.add_subplot(3, npeaks, n + npeaks))
-        ax[-1].imshow(last_img, cmap=plt.cm.gray, interpolation='nearest')
+        ax[-1].imshow(UI_images[fov_id][peak_id]['last'],
+                      cmap=plt.cm.gray, interpolation='nearest')
 
         # color image based on if it is thought empty or full
-        ones_array = np.ones_like(last_img)
+        ones_array = np.ones_like(UI_images[fov_id][peak_id]['last'])
         if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
             ax[-1].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
         else: # otherwise show red, means don't analyze
@@ -165,23 +162,20 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
             ax[-1].set_ylabel("time index, CC on X")
         ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
 
-    if p['output'] == 'HDF5':
-        h5f.close()
-
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
-    plt.show(block=False)
 
     # enter user input
     # ask the user to correct cell/nocell calls
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        plt.show(block=False)
         raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
     else:
         print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
+        plt.show(block=True)
     fig.canvas.mpl_disconnect(cells_handler)
-
     plt.close()
 
     return specs
@@ -194,10 +188,33 @@ def format_channel_plot(ax, peak_id):
     ax[-1].set_title(str(peak_id), fontsize = 8)
     return ax
 
+# function to preload all images for all FOVs, hopefully saving time
+def preload_images(specs, fov_id_list):
+    '''This dictionary holds the first and last image
+    for all channels in all FOVS. It is passed to the UI so that the
+    figures can be populated much faster
+    '''
+
+    # Intialized the dicionary
+    UI_images = {}
+
+    for fov_id in fov_id_list:
+        UI_images[fov_id] = {}
+        for peak_id in specs[fov_id].keys():
+            image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+            UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
+             # phase image at t=0. Rescale intenstiy and also cut the size in half
+            UI_images[fov_id][peak_id]['first'] = imresize(image_data[0,:,:], 0.5)
+            # phase image at end
+            UI_images[fov_id][peak_id]['last'] = imresize(image_data[-1,:,:], 0.5)
+
+    return UI_images
+
+
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = True
+    load_crosscorrs = False
     do_picking = True
 
     # get switches and parameters
@@ -208,7 +225,7 @@ if __name__ == "__main__":
         user_spec_fovs = []
         param_file_path = ''
     except getopt.GetoptError:
-        warning('No arguments detected (-f -o).')
+        mm3.warning('No arguments detected (-f -o).')
 
     for opt, arg in opts:
         if opt == '-f':
@@ -219,13 +236,13 @@ if __name__ == "__main__":
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
-                warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
 
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
-    information('Loading experiment parameters.')
+    mm3.information('Loading experiment parameters.')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
 
@@ -245,7 +262,7 @@ if __name__ == "__main__":
         with open(ana_dir + '/channel_masks.pkl', 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
     except:
-        warning('Could not load channel mask file.')
+        mm3.warning('Could not load channel mask file.')
         raise ValueError
 
     # make list of FOVs to process (keys of channel_mask file)
@@ -255,11 +272,11 @@ if __name__ == "__main__":
     if specify_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
-    information("Found %d FOVs to process." % len(fov_id_list))
+    mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
     if load_crosscorrs: # load precalculate ones if indicated
-        information('Loading precalculated cross-correlations.')
+        mm3.information('Loading precalculated cross-correlations.')
 
         with open(ana_dir + 'crosscorrs.pkl', 'r') as xcorrs_file:
             crosscorrs = pickle.load(xcorrs_file)
@@ -270,7 +287,7 @@ if __name__ == "__main__":
 
         # for each fov find cross correlations (sending to pull)
         for fov_id in fov_id_list:
-            information("Calculating cross correlations for FOV %d." % fov_id)
+            mm3.information("Calculating cross correlations for FOV %d." % fov_id)
 
             # nested dict keys are peak_ids and values are cross correlations
             crosscorrs[fov_id] = {}
@@ -280,7 +297,7 @@ if __name__ == "__main__":
 
             # find all peak ids in the current FOV
             for peak_id in sorted(channel_masks[fov_id].keys()):
-                information("Calculating cross correlations for peak %d." % peak_id)
+                mm3.information("Calculating cross correlations for peak %d." % peak_id)
 
                 # linear loop
                 # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
@@ -289,12 +306,12 @@ if __name__ == "__main__":
                 crosscorrs[fov_id][peak_id] = pool.apply_async(mm3.channel_xcorr,
                                                                args=(fov_id, peak_id,))
 
-            information('Waiting for cross correlation pool to finish for FOV %d.' % fov_id)
+            mm3.information('Waiting for cross correlation pool to finish for FOV %d.' % fov_id)
 
             pool.close() # tells the process nothing more will be added.
             pool.join() # blocks script until everything has been processed and workers exit
 
-            information("Finished cross correlations for FOV %d." % fov_id)
+            mm3.information("Finished cross correlations for FOV %d." % fov_id)
 
         # get results from the pool and put the results in the dictionary if succesful
         for fov_id, peaks in crosscorrs.iteritems():
@@ -309,16 +326,16 @@ if __name__ == "__main__":
                     crosscorrs[fov_id][peak_id] = False # put a false there if it's bad
 
         # write cross-correlations to pickle and text
-        information("Writing cross correlations file.")
+        mm3.information("Writing cross correlations file.")
         with open(ana_dir+ "/crosscorrs.pkl", 'w') as xcorrs_file:
             pickle.dump(crosscorrs, xcorrs_file)
         with open(ana_dir + "/crosscorrs.txt", 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
-        information("Wrote cross correlations files.")
+        mm3.information("Wrote cross correlations files.")
 
     ### User selection (channel picking) #####################################################
     if do_picking:
-        information('Initializing specifications file.')
+        mm3.information('Initializing specifications file.')
         # nested dictionary of {fov : {peak : spec ...}) for if channel should
         # be analyzed, used for empty, or ignored.
         specs = {}
@@ -326,21 +343,28 @@ if __name__ == "__main__":
         for fov_id, peaks in crosscorrs.items():
             specs[fov_id] = {}
             for peak_id, xcorrs in peaks.items():
+                # update the guess incase the parameters file was changed
+                xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
+
                 if xcorrs['full'] == True:
                     specs[fov_id][peak_id] = 1
                 else: # default to don't analyze
                     specs[fov_id][peak_id] = -1
 
-        information('Starting channel picking.')
+        # preload the images
+        mm3.information('Preloading images.')
+        UI_images = preload_images(specs, fov_id_list)
+
+        mm3.information('Starting channel picking.')
         # go through the fovs again, same as above
         for fov_id in fov_id_list:
-            specs = fov_choose_channels_UI(fov_id, crosscorrs, specs)
+            specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
 
         # write specfications to pickle and text
-        information("Writing specifications file.")
+        mm3.information("Writing specifications file.")
         with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
             pickle.dump(specs, specs_file)
         with open(ana_dir + "/specs.txt", 'w') as specs_file:
             pprint(specs, stream=specs_file)
 
-        information("Finished.")
+        mm3.information("Finished.")

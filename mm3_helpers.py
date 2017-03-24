@@ -1295,7 +1295,7 @@ def segment_image(image):
 
     # Morphological operations
     # tool for transformations
-    tool = morphology.disk(2)
+    tool = morphology.disk(3)
 
     # Opening = erosion then dialation.
     # opening smooths images, breaks isthmuses, and eliminates protrusions.
@@ -1325,11 +1325,11 @@ def segment_image(image):
 
     # threshold distance image
     distance_thresh = np.zeros_like(distance)
-    distance_thresh[distance < 2] = 0
-    distance_thresh[distance >= 2] = 1
+    distance_thresh[distance < 3] = 0
+    distance_thresh[distance >= 3] = 1
 
     # do an extra opening on the distance
-    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(1))
+    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
 
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance_opened)
@@ -1349,7 +1349,7 @@ def segment_image(image):
     # label using the random walker (diffusion watershed) algorithm
     try:
         # set anything outside of OTSU threshold to -1 so it will not be labeled
-        markers[morph == 0] = -1
+        markers[threshholded == 0] = -1
         # here is the main algorithm
         labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
