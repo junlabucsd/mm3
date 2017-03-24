@@ -170,18 +170,18 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs):
 
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
-    plt.show(block=False)
 
     # enter user input
     # ask the user to correct cell/nocell calls
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        plt.show(block=False)
         raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
     else:
         print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
+        plt.show(block=True)
     fig.canvas.mpl_disconnect(cells_handler)
-
     plt.close()
 
     return specs

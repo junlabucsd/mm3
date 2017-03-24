@@ -132,7 +132,7 @@ if __name__ == "__main__":
                         header=True, index=False)
 
     # Save csv in Sattar's format for Igor plotting
-    if False:
+    if True:
         mm3.information('Saving Igor style .txt files of cells.')
         # function which recursivly adds data from a lineage
         def add_lineage_data(Cells, cell_id, cells_df, lineage_df, channel_id=None, cell_age=0):
@@ -140,9 +140,11 @@ if __name__ == "__main__":
             # add the whole cell data to the big table
             # 'FOV_ID', 'channel_ID', 'elongation_rate', 'gen_time', 's_b', 's_d', 'delta'
             # convert this data into a temporary dataframe for appending purposes.
-            current_df = pd.DataFrame([[Cell.fov, channel_id, Cell.elong_rate, Cell.tau, Cell.sb, Cell.sd, Cell.delta, cell_age]],
+            current_df = pd.DataFrame([[Cell.fov, channel_id, Cell.elong_rate, Cell.tau,
+                                        Cell.sb, Cell.sd, Cell.delta, cell_age, Cell.birth_time]],
                                         columns=['FOV_ID', 'channel_ID', 'elongation_rate',
-                                                         'gen_time', 's_b', 's_d', 'delta', 'replicative_age'])
+                                                 'gen_time', 's_b', 's_d', 'delta',
+                                                 'replicative_age', 'wall_time'])
             cells_df = cells_df.append(current_df) # add it as a new row to the dataframe.
 
             # Now add information from every timepoint in this cell to the lineage datframe
@@ -153,15 +155,17 @@ if __name__ == "__main__":
                 div = 1 if i == len(Cell.times)-1 else 0
                 cur_lineage_data.append([cell_age, t, Cell.lengths[i], div, birth])
 
-            cur_lineage_df = pd.DataFrame(cur_lineage_data, columns=['replicative_age', 'lab_time_mins', 'cell_length',
-                                               'division_yes_no', 'birth_yes_no'])
+            cur_lineage_df = pd.DataFrame(cur_lineage_data, columns=['replicative_age',
+                                          'lab_time_mins', 'cell_length',
+                                          'division_yes_no', 'birth_yes_no'])
             lineage_df = lineage_df.append(cur_lineage_df)
 
             # get the daughter which may have kid (always first daughter in list)
             # if this child has a kid, recurse
             if Cell.daughters[0] in Cells:
                 cell_age += 1
-                cells_df, lineage_df = add_lineage_data(Cells, Cell.daughters[0], cells_df, lineage_df, channel_id, cell_age)
+                cells_df, lineage_df = add_lineage_data(Cells, Cell.daughters[0], cells_df,
+                                                        lineage_df, channel_id, cell_age)
 
             # otherwise back out with the data
             return cells_df, lineage_df
