@@ -869,23 +869,7 @@ def cut_slice(image_data, channel_loc):
 
     return channel_slice
 
-# # remove margins of zeros from 2d numpy array
-# def trim_zeros_2d(array):
-#     # make the array equal to the sub array which has columns of all zeros removed
-#     # "all" looks along an axis and says if all of the valuse are such and such for each row or column
-#     # ~ is the inverse operator
-#     # using logical indexing
-#     array = array[~np.all(array == 0, axis = 1)]
-#     # transpose the array
-#     array = array.T
-#     # make the array equal to the sub array which has columns of all zeros removed
-#     array = array[~np.all(array == 0, axis = 1)]
-#     # transpose the array again
-#     array = array.T
-#     # return the array
-#     return array
-
-# calculat cross correlation between pixels in channel stack
+# calculate cross correlation between pixels in channel stack
 def channel_xcorr(fov_id, peak_id):
     '''
     Function calculates the cross correlation of images in a
@@ -923,7 +907,6 @@ def channel_xcorr(fov_id, peak_id):
     return xcorr_array
 
 ### functions about subtraction
-# worker function for doing subtraction
 # average empty channels from stacks, making another TIFF stack
 def average_empties_stack(fov_id, specs):
     '''Takes the fov file name and the peak names of the designated empties,
@@ -1284,6 +1267,12 @@ def segment_image(image):
         Non labeled area should have value zero.
     '''
 
+    # load in segmentation parameters
+    first_opening_size = params['first_opening_size']
+    distance_threshold = params['distance_threshold']
+    second_opening_size = params['second_opening_size']
+    min_object_size = param['min_object_size']
+
     # threshold image
     thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
     threshholded = image > thresh # will create binary image
@@ -1293,14 +1282,10 @@ def segment_image(image):
     # likely on the side of the image
     threshholded = segmentation.clear_border(threshholded)
 
-    # Morphological operations
-    # tool for transformations
-    tool = morphology.disk(3)
-
     # Opening = erosion then dialation.
     # opening smooths images, breaks isthmuses, and eliminates protrusions.
     # "opens" dark gaps between bright features.
-    morph = morphology.binary_opening(threshholded, tool)
+    morph = morphology.binary_opening(threshholded, morphology.disk(first_opening_size))
 
     # if this image is empty at this point (likely if there were no cells), just return
     # the morphed image which is a zero array
@@ -1314,7 +1299,7 @@ def segment_image(image):
     # find highest value, aka width of fattest cell
     max_width = max(line_profile)
     # find indexes of rows where sum is less than 1/5th of this value.
-    zero_these_indicies = np.all([line_profile < (max_width/5), line_profile > 0], axis=0)
+    zero_these_indicies = np.all([line_profile < (max_width/4), line_profile > 0], axis=0)
     zero_these_indicies = np.where(zero_these_indicies)
     # zero out those rows
     morph[zero_these_indicies] = 0
@@ -1325,11 +1310,12 @@ def segment_image(image):
 
     # threshold distance image
     distance_thresh = np.zeros_like(distance)
-    distance_thresh[distance < 3] = 0
-    distance_thresh[distance >= 3] = 1
+    distance_thresh[distance < distance_threshold] = 0
+    distance_thresh[distance >= distance_threshold] = 1
 
     # do an extra opening on the distance
-    distance_opened = morphology.binary_opening(distance_thresh, morphology.disk(2))
+    distance_opened = morphology.binary_opening(distance_thresh,
+                                                morphology.disk(second_opening_size))
 
     # remove artifacts connected to image border
     cleared = segmentation.clear_border(distance_opened)
@@ -1338,7 +1324,7 @@ def segment_image(image):
     # could have used try/except but remove_small_objects loves to issue warnings.
     cleared, label_num = morphology.label(cleared, connectivity=1, return_num=True)
     if label_num > 1:
-        cleared = morphology.remove_small_objects(cleared, min_size=20)
+        cleared = morphology.remove_small_objects(cleared, min_size=min_object_size)
     else:
         # if there are no labels, then just return the cleared image as it is zero
         return cleared # should be zero image if there was only 1 label
@@ -1404,9 +1390,9 @@ def make_lineages_fov(fov_id, specs):
     return Cells
 
 # Creates lineage for a single channel
-def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
+def make_lineage_chnl_stack(fov_and_peak_id):
     '''
-    Create the lineage for a set of segmented images for one channel.
+    Create the lineage for a set of segmented images for one channel. Start by making the regions in the first time points potenial cells. Go forward in time and map regions in the timepoint to the potential cells in previous time points, building the life of a cell. Used basic checks such as the regions should overlap, and grow by a little and not shrink too much. If regions do not link back in time, discard them. If two regions map to one previous region, check if it is a sensible division event.
 
     Parameters
     ----------
@@ -1419,6 +1405,13 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
         A dictionary of all the cells from this lineage, divided and undivided
 
     '''
+
+    # load in parameters
+    # if leaf regions see no action for longer than this, drop them
+    lost_cell_time = params['lost_cell_time']
+    # only cells with y positions below this value will recieve the honor of becoming new
+    # cells, unless they are daughters of current cells
+    new_cell_y_cutoff = params['new_cell_y_cutoff']
 
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
@@ -1469,7 +1462,8 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
                 # create tuple which is cell_id of closest leaf, distance
                 current_closest = (None, 1000) # 1000 is just a large number
 
-                # check this region against all positions
+                # check this region against all positions of all current leaf regions,
+                # find the closest one in y.
                 for leaf in current_leaf_positions:
                     # calculate distance between region and leaf
                     y_dist_region_to_leaf = abs(region.centroid[0] - leaf[1])
@@ -1481,7 +1475,8 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
                 # update map with the closest region
                 leaf_region_map[current_closest[0]].append((r, y_dist_region_to_leaf))
 
-            # limit by the closest two regions if there are three regions to the leaf
+            # go through the current leaf regions.
+            # limit by the closest two current regions if there are three regions to the leaf
             for leaf_id, region_links in leaf_region_map.iteritems():
                 if len(region_links) > 2:
                     closest_two_regions = sorted(region_links, key=lambda x: x[1])[:2]
@@ -1503,7 +1498,8 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
             ### iterate over the leaves, looking to see what regions connect to them.
             for leaf_id, region_links in leaf_region_map.iteritems():
 
-                # their is just one suggested descendant, see if it checks out and append the data
+                # if there is just one suggested descendant,
+                # see if it checks out and append the data
                 if len(region_links) == 1:
                     region = regions[region_links[0][0]] # grab the region from the list
 
@@ -1519,15 +1515,19 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
                     region1 = regions[region_links[0][0]]
                     region2 = regions[region_links[1][0]]
 
-                    # check_division returns 3 if cell divided, 1 if first region is just the cell
-                    # 2 if the second region is the cell, or 0 if it cannot be determined.
+                    # check_division returns 3 if cell divided,
+                    # 1 if first region is just the cell growing and the second is trash
+                    # 2 if the second region is the cell, and the first is trash
+                    # or 0 if it cannot be determined.
                     check_division_result = check_division(Cells[leaf_id], region1, region2)
                     if check_division_result == 3:
                         # create two new cells and divide the mother
                         daughter1_id = create_cell_id(region1, t, peak_id, fov_id)
                         daughter2_id = create_cell_id(region2, t, peak_id, fov_id)
-                        Cells[daughter1_id] = Cell(daughter1_id, region1, t, parent_id=leaf_id)
-                        Cells[daughter2_id] = Cell(daughter2_id, region2, t, parent_id=leaf_id)
+                        Cells[daughter1_id] = Cell(daughter1_id, region1, t,
+                                                   parent_id=leaf_id)
+                        Cells[daughter2_id] = Cell(daughter2_id, region2, t,
+                                                   parent_id=leaf_id)
                         Cells[leaf_id].divide(Cells[daughter1_id], Cells[daughter2_id], t)
 
                         # add the daughter ids to list of current leaves, remove mother
@@ -1544,7 +1544,7 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
                         Cells[leaf_id].grow(region2, t)
 
     # Also save an image of the lineages superimposed on the segmented images
-    if print_lineages:
+    if params['print_lineages']:
         information('Creating lineage image.')
 
         # load subtracted data
@@ -1669,7 +1669,6 @@ def make_lineage_chnl_stack(fov_and_peak_id, print_lineages=False):
 
     # return the dictionary with all the cells
     return Cells
-
 
 # Cell class and related functions
 class Cell():
@@ -1833,29 +1832,16 @@ def cell_growth_func(t, sb, elong_rate):
     return sb+elong_rate*t
 
 # functions for checking if a cell has divided or not
-# parameters for building lineages
-# amount of frames after which a cell is dropped because no
-# new regions linked to it
-lost_cell_time = 3
-
-# these parameters say the max and minimum ammount a cell is allowed
-# to grow by to link a new region to an existing cell
-max_growth_length = 1.2
-min_growth_length = 0.95
-max_growth_area = 1.2
-min_growth_area = 0.95
-
-# only cells with y positions below this value
-# will recieve the honor of becoming new cells,
-# unless they are daughters of current cells
-new_cell_y_cutoff = 200
-
 # this function should also take the variable t to
 # weight the allowed changes by the difference in time as well
 def check_growth_by_region(cell, region):
     '''Checks to see if it makes sense
     to grow a cell by a particular region'''
-    grow = True # default is say go ahead
+    # load parameters for checking
+    max_growth_length = params['max_growth_length']
+    min_growth_length = params['min_growth_length']
+    max_growth_area = params['max_growth_area']
+    min_growth_area = params['min_growth_area']
 
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
@@ -1880,7 +1866,8 @@ def check_growth_by_region(cell, region):
     if lower_quarter > region.centroid[0] or upper_quarter < region.centroid[0]:
         return False
 
-    return grow
+    # return true if you get this far
+    return True
 
 # see if a cell has reasonably divided
 def check_division(cell, region1, region2):
@@ -1891,6 +1878,10 @@ def check_division(cell, region1, region2):
     Return 1 if cell should grow by region 1
     Return 2 if cell should grow by region 2
     Return 3 if cell should divide into the regions.'''
+
+    # load in parameters
+    max_growth_length = params['max_growth_length']
+    min_growth_length = params['min_growth_length']
 
     # see if either region just could be continued growth,
     # if that is the case then just return
@@ -1913,7 +1904,7 @@ def check_division(cell, region1, region2):
 
     # centroids of regions should be in the upper and lower half of the
     # of the mother's bounding box, respectively
-    # bottom cell within top half of mother bounding box
+    # top region within top half of mother bounding box
     if cell.bboxes[-1][0] > region1.centroid[0] or cell.y_positions[-1] < region1.centroid[0]:
         return 0
     # bottom region with bottom half of mother bounding box
