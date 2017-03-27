@@ -2,11 +2,11 @@
 
 This is an overview of how to use mm3. Refer to the individual guides referenced in this document for more specific information about usage and function of each script. This guide is current for March 2017.
 
-mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 Supports reading TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells).
+mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 supports reading TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells). This is done via segmentation of subtracted images and lineage recreation.
 
 ## Workflow
 
-Generally, there is one script for one process. The mm3 library file mm3_helpers.py contains the functions that do the actual heavy lifting. 
+Generally, there is one script for one process. The mm3 library file mm3_helpers.py contains the functions that do the actual heavy lifting.
 
 **Basic workflow is as follows:**
 
