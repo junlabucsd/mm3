@@ -46,7 +46,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_empties = False # use precomputed empties
+    do_empties = True # calculate empties. Otherwise expect them to be there. 
     do_subtraction = True
 
     # get switches and parameters
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Make average empty channels ###############################################################
-    if load_empties:
+    if not do_empties:
         mm3.information("Loading precalculated empties.")
         pass # just skip this part and go to subtraction
 

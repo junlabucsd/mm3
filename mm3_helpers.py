@@ -1271,7 +1271,7 @@ def segment_image(image):
     first_opening_size = params['first_opening_size']
     distance_threshold = params['distance_threshold']
     second_opening_size = params['second_opening_size']
-    min_object_size = param['min_object_size']
+    min_object_size = params['min_object_size']
 
     # threshold image
     thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
