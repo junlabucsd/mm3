@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
-    mm3.information ('Loading experiment parameters.')
+    mm3.information ('Loading experiment parameters and cell data.')
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     ### From here, change flags to True for different data transformations that you want
     # Save complete cells into a dictionary of dictionaries.
-    if True:
+    if False:
         mm3.information('Saving dictionary of cells.')
         # Or just mothers
         Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
@@ -87,14 +87,14 @@ if __name__ == "__main__":
             pprint(Cells_dict, stream=cell_file)
 
     # All cells and mother cells saved to a matlab file.
-    if True:
+    if False:
         mm3.information('Saving .mat file of cells.')
 
         with open(p['cell_dir'] + '/cells.mat', 'wb') as cell_file:
             savemat(cell_file, Cells)
 
     # Save a big .csv of all the cell data (JT's format)
-    if True:
+    if False:
         mm3.information('Saving .csv table of cells.')
 
         Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
@@ -127,7 +127,7 @@ if __name__ == "__main__":
                         header=True, index=False)
 
     # Save csv in Sattar's format for Igor plotting
-    if True:
+    if False:
         mm3.information('Saving Igor style .txt files of cells.')
         # function which recursivly adds data from a lineage
         def add_lineage_data(Cells, cell_id, cells_df, lineage_df, channel_id=None, cell_age=0):
@@ -239,6 +239,7 @@ if __name__ == "__main__":
     if True:
         # regather cells in case previous operations manipulated it
         Cells = mm3.find_mother_cells(Complete_Cells)
+        Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.division_time <=250}
 
         # make a directory to hold these csvs
         plot_dir = p['cell_dir'] + 'plots/'
@@ -277,8 +278,8 @@ if __name__ == "__main__":
         ax[1].set_xlabel('Time [min]', size=20)
         ax[0].set_ylabel('Length [um]', size=20)
         ax[1].set_ylabel('Log(Length [um])', size=20)
-        ax[0].set_ylim([0,10])
-        ax[1].set_ylim([0,10])
+        # ax[0].set_ylim([0,10])
+        # ax[1].set_ylim([0,10])
 
         sns.despine()
         #plt.save
@@ -390,7 +391,7 @@ if __name__ == "__main__":
             ax[i].set_title(label, size=20)
         #     ax[i].get_yaxis().set_ticks([])
             ax[i].set_ylabel(ylabels[i], size=20)
-            ax[i].set_xlim([0,200])
+            # ax[i].set_xlim([0,200])
 
         ax[i].set_xlabel('birth time [min]', size=20)
 
