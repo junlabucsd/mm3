@@ -2,32 +2,31 @@
 from __future__ import print_function
 
 # import modules
-import sys
-import os
-import time
-import inspect
-import yaml
-import json # for importing tiff metdata
+import sys # input, output, errors, and files
+import os # interacting with file systems
+import time # getting time
+import inspect # getting passed parameters
+import yaml # parameter importing
+import json # for importing tiff metadata
 try:
-    import cPickle as pickle # pickle
+    import cPickle as pickle # loading and saving python objects
 except:
     import pickle
-import numpy as np
+import numpy as np # numbers package
 import scipy.signal as spsig # used in channel finding
-import scipy.stats as spstats
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit # fitting elongation rate
 import struct # for interpretting strings as binary data
 import re # regular expressions
-import traceback
-import copy
-import warnings
-import h5py
+import traceback # for error messaging
+import warnings # error messaging
+import copy # not sure this is needed
+import h5py # working with HDF5 files
 
 # Image analysis modules
-from scipy import ndimage as ndi
+from scipy import ndimage as ndi # labeling and distance transform
 from skimage import segmentation # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
-from skimage.filters import threshold_otsu
+from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 
