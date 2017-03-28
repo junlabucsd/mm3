@@ -1,4 +1,4 @@
-# mm3 Overview as of March 2017
+# Description of cell data
 
 When cells are made during lineage creation, the information is stored per cell in an object called Cell. The Cell object is the fundamental unit of data produced by mm3. Every Cell object has a unique identifier (`id`) as well as all the other pertinent information. Below is a description of the information contained in a Cell object and how to export it to other formats. For an overview on classes in Python see [here](https://learnpythonthehardway.org/book/ex40.html).
 
@@ -34,4 +34,4 @@ The following is a list of the attributes of a Cell.
 
 ## Additional data outputs
 
-The default data format save by mm3_Segment.py is a dictionary of these cell objecs, where the keys are each cell id and the values are the object itself. Use the script mm3_OutputData.py to save the data in different ways, such as a Matlab .mat file or .csv. There are also functions/examples there that show how to filter cells (for example, just extracting the mother cells) or filtering by time point. The script is run the same way as the others, but you should manually edit the flags in the script to turn on what you want. There is also some basic plotting functions which require the [Seaborn](https://seaborn.pydata.org/) package. 
+The default data format save by mm3_Segment.py is a dictionary of these cell objecs, where the keys are each cell id and the values are the object itself. Use the script mm3_OutputData.py to save the data in different ways, such as a Matlab .mat file or .csv. There are also functions/examples there that show how to filter cells (for example, just extracting the mother cells) or filtering by time point. The script is run the same way as the others, but you should manually edit the flags in the script to turn on what you want. There is also some basic plotting functions which require the [Seaborn](https://seaborn.pydata.org/) package.
