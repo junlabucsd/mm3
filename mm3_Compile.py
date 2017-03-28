@@ -46,8 +46,8 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    load_metadata = False
-    load_channel_masks = False
+    do_metadata = True
+    do_channel_masks = True
     t_end = None # only analyze images up until this t point
 
     # get switches and parameters
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     analyzed_imgs = {} # for storing get_params pool results.
 
     ### process TIFFs for metadata #################################################################
-    if load_metadata:
+    if not do_metadata:
         mm3.information("Loading image parameters dictionary.")
 
         with open(p['ana_dir'] + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
@@ -175,7 +175,7 @@ if __name__ == "__main__":
         mm3.information('Saved metadata from analyzed images.')
 
     ### Make consensus channel masks and get other shared metadata #################################
-    if load_channel_masks:
+    if not do_channel_masks:
         mm3.information("Loading channel masks dictionary.")
 
         with open(p['ana_dir'] + '/channel_masks.pkl', 'r') as cmask_file:

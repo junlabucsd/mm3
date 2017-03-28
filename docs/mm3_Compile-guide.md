@@ -23,21 +23,18 @@ Run in terminal or iPython session. The -f option is required followed by the pa
 
 Fill out the parameters file normally. Pay special attention to the following:
 
-`TIFF_source` needs to be specified to indicate how the script should look for TIFF metadata. Choices are `elements` and `nd2ToTIFF`.
-
-`channel_width`, `channel_separation`, and `channel_detection_snr`, which are used to help find the channels.
-
-`channel_length_pad` and `channel_width_pad` will increase the size of your channel slices.
+* `TIFF_source` needs to be specified to indicate how the script should look for TIFF metadata. Choices are `elements` and `nd2ToTIFF`.
+* `channel_width`, `channel_separation`, and `channel_detection_snr`, which are used to help find the channels.
+* `channel_length_pad` and `channel_width_pad` will increase the size of your channel slices.
 
 **Hardcoded parameters**
 
 There are few hardcoded parameters at the start of the executable Python script (right after __main__).
 
-* `load_metadata` : Skip determining metadata, load it from the analysis folder.
-* `load_channel_masks` : Skip finding consensus channel masks, load from analysis folder
+* `do_metadata` : Determine metadata. If this is False, it will attempt to load the metadata from a previous run of mm3_Compile.py
+* `do_channel_masks` : Calculate consensus channel masks. Again, if False it will look to load this information.
+* `t_end` : Will only analyze images up to this time point. Useful for debugging.
 
 ## Notes on use
 
 Two types of TIFF files can be handled by this script. One are TIFFs that have been exported by mm3_nd2ToTIFF.py. These TIFFs have their metadata saved in the header of each file. The second is TIFF files which have been exported by Nikon Elements. This TIFF files must be exported as multi-page TIFFs if there are multiple planes (colors).
-
-Note that it draws on many functions from mm3_helpers.

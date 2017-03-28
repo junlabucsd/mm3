@@ -22,19 +22,19 @@ Run in terminal or iPython session. The -f option is required followed by the pa
 
 Fill out the parameters file normally. Pay special attention to the following:
 
-`channel_picking_threshold` is a measure of correlation between a series of images, so a value of 1 would mean the same image over and over. Channels with values above this value (like empty channels) will be designated as empty before the user selection GUI.
+* `channel_picking_threshold` is a measure of correlation between a series of images, so a value of 1 would mean the same image over and over. Channels with values above this value (like empty channels) will be designated as empty before the user selection GUI.
 
 **Hardcoded parameters**
 
 There are few hardcoded parameters at the start of the executable Python script (right after __main__).
 
-* `load_crosscorrs` : Skip determining cross correlations, loaded from file in analysis folder.
-* `do_picking` : Set to `False` if you just want to calculate cross correlations. 
+* `do_crosscorrs` : Determine cross correlations. If False try to load them.
+* `do_picking` : Set to `False` if you just want to calculate cross correlations.
 
 ## Notes on use
 
 When the cross correlations are calculated or loaded, the GUI is then launched. The user is asked to click on the channels to change their designation between analyze (green), empty (blue) and ignore (red).
 
-The GUI shows all the channel for one FOV in columns. The top row has the first image from that channel. The second row has the last image from that channel, colored with the guess of if it is full or empty. The bottom row shows the cross correlation value (X, between 0.9 and 1), across time (Y, 0-100 where 0 is the start of the experiment and 100 is the end).
+The GUI shows all the channel for one FOV in columns. The top row has the first image from that channel. The second row has the last image from that channel, colored with the guess of if it is full or empty. The bottom row shows the cross correlation value (X, between 0.8 and 1), across time (Y, 0-100 where 0 is the start of the experiment and 100 is the end).
 
-Click on the colored channels until they are as you wish, then click back on the terminal and press enter to go to the next FOV. The script will output the specs file with channels indicated as analyzed (green, 1), empty for subtraction (blue, 0), or ignore (red, -1).
+Click on the colored channels until they are as you wish. To go to the next FOV close the window or press enter in the Terminal (depends on Matplotlib version). The script will output the specs file with channels indicated as analyzed (green, 1), empty for subtraction (blue, 0), or ignore (red, -1).

@@ -214,7 +214,7 @@ def preload_images(specs, fov_id_list):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    load_crosscorrs = False
+    do_crosscorrs = True 
     do_picking = True
 
     # get switches and parameters
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
-    if load_crosscorrs: # load precalculate ones if indicated
+    if not do_crosscorrs: # load precalculate ones if indicated
         mm3.information('Loading precalculated cross-correlations.')
 
         with open(ana_dir + 'crosscorrs.pkl', 'r') as xcorrs_file:

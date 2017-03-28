@@ -5,10 +5,10 @@ experiment_name: 'exp_name'
 # root directory for the experiment. Must end in "/"
 experiment_directory: '/path/to/exp/folder/'
 
-# subdirectory for the original TIFs
+# subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
 
-# subdirectory for storing analysis data
+# subdirectory for storing analysis data. This should be in your experiment_directory
 analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to
@@ -54,6 +54,43 @@ channel_width_pad: 10
 # threshold for calling empty/full channels in ChannelPicker
 channel_picking_threshold: 0.97
 
+### segmentaion and lineage creation parameters
+# the radius of the disk that is used in the first morphological opening
+# unit is pixels
+first_opening_size: 2
+
+# pixels closer than this distance to the edge of a cell will be zeroed.
+# unit is pixels
+distance_threshold: 2
+
+# the radius, in pixels, of the size of the disk that is used in the second morphological
+# unit is pixels
+second_opening_size: 0
+
+# markers for potential cells smaller than this area will be zeroed
+# unit is pixels^2
+min_object_size: 20
+
+# boolean for printing out segmentations and lineages over time. This is extremely slow,
+# so only do this a few channels and shorter times. Good for debugging.
+print_lineages: False
+
+# amount of frames after which a cell is dropped because no new regions linked to it
+lost_cell_time: 3
+
+# parameters for the minimum and maximum a region can when linking new regions to
+# existing potential cell
+# Unit is ratio
+max_growth_length: 1.2
+min_growth_length: 0.95
+max_growth_area: 1.2
+min_growth_area: 0.95
+
+# regions only less than this value down the channel from the closed end will be considered
+# to start potential new cells. Does not apply to daughters
+# unit is pixels
+new_cell_y_cutoff: 200
+
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment
 movie_directory: 'movies/'
@@ -66,4 +103,4 @@ image_start: 0
 
 # image end for movie making. If this value exceeds the maximum index value
 # present in an experiment, it will be silently ignored
-image_end: 1000
+image_end: 10000

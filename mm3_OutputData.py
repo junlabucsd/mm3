@@ -52,7 +52,7 @@ if __name__ == "__main__":
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
-    mm3.information ('Loading experiment parameters.')
+    mm3.information ('Loading experiment parameters and cell data.')
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         with open(p['cell_dir'] + '/cells_dict.txt', 'w') as cell_file:
             pprint(Cells_dict, stream=cell_file)
 
-    # All cells and mother cells saved to a matlab file.
+    # Saved to a matlab file.
     if True:
         mm3.information('Saving .mat file of cells.')
 
@@ -239,6 +239,7 @@ if __name__ == "__main__":
     if True:
         # regather cells in case previous operations manipulated it
         Cells = mm3.find_mother_cells(Complete_Cells)
+        Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.division_time <=250}
 
         # make a directory to hold these csvs
         plot_dir = p['cell_dir'] + 'plots/'
@@ -277,8 +278,8 @@ if __name__ == "__main__":
         ax[1].set_xlabel('Time [min]', size=20)
         ax[0].set_ylabel('Length [um]', size=20)
         ax[1].set_ylabel('Log(Length [um])', size=20)
-        ax[0].set_ylim([0,10])
-        ax[1].set_ylim([0,10])
+        # ax[0].set_ylim([0,10])
+        # ax[1].set_ylim([0,10])
 
         sns.despine()
         #plt.save
@@ -390,7 +391,7 @@ if __name__ == "__main__":
             ax[i].set_title(label, size=20)
         #     ax[i].get_yaxis().set_ticks([])
             ax[i].set_ylabel(ylabels[i], size=20)
-            ax[i].set_xlim([0,200])
+            # ax[i].set_xlim([0,200])
 
         ax[i].set_xlabel('birth time [min]', size=20)
 
