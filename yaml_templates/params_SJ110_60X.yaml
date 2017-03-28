@@ -5,10 +5,10 @@ experiment_name: 'exp_name'
 # root directory for the experiment. Must end in "/"
 experiment_directory: '/path/to/exp/folder/'
 
-# subdirectory for the original TIFs
+# subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
 
-# subdirectory for storing analysis data
+# subdirectory for storing analysis data. This should be in your experiment_directory
 analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to
@@ -74,7 +74,7 @@ min_object_size: 20
 # amount of frames after which a cell is dropped because no new regions linked to it
 lost_cell_time: 3
 
-# boolean for printing out segmentations and lineages over time. This is extremly slow,
+# boolean for printing out segmentations and lineages over time. This is extremely slow,
 # so only do this a few channels and shorter times. Good for debugging.
 print_lineages: False
 

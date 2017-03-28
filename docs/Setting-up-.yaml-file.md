@@ -1,6 +1,6 @@
 # Setting up .yaml file
 
-This is a guide for editing the .yaml file prior to analysis. The .yaml file contains information about the location of the images, and where to save output data. It also contains parameters related to the size of the growth channels. There has been an effort to reduce the number of hardcoded parameters in the mm3 scripts, and instead load them from the parameters file. It is thus very important to fill out the parameters file correctly. The script itself is also commented with descriptions of the parameters.
+This is a guide for editing the .yaml file prior to analysis. The .yaml file contains information about the location of the images, and where to save output data. It also contains parameters related to the size of the growth channels (to aid in channel locating) and segmentation. There has been an effort to reduce the number of hardcoded parameters in the mm3 scripts, and instead load them from the parameters file. It is thus very important to fill out the parameters file correctly. The script itself is also commented with descriptions of the parameters.
 
 Not all parameters are used in all scripts, and this can lead to confusing results. An effort here is made to indicate what scripts use which parameters.
 
@@ -48,7 +48,7 @@ mm3 supports saving processed images (sliced, empty, subtracted, and segmented c
 
 This number is needed for creating the time stamps during movie making.
 
-### Indicate conversion factor from pixels to micron
+### Indicate conversion factor from pixels to micron.
 
 `pxl2um: 0.108`
 
@@ -56,7 +56,7 @@ Options 0.065 (100X) or 0.108 (60X)
 
 This number will be used when converting from pixels to microns when curating the cell data.
 
-### Indicate channel orientation
+### Indicate channel orientation.
 
 `image_orientation: 'auto'`
 
@@ -74,7 +74,7 @@ The width of the channel in pixels. Used to help find the channels.
 
 Distance between channels (midpoint to midpoint) in pixels.
 
-### Set pad size around channels for slicing
+### Set pad size around channels for slicing.
 
 `channel_length_pad: 15`
 
@@ -84,17 +84,60 @@ Padding along y in pixels (applied to both ends).
 
 Padding along x in pixels (applied to both sides).
 
-### Signal to noise ratio threshold for channel findings
+### Signal to noise ratio threshold for channel findings.
 
 `channel_detection_snr: 1`
 
 This is used in channel finding. Lower numbers will find more (and possible false) channels. Higher numbers will find less (and possibly miss) channels. This is used by mm3_Compile.py
 
-### Determining empty and full channels based on cross correlation
+### Determining empty and full channels based on cross correlation.
 
 `channel_picking_threshold: 0.97`
 
 This is used by mm3_ChannelPicker.py to help determine if a channel is full or not. It is a measure of correlation between a series of images, so a value of 1 would mean the same image over and over. Channels with values above this value (like empty channels) will be designated as empty before the user selection GUI.
+
+### Set parameters for segmentation.
+
+The following parameters are used in the segmentation of a single subtracted image. Check out the IPython notebook mm3_Segment.ipynb in the notebooks folder for a walkthrough on segmentation. You should edit these based on your experiment, with magnification and cell size determining what values work best.
+
+`first_opening_size: 2`
+
+The radius of the disk that is used in the first morphological opening. Unit is pixels. 3 is good for 100X and 2 is good for 60X
+
+`distance_threshold: 2`
+
+Pixels closer than this distance to the edge of a cell will be zeroed. Unit is pixels. 3 is good for 100X and 2 is good for 60X
+
+`second_opening_size: 0`
+
+The radius, in pixels, of the size of the disk that is used in the second morphological. Unit is pixels. 2 is good for 100X and 0 (no second opening) is good for 60X
+
+`min_object_size: 20`
+
+Markers for potential cells smaller than this area will be zeroed. Unit is pixels^2. 40 is good for 100X and 20 is good for 60X.
+
+### Set parameters for lineage creation.
+
+These parameters have to do with creating cell lineages from segmentations across time. The should not have to be changed between experiments.
+
+`lost_cell_time: 3`
+
+Amount of frames after which a cell is dropped because no new regions linked to it.
+
+`print_lineages: False`
+
+Boolean for printing out segmentations and lineages over time. This is extremely slow, so only do this a few channels and shorter times. Good for debugging.
+
+`max_growth_length: 1.2`
+`min_growth_length: 0.95`
+`max_growth_area: 1.2`
+`min_growth_area: 0.95`
+
+Parameters for the minimum and maximum a region can when linking new regions to existing potential cell. Unit is ratio.
+
+`new_cell_y_cutoff: 200`
+
+Regions only less than this value down the channel from the closed end will be considered to start potential new cells. Does not apply to daughters. Unit is pixels.
 
 ### Set movie making parameters.
 

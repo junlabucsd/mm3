@@ -5,10 +5,10 @@ experiment_name: 'exp_name'
 # root directory for the experiment. Must end in "/"
 experiment_directory: '/path/to/exp/folder/'
 
-# subdirectory for the original TIFs
+# subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
 
-# subdirectory for storing analysis data
+# subdirectory for storing analysis data. This should be in your experiment_directory
 analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to

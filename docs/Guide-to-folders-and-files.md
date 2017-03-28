@@ -12,7 +12,7 @@ Defined in the parameters.yaml file as experimental_directory. Type the whole pa
 
 Some things besides subfolders go directly into your experimental directory. These include:
 
-* parmeters.yaml : This holds a adjustable parameters and file names. Definitely fill this out to the best of your ability before you run any scripts, and better yet determine which parameters are used by each script.
+* parameters.yaml : This holds a adjustable parameters and file names. Definitely fill this out to the best of your ability before you run any scripts, and better yet determine which parameters are used by each script.
 
 ### Image Directory
 
@@ -22,9 +22,9 @@ Defined in the parameters.yaml file as image_directory. Type the path from the e
 
 TIFF files have a specific naming scheme:
 
-`yyyymmdd_experiment_name_t0000xy000c0.tif`
+`experiment_name_t0000xy00.tif` or `experiment_name_t0000xy00c0.tif`
 
-The file postfix, with information about the time point `t`, the FOV number `xy` and the color channel `c` are particularly important. mm3 scripts expect this format when searching and retrieving metadata from image files.
+The file postfix `t0000xy00c0.tif`, with information about the time point `t`, the FOV number `xy` and the color channel `c`, if there is more than one imaging method per time point, are particularly important. mm3 scripts expect this format when searching and retrieving metadata from image files.
 
 ### Analysis Directory
 
@@ -36,7 +36,9 @@ This is where most metadata and processed images go that are accumulated during 
 * crosscorrs.pkl and .txt : Python dictionary that contains image correlation value for channels over time. Used to guess if a channel is full or empty. Same structure as channel_masks. Created by mm3_ChannelPicker.py.
 * specs.pkl and .txt : Python dictionary which is the specifications of channels as full (1), empty (0), or ignore (-1). Same structure as channel_masks. Created by mm3_ChannelPicker.py.
 
-The analysis directory also contains subfolders which contain analyzed data. This includes both the image stacks and the final curated cell data.
+The .txt files are simply a convenience provided for checking the metadata. If you want to manually edit the metadata you must open the .pkl files in a Python session, change them, and resave them.
+
+The analysis directory also contains subfolders which contain analyzed data. This includes both the image stacks and the final curated cell data. These folders are created by the various scripts and do not need to be initialized beforehand.
 
 #### Channel stacks
 
@@ -46,7 +48,7 @@ Contains the sliced and stacked channel information as created by mm3_Compile.py
 
 `experiment_name_xy000_p0000_c1.tif`
 
-Where `experiment_name` is from the parameters file. `xy` is the 3 digit FOV number, `p` is the four digit peak ID (channel ID) and `c` is the single digit color plane. FOV number is 1 indexed, color plane is 1 indexed, and the peak ID comes from the X pixel location of the channel midline in the original TIFF images.
+Where `experiment_name` is from the parameters file. `xy` is the 3 digit FOV number, `p` is the four digit peak ID (channel ID) and `c` is the single digit color plane. FOV number and color plane are 1 indexed, and the peak ID comes from the X pixel location of the channel midline in the original TIFF images.
 
 #### Averaged empty channels
 
@@ -76,10 +78,9 @@ Contains the segmented images as created by mm3_Segment.py. Uses the naming conv
 
 `/experimental_directory/analysis/lineages/`
 
-This optional folder is created if during segmentation you want to create lineage images after segmentation and lineage finding. These images show how the cells grow and are connected to each other over time. Useful for debugging segmentation. Find the flag `print_lineages` in mm3_helpers.py.
+This optional folder is created if during segmentation you want to create lineage images after segmentation and lineage finding. These images show how the cells grow and are connected to each other over time. Useful for debugging segmentation. Find the parameter `print_lineages` in your parameters.yaml file.
 
 `experimental_name_xy000_p0000_lin.png`
-
 
 #### Cell data
 

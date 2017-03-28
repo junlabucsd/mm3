@@ -27,7 +27,7 @@ Fill out the parameters file normally.
 
 There are few hardcoded parameters at the start of the executable Python script (right after __main__).
 
-* `load_empties` : Skip calculating empty channels.
+* `do_empties` : Calculate averaged empty channels. If False attempt to load them.
 * `do_subtraction` : Subtract phase constrast images or not.
 
 ## Notes on use
