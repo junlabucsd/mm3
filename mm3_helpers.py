@@ -1742,6 +1742,7 @@ class Cell():
         self.sd = None # this should be combined lengths of daughters, in um
         self.delta = None
         self.tau = None
+        self.elong_rate = None
         self.sum_cov = None
         self.septum_position = None
 

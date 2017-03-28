@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     ### From here, change flags to True for different data transformations that you want
     # Save complete cells into a dictionary of dictionaries.
-    if False:
+    if True:
         mm3.information('Saving dictionary of cells.')
         # Or just mothers
         Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
@@ -86,15 +86,15 @@ if __name__ == "__main__":
         with open(p['cell_dir'] + '/cells_dict.txt', 'w') as cell_file:
             pprint(Cells_dict, stream=cell_file)
 
-    # All cells and mother cells saved to a matlab file.
-    if False:
+    # Saved to a matlab file.
+    if True:
         mm3.information('Saving .mat file of cells.')
 
         with open(p['cell_dir'] + '/cells.mat', 'wb') as cell_file:
             savemat(cell_file, Cells)
 
     # Save a big .csv of all the cell data (JT's format)
-    if False:
+    if True:
         mm3.information('Saving .csv table of cells.')
 
         Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
@@ -127,7 +127,7 @@ if __name__ == "__main__":
                         header=True, index=False)
 
     # Save csv in Sattar's format for Igor plotting
-    if False:
+    if True:
         mm3.information('Saving Igor style .txt files of cells.')
         # function which recursivly adds data from a lineage
         def add_lineage_data(Cells, cell_id, cells_df, lineage_df, channel_id=None, cell_age=0):

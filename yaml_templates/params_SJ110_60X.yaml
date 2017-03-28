@@ -71,12 +71,12 @@ second_opening_size: 0
 # unit is pixels^2
 min_object_size: 20
 
-# amount of frames after which a cell is dropped because no new regions linked to it
-lost_cell_time: 3
-
 # boolean for printing out segmentations and lineages over time. This is extremely slow,
 # so only do this a few channels and shorter times. Good for debugging.
 print_lineages: False
+
+# amount of frames after which a cell is dropped because no new regions linked to it
+lost_cell_time: 3
 
 # parameters for the minimum and maximum a region can when linking new regions to
 # existing potential cell

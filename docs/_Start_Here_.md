@@ -2,7 +2,7 @@
 
 This is an overview of how to use mm3. Refer to the individual guides referenced in this document for more specific information about usage and function of each script. This guide is current for March 2017.
 
-mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 supports reading TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells). This is done via segmentation of subtracted images and lineage recreation. A parameter (.yaml) file is used to pass parameters specific to the experiment.
+mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 supports reading TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells). This is done via segmentation of subtracted images and lineage recreation. A parameter (.yaml) file is used to pass parameters specific to the experiment to the scripts of mm3.
 
 ## Installation
 
@@ -45,7 +45,7 @@ mm3_Compile.py identifies all growth channels, regardless of if they contain or 
 
 Downstream analysis of phase contrast (brightfield) images requires background subtraction to remove artifacts of the PDMS device in the images. See **mm3_Subtract guide**.
 
-### 7. Segmented images and create cell lineages (mm3_Segment.py).
+### 7. Segment images and create cell lineages (mm3_Segment.py).
 
 mm3 Uses a relies on Otsu thresholding and watershedding algorithms to locate cells from the subtracted images. After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages. See **mm3_Segment guide** for usage and details.
 
@@ -63,3 +63,11 @@ There are some optional and additional processes that you may want to perform ba
 ### Make movies per FOV (mm3_MovieMaker.py).
 
 Though making movies of your data is not strictly required for analysis, it's a good idea to do so! There is a script to make .mpg4 movies from TIFF files. See **mm3_MovieMaker guide** for usage and details.
+
+### Add additional image analysis to cell data (mm3_Colors.py).
+
+The cell data output by mm3_Segment.py contains information about all cells in the experiment, including which images and locations in the images they came from. You can use this to go back to additional image planes (colors) for secondary analysis, such as fluorescence levels or foci detection. mm3_Colors.py provides an example of how to add average fluorescent intensity information to the cell data.
+
+### Output data to various formats (mm3_OutputData.py).
+
+The cell information output by mm3_Segment.py is in the form of a dictionary of Cell objects which describe individual cells. You can use mm3_OutputData.py to both filter that dictionary and to save the data in different formats. See **Cell_data_description** for more information. 
