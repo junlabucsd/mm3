@@ -103,4 +103,5 @@ image_start: 0
 
 # image end for movie making. If this value exceeds the maximum index value
 # present in an experiment, it will be silently ignored
+# This is also used for nd2ToTIFF
 image_end: 10000

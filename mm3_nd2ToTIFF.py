@@ -131,10 +131,10 @@ if __name__ == "__main__":
 
             # extraction range is the time points that will be taken out. Note the indexing,
             # it is zero indexed to grab from nd2, but TIFF naming starts at 1.
-            extraction_range = range(p['image_start'] - 1, p['image_end'] - 0)
+            extraction_range = range(p['image_start'], p['image_end'])
             # if there is more than one FOV (len(nd2f) != 1), make sure the user input
             # last time index is before the actual time index. Ignore it.
-            if len(nd2f) != 1 and len(nd2f) - 1 < p['image_end'] - 0:
+            if len(nd2f) != 1 and len(nd2f) - 1 < p['image_end']:
                 extraction_range = range(0, len(nd2f) - 1)
 
             # loop through time points
