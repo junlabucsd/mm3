@@ -1086,6 +1086,10 @@ def subtract_fov_stack(fov_id, specs):
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
     information("Subtracting %d channels for FOV %d." % (len(ana_peak_ids), fov_id))
 
+    # just break if there are to peaks to analize
+    if not ana_peak_ids:
+        return False
+
     # load images for the peak and get phase images
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
@@ -1362,6 +1366,11 @@ def make_lineages_fov(fov_id, specs):
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
     information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
+
+    # just break if there are to peaks to analize
+    if not ana_peak_ids:
+        # returning empty dictionary will add nothing to current cells dictionary
+        return {}
 
     # This is a list of tuples (fov_id, peak_id) to send to the Pool command
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
