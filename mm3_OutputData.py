@@ -71,6 +71,10 @@ if __name__ == "__main__":
     # Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.birth_time <=200}
     # Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.division_time <=250}
 
+    # Safe cell pickle if filtered.
+    # with open(p['cell_dir'] + '/filtered_cells.pkl', 'wb') as cell_file:
+    #     pickle.dump(Cells, cell_file)
+
     ### From here, change flags to True for different data transformations that you want
     # Save complete cells into a dictionary of dictionaries.
     if True:
