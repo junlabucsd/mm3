@@ -19,8 +19,6 @@ from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
 import h5py
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
 import signal
 
 # user modules
@@ -45,58 +43,22 @@ with warnings.catch_warnings():
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
-# class which responds to file addition events and saves their file names
-class tif_sentinal(PatternMatchingEventHandler):
-    '''tif_sentinal will react to file additions that have .tif at the end.
-    It only looks at file creations, not modifications or deletions.
-    It inherits from the pattern match event handler in watchdog.
-    There are two class attributes, events_filenames and events_buffer.
-    events_filenames is the name of all added .tif files. Use the
-    self.get_filenames method to return all events.
-    events_buffer are just the filenames since last time the buffer was returned
-    use self.get_buffer to return the buffer (which also clears the buffer).
+# this returns the files yet to be processed
+def find_unknown_files(processd_files):
     '''
-    patterns = ["*.tif"]
+    Given a list of processed files, return a sorted list of the files that
+    are in the TIFF directory but have not been processed.
+    '''
 
-    def __init__(self):
-        # Makes sure to do the init function from the parent (super) class first
-        super(tif_sentinal, self).__init__()
-        self.events_filenames = [] # keeps all event filenames
-        self.events_buffer = [] # keeps just event filenames since last call to buf
+    # get all the TIFFs in the folder
+    found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
+    found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
+    found_files = set(found_files) # make a set so we can do comparisons
 
-    def process(self, event):
-        """
-        called when an event (file change) occurs
+    unknown_files = sorted(found_files.difference(processed_files))
 
-        event.event_type
-            'modified' | 'created' | 'moved' | 'deleted'
-        event.is_directory
-            True | False
-        event.src_pquitath
-            path/to/observed/file
-        """
-        filename = event.src_path.split('/')[-1] # get just the file name
-        # append the file name to the class attributes for later retrieving
-        self.events_filenames.append(filename)
-        self.events_buffer.append(filename)
+    return unknown_files
 
-    def get_filenames(self):
-        '''returns all event file names'''
-        return self.events_filenames
-
-    def get_buffer(self):
-        '''returns all events since last call to print buffer'''
-        # make a temporary buffer for printing
-        buf = [x for x in self.events_buffer]
-        self.events_buffer = [] # reset buffer
-        return buf
-
-    # could use this to do something on file modifications
-    # def on_modified(self, event):
-    #     self.process(event)
-
-    def on_created(self, event):
-        self.process(event)
 
 # define function for exting the loop
 def signal_handler(signal, frame):
@@ -318,26 +280,11 @@ if __name__ == "__main__":
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
-    ### Pre watching loop
-    # start the event watcher
-    event_handler = tif_sentinal()
-    # obsever is the class from watchdog which gets system events.
-    observer = Observer()
-    # schedule the sentinal. recursive means look in subfolders in path too
-    observer.schedule(event_handler, p['TIFF_dir'], recursive=True)
-    observer.start() # start it up
-
     # start looking for interupts
     signal.signal(signal.SIGINT, signal_handler)
     interrupted = False
 
-    # intialize known files list and files to be analyzed list
-    # get all the TIFFs in the folder
-    found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
-    found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
-    found_files = set(found_files) # make a set so we can do comparisons
-
-    # first determine known files
+    # first determine processed files
     processed_files = []
     # you can do this by looping through the HDF5 files and looking at the list 'filenames'
     for fov_id in fov_id_list:
@@ -345,19 +292,9 @@ if __name__ == "__main__":
             # add all processed files to a big list
             for filename in h5f[u'filenames']:
                 processed_files.append(str(filename[0]))
-            # fov_filenames = [str(filename) for filename in h5f[u'filenames']]
-            # processed_files += fov_filenames
 
-    # Filter for known and unknown files. found_files should be > processed_files
-    # known files are both in found_files and processed_files. Sort by time
-    known_files = sorted(found_files.intersection(processed_files))
-
-    # unknown files
-    unknown_files = sorted(found_files.difference(processed_files))
-
-    # clear up some memories
-    del processed_files
-    del found_files
+    # now get the files that are new
+    unknown_files = find_unknown_files(processd_files)
 
     ### Now begin watching loop
     while True:
@@ -375,7 +312,7 @@ if __name__ == "__main__":
         process_results = {}
         for fov_id, filenames in images_by_fov.items():
             # only send files to processing if there are more than x images
-            if len(filenames) >= 5:
+            if len(filenames) >= 1:
                 mm3.information('Analyzing %d images for FOV %d.' % (len(filenames), fov_id))
                 # send to multiprocessing
                 process_results[fov_id] = pool.apply_async(process_FOV_images,
@@ -391,18 +328,12 @@ if __name__ == "__main__":
             if result.successful():
                 mm3.information('Processing successful for FOV %d.' % fov_id)
                 for filename in result.get():
-                    known_files.append(filename)
-                    unknown_files.remove(filename)
+                    processed_files.append(filename)
             else:
                 mm3.warning('Processing failed for FOV %d.' % fov_id)
 
         # Check to see if new files have been added to the TIFF folder
-        # add them to the unknown files if so.
-        file_events = event_handler.get_buffer()
-        for filename in file_events:
-            if filename not in known_files:
-                unknown_files.append(filename)
-        unknown_files = sorted(unknown_files)
+        unknown_files = find_unknown_files(processd_files)
 
         mm3.information('Found %d more files.' % len(unknown_files))
 
