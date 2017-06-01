@@ -295,16 +295,16 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
 
-    # create figure, going to apply graphs to each axis sequentially
-    fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[15,5*len(columns)/2], squeeze=False)
-    ax = np.ravel(axes)
-
     # lists for plotting and formatting
     columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
     titles = ['Length at Birth', 'Length at Division', 'Delta',
               'Generation Time', 'Elongation Rate', 'Septum Position']
     ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$','daughter/mother']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
+                            figsize=[15,5*len(columns)/2], squeeze=False)
+    ax = np.ravel(axes)
 
     # binning parameters, should be arguments
     binmin = 5 # minimum bin size to display
