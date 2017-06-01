@@ -32,6 +32,7 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import mm3_helpers as mm3
+import mm3_plots
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -61,43 +62,52 @@ if __name__ == "__main__":
 
     # load cell data dict.
     with open(p['cell_dir'] + 'complete_cells.pkl', 'r') as cell_file:
-        Complete_Cells = pickle.load(cell_file)
+        Cells = pickle.load(cell_file)
 
     ### Filters you may want to apply
-    # Just get the mother cells, as most people only care about those.
-    Cells = mm3.find_mother_cells(Complete_Cells)
+    if True:
+        # Filter based on birth_label. mother cells : label_num=1
+        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1,2,3])
 
-    # before and after a certain time
-    # Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.birth_time <=200}
-    # Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.division_time <=250}
+        # Filter based on birth time point
+        # Cells = mm3_plots.find_cells_born_before(Cells, born_before=1000)
+
+        # Filter based on statistics
+        Cells = mm3_plots.filter_by_stat(Cells, center_stat='mean', std_distance=3)
+
+        # save cell pickle of filtered cells.
+        if False:
+            with open(p['cell_dir'] + 'complete_cells_filtered.pkl', 'wb') as cell_file:
+                pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     ### From here, change flags to True for different data transformations that you want
     # Save complete cells into a dictionary of dictionaries.
-    if True:
+    if False:
         mm3.information('Saving dictionary of cells.')
-        # Or just mothers
-        Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
+        Cells_dict = mm3_plots.cells2dict(Cells)
 
-        # save pickle version.
-        with open(p['cell_dir'] + '/cells_dict.pkl', 'wb') as cell_file:
-            pickle.dump(Cells_dict, cell_file)
+        if False:
+            # save pickle version.
+            with open(p['cell_dir'] + '/cells_dict.pkl', 'wb') as cell_file:
+                pickle.dump(Cells_dict, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        # The text file version of the dictionary is good for easy glancing
-        with open(p['cell_dir'] + '/cells_dict.txt', 'w') as cell_file:
-            pprint(Cells_dict, stream=cell_file)
+        if False:
+            # The text file version of the dictionary is good for easy glancing
+            with open(p['cell_dir'] + '/cells_dict.txt', 'w') as cell_file:
+                pprint(Cells_dict, stream=cell_file)
 
     # Saved to a matlab file.
-    if True:
+    if False:
         mm3.information('Saving .mat file of cells.')
 
-        with open(p['cell_dir'] + '/cells.mat', 'wb') as cell_file:
+        with open(p['cell_dir'] + '/complete_cells.mat', 'wb') as cell_file:
             savemat(cell_file, Cells)
 
     # Save a big .csv of all the cell data (JT's format)
-    if True:
+    if False:
         mm3.information('Saving .csv table of cells.')
 
-        Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
+        Cells_dict = mm3_plots.cells2dict(Cells)
 
         # pandas dataframe wants to be converted from a dict of dicts.
         Cells_df = pd.DataFrame(Cells_dict).transpose() # columns as data types
@@ -123,11 +133,11 @@ if __name__ == "__main__":
         float_columns = ['sb', 'sd', 'delta', 'elong_rate', 'tau', 'septum_position']
         Cells_df[float_columns] = Cells_df[float_columns].astype(np.float)
 
-        Cells_df.to_csv(p['cell_dir'] + 'cells.csv', sep=',', float_format='%.4f',
+        Cells_df.to_csv(p['cell_dir'] + 'complete_cells.csv', sep=',', float_format='%.4f',
                         header=True, index=False)
 
     # Save csv in Sattar's format for Igor plotting
-    if True:
+    if False:
         mm3.information('Saving Igor style .txt files of cells.')
         # function which recursivly adds data from a lineage
         def add_lineage_data(Cells, cell_id, cells_df, lineage_df, channel_id=None, cell_age=0):
@@ -237,170 +247,41 @@ if __name__ == "__main__":
 
     # Some plotting things
     if True:
-        # regather cells in case previous operations manipulated it
-        Cells = mm3.find_mother_cells(Complete_Cells)
-        Cells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.division_time <=250}
+        # This shall use the cells as filtered above.
 
         # make a directory to hold these csvs
         plot_dir = p['cell_dir'] + 'plots/'
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 
-        # import plotting modules
-        import matplotlib as mpl
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import ListedColormap
+        # Data frame is convinient for plotting.
+        Cells_df = mm3_plots.cells2df(Cells)
 
-        font = {'family' : 'normal',
-                'weight' : 'normal',
-                'size'   : 18}
-        mpl.rc('font', **font)
-        mpl.rcParams['figure.figsize'] = 10, 10
-        mpl.rcParams['pdf.fonttype'] = 42
+        mm3.information('Plotting violin plots by FOV.')
+        fig, ax = mm3_plots.violin_fovs(Cells_df)
+        fig.savefig(plot_dir + 'cell_parameters_by_fov.png', dpi=100)
 
-        import matplotlib.pyplot as plt
-        # import matplotlib.patches as mpatches
+        mm3.information('Plotting stats by birth label.')
+        fig, ax = mm3_plots.violin_birth_label(Cells_df)
+        fig.savefig(plot_dir + 'cell_parameters_by_birth_label.png', dpi=100)
 
-        import seaborn as sns
+        mm3.information('Plotting stats over time.')
+        fig, ax = mm3_plots.hex_time_plot(Cells_df, time_mark='birth_time')
+        fig.savefig(plot_dir + 'cell_parameters_over_time.png', dpi=100)
 
-        sns.set(style="ticks", color_codes=True, font_scale=1.25)
+        mm3.information('Plotting traces over time.')
+        fig, ax = mm3_plots.plot_traces(Cells)
+        fig.savefig('./plots/traces.png', dpi=100)
 
-        ### Traces
-        fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
-        ax = axes.flat # same as axes.ravel()
+        mm3.information('Plotting parameter distributions.')
+        fig, ax = mm3_plots.plot_distributions(Cells_df)
+        fig.savefig(plot_dir + 'distributions.png', dpi=100)
 
-        for cell_id, cell in Cells.iteritems():
+        mm3.information('Plotting rescaled parameter ditributions.')
+        fig, ax = mm3_plots.plot_rescaled_distributions(Cells_df)
+        fig.savefig(plot_dir + 'rescaled_distributions.png', dpi=100)
 
-            ax[0].plot(cell.times_w_div, cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
-            ax[1].semilogy(cell.times_w_div, cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
-
-        ax[0].set_title('Cell Length vs Time', size=24)
-        ax[1].set_xlabel('Time [min]', size=20)
-        ax[0].set_ylabel('Length [um]', size=20)
-        ax[1].set_ylabel('Log(Length [um])', size=20)
-        # ax[0].set_ylim([0,10])
-        # ax[1].set_ylim([0,10])
-
-        sns.despine()
-        #plt.save
-        plt.savefig(plot_dir + 'traces.png')
-
-        ### Distributions of filtered parameters
-        labels = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-        xlabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
-
-        fig, axes = plt.subplots(nrows=len(labels), ncols=1, figsize=[15,30], squeeze=False)
-        ax = np.ravel(axes)
-
-        # Make dataframe for plotting variables
-        Cells_dict = {cell_id : vars(cell) for cell_id, cell in Cells.iteritems()}
-        Cells_df = pd.DataFrame(Cells_dict).transpose() # must be transposed so data is in columns
-        Cells_df = Cells_df.sort(columns=['fov', 'peak', 'birth_time', 'birth_label']) # sort for convinience
-        plot_columns = ['sb', 'sd', 'delta', 'elong_rate', 'tau', 'septum_position']
-        plot_df = Cells_df[plot_columns].astype(np.float)
-
-        # Filter the data in plot_df to cells which fall into 3 standard deviations of the mean for all
-        # the six parameters above
-        filters = [] # list of logical indicies
-
-        for i, label in enumerate(labels):
-            current_data = plot_df[label]
-
-            # find mean and standard deviation
-            data_mean = current_data.mean()
-            data_std = current_data.std()
-            data_cv = data_std / data_mean
-            #print('%s, mean=%.3f, std=%.3f, cv=%.3f, n=%d' % (label, data_mean, data_std, data_cv, len(current_data)))
-
-            # constrict range to the mean plus-minus 3std on either side
-            data_range = [data_mean - 3*data_std, data_mean + 3*data_std]
-
-            # filter the data from the smaller range and repeat
-            filters.append(np.logical_and(current_data > data_range[0], current_data < data_range[1]))
-            #print('Cells after filtering = %d' % sum(filters[i]))
-
-        compiled_filter = np.logical_and(filters[0], filters[1])
-        for i in range(2,len(labels)):
-            compiled_filter = np.logical_and(compiled_filter, filters[i])
-        #     print(sum(compiled_filter))
-        filtered_df = plot_df[compiled_filter]
-        #print('There are %d filtered cells' % len(filtered_df))
-        #print('\n')
-
-        # Now plot the filtered data
-        for i, label in enumerate(labels):
-            filtered_data = filtered_df[label]
-
-            # and the new mean and std
-            fil_data_mean = filtered_data.mean()
-            fil_data_std = filtered_data.std()
-            fil_data_cv = fil_data_std / fil_data_mean
-            #print('%s, mean=%.3f, std=%.3f, cv=%.3f' % (label, fil_data_mean, fil_data_std, fil_data_cv))
-
-            fil_data_range = [fil_data_mean - 3*fil_data_std, fil_data_mean + 3*fil_data_std]
-
-            ax[i].hist(filtered_data, bins=22, histtype='step', range=fil_data_range, normed=True, lw=3, alpha=0.75)
-
-            ax[i].set_title(label, size=20)
-            ax[i].set_xlabel(xlabels[i], size=20)
-            ax[i].get_yaxis().set_ticks([])
-            ax[i].set_ylabel('pdf', size=20)
-
-            ax[i].legend(['$\mu$=%.3f, CV=%.2f' % (fil_data_mean, fil_data_cv)], fontsize=14)
-
-        plt.tight_layout()
-        sns.despine()
-        # plt.show()
-        plt.savefig(plot_dir + 'distributions.png')
-
-        ### correlations
-        g = sns.pairplot(filtered_df, kind="reg")
-        # g.map_offdiag(kind='hex')
-
-        # Make title, need a little extra space
-        plt.subplots_adjust(top=0.94)
-        g.fig.suptitle('Correlations and Distributions', size=24)
-
-        for ax in g.axes.flatten():
-            for t in ax.get_xticklabels():
-                t.set(rotation=45)
-
-        plt.savefig(plot_dir + 'correlations.png')
-
-        ### parameters over time
-        labels = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-        ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
-
-        fig, axes = plt.subplots(nrows=len(labels), ncols=1, figsize=[15,30], squeeze=False)
-        ax = np.ravel(axes)
-
-        # Now plot the filtered data
-        for i, label in enumerate(labels):
-
-            columns = ['birth_time', label]
-            time_df = Cells_df[columns]
-            time_df = time_df[columns].apply(pd.to_numeric)
-            time_df = time_df.reset_index()
-            time_df = time_df[columns]
-            time_df.sort_values(by='birth_time', inplace=True)
-
-        #     filtered_data = filtered_df[label]
-
-            ax[i].scatter(time_df['birth_time'], time_df[label])
-
-            ax[i].set_title(label, size=20)
-        #     ax[i].get_yaxis().set_ticks([])
-            ax[i].set_ylabel(ylabels[i], size=20)
-            # ax[i].set_xlim([0,200])
-
-        ax[i].set_xlabel('birth time [min]', size=20)
-
-        # plt.tight_layout()
-
-        # Make title, need a little extra space
-        plt.subplots_adjust(top=0.95)
-        fig.suptitle('Cell Parameters Over Time', size=24)
-
-        sns.despine()
-        # plt.show()
-        plt.savefig(plot_dir + 'time_plots.png')
+        mm3.information('Plotting rescaled parameter correlations.')
+        Cells_df_r = mm3_plots.cells2df(Cells, rescale=True)
+        g = mm3_plots.plot_correlations(Cells_df_r, rescale=True)
+        g.fig.savefig(plot_dir + 'correlations_rescaled.png', dpi=100)
