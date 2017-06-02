@@ -7,6 +7,7 @@ from __future__ import print_function
 import numpy as np
 import scipy.stats as sps
 import pandas as pd
+from random import sample
 
 # plotting modules
 import matplotlib as mpl
@@ -81,6 +82,18 @@ def find_cells_born_before(Cells, born_before=None):
 
     return fCells
 
+def find_cells_born_after(Cells, born_after=None):
+    '''
+    Returns Cells dictionary of cells with a birth_time after the value specified
+    '''
+
+    if born_after == None:
+        return Cells
+
+    fCells = {cell_id : Cell for cell_id, Cell in Cells.iteritems() if Cell.birth_time >= born_after}
+
+    return fCells
+
 def organize_cells_by_channel(Cells, specs):
     '''
     Returns a nested dictionary where the keys are first
@@ -109,10 +122,6 @@ def filter_by_stat(Cells, center_stat='mean', std_distance=3):
     Filters a dictionary of Cells by ensuring all of the 6 major parameters are
     within some number of standard deviations away from either the mean or median
     '''
-
-    # set center stat
-    if center_stat == 'median':
-        center_stat = '50%' # this is how pd.describe calls median
 
     # Calculate stats.
     Cells_df = cells2df(Cells)
@@ -204,6 +213,25 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
     return Continuous_Lineages
 
 ### Statistics and analysis functions ##############################################################
+def stats_table(Cells_df):
+    '''Returns a Pandas dataframe with statistics about the 6 major cell parameters.
+    '''
+
+    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    cell_stats = Cells_df[columns].describe() # This is a nifty function
+
+    # add a CV row
+    CVs = [cell_stats[column]['std'] / cell_stats[column]['mean'] for column in columns]
+    cell_stats = cell_stats.append(pd.Series(CVs, index=columns, name='CV'))
+
+    # reorder and remove rows
+    index_order = ['mean', 'std', 'CV', '50%', 'min', 'max']
+    cell_stats = cell_stats.reindex(index_order)
+
+    # rename 50% to median because I hate that name
+    cell_stats = cell_stats.rename(index={'50%': 'median'})
+
+    return cell_stats
 
 
 ### Plotting functions #############################################################################
@@ -262,7 +290,7 @@ def violin_birth_label(Cells_df):
               'Generation Time', 'Elongation Rate', 'Septum Position']
 
     fig, axes = plt.subplots(nrows=len(columns), ncols=1,
-                            figsize=[15,2.5*len(columns)], squeeze=False)
+                            figsize=[10,2.5*len(columns)], squeeze=False)
     ax = np.ravel(axes)
 
     for i, column in enumerate(columns):
@@ -284,7 +312,6 @@ def violin_birth_label(Cells_df):
     fig.suptitle('Cell Parameters vs Birth Label', size=20)
 
     sns.despine()
-    # plt.show()
 
     return fig, ax
 
@@ -314,13 +341,13 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     # bining parameters for each data type
     # bin_extent in within which bounds should bins go. (left, right, bottom, top)
     if x_extents == None:
-        x_extents = (0, 1500)
+        x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 6),
                       (x_extents[0], x_extents[1], 0, 12),
                       (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 60),
+                      (x_extents[0], x_extents[1], 0, 120),
                       (x_extents[0], x_extents[1], 0, 0.04),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -361,9 +388,76 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     return fig, ax
 
-def plot_traces(Cells):
+def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_window=10):
     '''
-    plot traces of all cells over time
+    Plots the derivtive of the moving average of the cell parameters.
+
+    Parameters
+    ----------
+    time_window : int
+        Time window which the parameters statistic is calculated over
+    '''
+
+    sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
+
+    # lists for plotting and formatting
+    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    titles = ['Length at Birth', 'Length at Division', 'Delta',
+              'Generation Time', 'Elongation Rate', 'Septum Position']
+    ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$','daughter/mother']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
+                            figsize=[15,5*len(columns)/2], squeeze=False)
+    ax = np.ravel(axes)
+
+    # over what times should we calculate stats?
+    if x_extents == None:
+        x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
+
+    # Now plot the filtered data
+    for i, column in enumerate(columns):
+
+        # get out just the data to be plot for one subplot
+        time_df = Cells_df[[time_mark, column]].apply(pd.to_numeric)
+        time_df.sort_values(by=time_mark, inplace=True)
+
+        # graph moving average
+        xlims = x_extents
+        bin_mean, bin_edges, bin_n = sps.binned_statistic(time_df[time_mark], time_df[column],
+                        statistic='mean', bins=np.arange(xlims[0]-1, xlims[1]+1, time_window))
+        bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+        # ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
+
+        mean_diff = np.diff(bin_mean)
+        ax[i].plot(bin_centers[:-1], mean_diff, lw=4, alpha=0.8, color='blue')
+
+        # formatting
+        ax[i].set_title(titles[i], size=18)
+        ax[i].set_ylabel(ylabels[i], size=16)
+
+    ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right')
+    ax[4].set_xlabel('%s [min]' % time_mark, size=16)
+    ax[5].set_xlabel('%s [min]' % time_mark, size=16)
+
+    # Make title, need a little extra space
+    plt.subplots_adjust(top=0.925, hspace=0.25)
+    fig.suptitle('Cell Parameters Over Time', size=24)
+
+    sns.despine()
+
+    return fig, ax
+
+def plot_traces(Cells, trace_limit=1000):
+    '''
+    Plot length traces of all cells over time. Makes two plots in the figure, one a
+    lineag plot, the second log linear.
+
+    Parameters
+    ----------
+    trace_limit : int
+        Limit the number of traces to this value, chosen randomly from the dictionary Cells.
+        Plotting all the traces can be time consuming and mask the trends in the graph.
     '''
 
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
@@ -371,6 +465,10 @@ def plot_traces(Cells):
     ### Traces #################################################################################
     fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
     ax = axes.flat # same as axes.ravel()
+
+    if trace_limit:
+        cell_id_subset = sample(list(Cells), trace_limit)
+        Cells = {cell_id : Cells[cell_id] for cell_id in cell_id_subset}
 
     for cell_id, Cell in Cells.iteritems():
 
