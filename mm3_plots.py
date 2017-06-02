@@ -123,10 +123,6 @@ def filter_by_stat(Cells, center_stat='mean', std_distance=3):
     within some number of standard deviations away from either the mean or median
     '''
 
-    # set center stat
-    if center_stat == 'median':
-        center_stat = '50%' # this is how pd.describe calls median
-
     # Calculate stats.
     Cells_df = cells2df(Cells)
     stats_columns = ['sb', 'sd', 'delta', 'elong_rate', 'tau', 'septum_position']
@@ -217,6 +213,25 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
     return Continuous_Lineages
 
 ### Statistics and analysis functions ##############################################################
+def stats_table(Cells_df):
+    '''Returns a Pandas dataframe with statistics about the 6 major cell parameters.
+    '''
+
+    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    cell_stats = Cells_df[columns].describe() # This is a nifty function
+
+    # add a CV row
+    CVs = [cell_stats[column]['std'] / cell_stats[column]['mean'] for column in columns]
+    cell_stats = cell_stats.append(pd.Series(CVs, index=columns, name='CV'))
+
+    # reorder and remove rows
+    index_order = ['mean', 'std', 'CV', '50%', 'min', 'max']
+    cell_stats = cell_stats.reindex(index_order)
+
+    # rename 50% to median because I hate that name
+    cell_stats = cell_stats.rename(index={'50%': 'median'})
+
+    return cell_stats
 
 
 ### Plotting functions #############################################################################
@@ -297,7 +312,6 @@ def violin_birth_label(Cells_df):
     fig.suptitle('Cell Parameters vs Birth Label', size=20)
 
     sns.despine()
-    # plt.show()
 
     return fig, ax
 
@@ -333,7 +347,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         bin_extents = [(x_extents[0], x_extents[1], 0, 6),
                       (x_extents[0], x_extents[1], 0, 12),
                       (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 90),
+                      (x_extents[0], x_extents[1], 0, 120),
                       (x_extents[0], x_extents[1], 0, 0.04),
                       (x_extents[0], x_extents[1], 0, 1)]
 
