@@ -1790,7 +1790,7 @@ class Cell():
         self.delta = self.sd - self.sb
 
         # generation time
-        self.tau = self.division_time - self.birth_time * params['seconds_per_time_index'] / 60
+        self.tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60
 
         # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
         # include the data points from the daughters
