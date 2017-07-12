@@ -44,7 +44,7 @@ with warnings.catch_warnings():
 import mm3_helpers as mm3
 
 # this returns the files yet to be processed
-def find_unknown_files(processd_files):
+def find_unknown_files(processed_files):
     '''
     Given a list of processed files, return a sorted list of the files that
     are in the TIFF directory but have not been processed.
@@ -294,7 +294,7 @@ if __name__ == "__main__":
                 processed_files.append(str(filename[0]))
 
     # now get the files that are new
-    unknown_files = find_unknown_files(processd_files)
+    unknown_files = find_unknown_files(processed_files)
 
     ### Now begin watching loop
     while True:
