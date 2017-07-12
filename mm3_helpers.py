@@ -567,7 +567,7 @@ def find_channel_locs(image_data):
     chan_snr = params['channel_detection_snr']
 
     # Detect peaks in the x projection (i.e. find the channels)
-    projection_x = image_data.sum(axis=0)
+    projection_x = image_data.sum(axis=0).astype(np.int32)
     # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
     # convolving it with a wave. here the wave is the default wave used by the algorithm
     # but the minimum signal to noise ratio is specified

@@ -333,7 +333,7 @@ if __name__ == "__main__":
                 mm3.warning('Processing failed for FOV %d.' % fov_id)
 
         # Check to see if new files have been added to the TIFF folder
-        unknown_files = find_unknown_files(processd_files)
+        unknown_files = find_unknown_files(processed_files)
 
         mm3.information('Found %d more files.' % len(unknown_files))
 
