@@ -158,8 +158,12 @@ if __name__ == "__main__":
     '''
 
     # hard parameters
-    FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
-    fontface = Face("/Library/Fonts/Andale Mono.ttf")
+    if sys.platform == 'darwin':
+        FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+        fontface = Face("/Library/Fonts/Andale Mono.ttf")
+    elif sys.platform == 'linux2': # Ubuntu (Docker install)
+        FFMPEG_BIN = '/usr/bin/ffmpeg'
+        fontface = Face("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
