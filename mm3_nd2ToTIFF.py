@@ -100,7 +100,7 @@ if __name__ == "__main__":
         p = yaml.safe_load(param_file) # load parameters into dictionary
 
     # assign shorthand directory names
-    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
+    TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
 
     # set up image and analysis folders if they do not already exist
     if not os.path.exists(TIFF_dir):
@@ -108,10 +108,11 @@ if __name__ == "__main__":
 
     # Load ND2 files into a list for processing
     if len(external_directory) > 0:
-        nd2files = glob.glob(external_directory + "*.nd2")
+        nd2files = os.path.join(glob.glob(external_directory, "*.nd2"))
         information("Found %d files to analyze from external file." % len(nd2files))
     else:
-        nd2files = glob.glob(p['experiment_directory'] + "*.nd2")
+        print("external directory: {:s}".format(p['experiment_directory']))
+        nd2files = glob.glob(os.path.join(p['experiment_directory'],"*.nd2"))
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
@@ -194,18 +195,18 @@ if __name__ == "__main__":
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(TIFF_dir + tif_filename, image_data_one, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
 
                             # cut and save bottom row
                             fov += 1 # add one to naming of FOV
                             metadata_t['fov'] = fov # update metdata
                             metadata_json = json.dumps(metadata_t)
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(TIFF_dir + tif_filename, image_data_two, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
 
                             # increase FOV counter
                             fov += 1
@@ -215,7 +216,7 @@ if __name__ == "__main__":
                     # save the tiff
                     tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                     information('Saving %s.' % tif_filename)
-                    tiff.imsave(TIFF_dir + tif_filename, image_data, description=metadata_json,
+                    tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json,
                                 compress=tif_compress)
 
                     # increase FOV counter
