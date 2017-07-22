@@ -84,14 +84,14 @@ def init_mm3_helpers(param_file_path):
     params['num_analyzers'] = cpu_count*2 - 2
 
     # useful folder shorthands for opening files
-    params['TIFF_dir'] = params['experiment_directory'] + params['image_directory']
-    params['ana_dir'] = params['experiment_directory'] + params['analysis_directory']
-    params['hdf5_dir'] = params['ana_dir'] + 'hdf5/'
-    params['chnl_dir'] = params['ana_dir'] + 'channels/'
-    params['empty_dir'] = params['ana_dir'] + 'empties/'
-    params['sub_dir'] = params['ana_dir'] + 'subtracted/'
-    params['seg_dir'] = params['ana_dir'] + 'segmented/'
-    params['cell_dir'] = params['ana_dir'] + 'cell_data/'
+    params['TIFF_dir'] = os.path.join(params['experiment_directory'], params['image_directory'])
+    params['ana_dir'] = os.path.join(params['experiment_directory'],params['analysis_directory'])
+    params['hdf5_dir'] = os.path.join(params['ana_dir'], 'hdf5')
+    params['chnl_dir'] = os.path.join(params['ana_dir'],'channels')
+    params['empty_dir'] = os.path.join(params['ana_dir'],'empties')
+    params['sub_dir'] = os.path.join(params['ana_dir'],'subtracted')
+    params['seg_dir'] = os.path.join(params['ana_dir'],'segmented')
+    params['cell_dir'] = os.path.join(params['ana_dir'],'cell_data')
 
     return params
 
@@ -127,11 +127,11 @@ def load_stack(fov_id, peak_id, color='c1'):
         if params['output'] == 'TIFF':
             img_filename = params['experiment_name'] + '_xy%03d_%s.tif' % (fov_id, color)
 
-            with tiff.TiffFile(params['empty_dir'] + img_filename) as tif:
+            with tiff.TiffFile(os.path.join(params['empty_dir'],img_filename)) as tif:
                 img_stack = tif.asarray()
 
         if params['output'] == 'HDF5':
-            with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
+            with h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r') as h5f:
                 img_stack = h5f['empty_channel'][:]
 
         return img_stack
@@ -147,11 +147,11 @@ def load_stack(fov_id, peak_id, color='c1'):
 
         img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, color)
 
-        with tiff.TiffFile(img_dir + img_filename) as tif:
+        with tiff.TiffFile(os.path.join(img_dir,img_filename)) as tif:
             img_stack = tif.asarray()
 
     if params['output'] == 'HDF5':
-        with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
+        with h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r') as h5f:
             # normal naming
             # need to use [:] to get a copy, else it references the closed hdf5 dataset
             img_stack = h5f['channel_%04d/p%04d_%s' % (peak_id, peak_id, color)][:]
@@ -186,7 +186,7 @@ def get_tif_params(image_filename, find_channels=True):
 
     try:
         # open up file and get metadata
-        with tiff.TiffFile(params['TIFF_dir'] + image_filename) as tif:
+        with tiff.TiffFile(os.path.join(params['TIFF_dir'],image_filename)) as tif:
             image_data = tif.asarray()
 
             if params['TIFF_source'] == 'elements':
@@ -214,7 +214,7 @@ def get_tif_params(image_filename, find_channels=True):
         information('Analyzed %s' % image_filename)
 
         # return the file name, the data for the channels in that image, and the metadata
-        return {'filepath': params['TIFF_dir'] + image_filename,
+        return {'filepath': os.path.join(params['TIFF_dir'],image_filename),
                 'fov' : image_metadata['fov'], # fov id
                 't' : image_metadata['t'], # time point
                 'jd' : image_metadata['jd'], # absolute julian time
@@ -229,7 +229,7 @@ def get_tif_params(image_filename, find_channels=True):
         print(sys.exc_info()[0])
         print(sys.exc_info()[1])
         print(traceback.print_tb(sys.exc_info()[2]))
-        return {'filepath': TIFF_dir + image_filename, 'analyze_success': False}
+        return {'filepath': os.path.join(TIFF_dir,image_filename), 'analyze_success': False}
 
 # finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
@@ -427,7 +427,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         for color_index in range(channel_stack.shape[3]):
             # this is the filename for the channel
             # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = params['chnl_dir'] + params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1)
+            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1))
             # save stack
             tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
 
@@ -492,7 +492,7 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
     image_fov_stack = np.stack(image_fov_stack, axis=0)
 
     # create the HDF5 file for the FOV, first time this is being done.
-    with h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'w', libver='earliest') as h5f:
+    with h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'w', libver='earliest') as h5f:
 
         # add in metadata for this FOV
         # these attributes should be common for all channel
@@ -983,10 +983,10 @@ def average_empties_stack(fov_id, specs):
     if params['output'] == 'TIFF':
         # make new name and save it
         empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
-        tiff.imsave(params['empty_dir'] + empty_filename, avg_empty_stack, compress=4)
+        tiff.imsave(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compress=4)
 
     if params['output'] == 'HDF5':
-        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+        h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
 
         # delete the dataset if it exists (important for debug)
         if 'empty_channel' in h5f:
@@ -1118,10 +1118,10 @@ def subtract_fov_stack(fov_id, specs):
         # save out the subtracted stack
         if params['output'] == 'TIFF':
             sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
-            tiff.imsave(params['sub_dir'] + sub_filename, subtracted_stack, compress=4) # save it
+            tiff.imsave(os.path.join(params['sub_dir'],sub_filename), subtracted_stack, compress=4) # save it
 
         if params['output'] == 'HDF5':
-            h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+            h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
 
             # put subtracted channel in correct group
             h5g = h5f['channel_%04d' % peak_id]
@@ -1233,11 +1233,11 @@ def segment_chnl_stack(fov_id, peak_id):
     # save out the subtracted stack
     if params['output'] == 'TIFF':
         seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-        tiff.imsave(params['seg_dir'] + seg_filename,
+        tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
                     segmented_imgs.astype('uint16'), compress=4)
 
     if params['output'] == 'HDF5':
-        h5f = h5py.File(params['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+        h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
 
         # put segmented channel in correct group
         h5g = h5f['channel_%04d' % peak_id]
@@ -1667,11 +1667,11 @@ def make_lineage_chnl_stack(fov_and_peak_id):
         #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
 
             # save image to segmentation subfolder
-            lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
+            lin_dir = os.path.join(params['experiment_directory'],params['analysis_directory'],'lineages')
             if not os.path.exists(lin_dir):
                 os.makedirs(lin_dir)
             lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
-            lin_filepath = lin_dir + lin_filename
+            lin_filepath = os.path.join(lin_dir,lin_filename)
             fig.savefig(lin_filepath, dpi=75)
             plt.close()
 

@@ -97,14 +97,14 @@ if __name__ == "__main__":
     if not do_metadata:
         mm3.information("Loading image parameters dictionary.")
 
-        with open(p['ana_dir'] + '/TIFF_metadata.pkl', 'r') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'r') as tiff_metadata:
             analyzed_imgs = pickle.load(tiff_metadata)
 
     else:
         mm3.information("Finding image parameters.")
 
         # get all the TIFFs in the folder
-        found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
+        found_files = glob.glob(os.path.join(p['TIFF_dir'],'*.tif')) # get all tiffs
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
@@ -168,9 +168,9 @@ if __name__ == "__main__":
 
         # save metadata to a .pkl and a human readable txt file
         mm3.information('Saving metadata from analyzed images...')
-        with open(p['ana_dir'] + '/TIFF_metadata.pkl', 'wb') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'],'TIFF_metadata.pkl'), 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata)
-        with open(p['ana_dir'] + '/TIFF_metadata.txt', 'w') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'],'TIFF_metadata.txt'), 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
         mm3.information('Saved metadata from analyzed images.')
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     if not do_channel_masks:
         mm3.information("Loading channel masks dictionary.")
 
-        with open(p['ana_dir'] + '/channel_masks.pkl', 'r') as cmask_file:
+        with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
 
     else:
@@ -188,9 +188,9 @@ if __name__ == "__main__":
         channel_masks = mm3.make_masks(analyzed_imgs)
 
         #save the channel mask dictionary to a pickle and a text file
-        with open(p['ana_dir'] + '/channel_masks.pkl', 'wb') as cmask_file:
+        with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'wb') as cmask_file:
             pickle.dump(channel_masks, cmask_file)
-        with open(p['ana_dir'] + '/channel_masks.txt', 'w') as cmask_file:
+        with open(os.path.join(p['ana_dir'],'channel_masks.txt'), 'w') as cmask_file:
             pprint(channel_masks, stream=cmask_file)
 
         mm3.information("Channel masks saved.")

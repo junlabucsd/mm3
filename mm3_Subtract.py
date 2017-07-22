@@ -46,7 +46,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    do_empties = True # calculate empties. Otherwise expect them to be there. 
+    do_empties = True # calculate empties. Otherwise expect them to be there.
     do_subtraction = True
 
     # get switches and parameters
@@ -86,7 +86,7 @@ if __name__ == "__main__":
             os.makedirs(p['sub_dir'])
 
     # load specs file
-    with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
         specs = pickle.load(specs_file)
 
     # make list of FOVs to process (keys of specs file)
