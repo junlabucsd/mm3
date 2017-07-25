@@ -70,6 +70,25 @@ def find_cells_of_birth_label(Cells, label_num=1):
 
     return fCells
 
+def find_cells_of_fov(Cells, FOVs=[]):
+    '''Return only cells from certain FOVs.
+
+    Parameters
+    ----------
+    FOVs : int or list of ints
+    '''
+
+    fCells = {} # f is for filtered
+
+    if type(FOVs) is int:
+        FOVs = [FOVs]
+
+    for cell_id in Cells:
+        if Cells[cell_id].fov in FOVs:
+            fCells[cell_id] = Cells[cell_id]
+
+    return fCells
+
 def find_cells_born_before(Cells, born_before=None):
     '''
     Returns Cells dictionary of cells with a birth_time before the value specified
