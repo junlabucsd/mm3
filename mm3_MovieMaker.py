@@ -1,5 +1,6 @@
 #!/usr/bin/python
 from __future__ import print_function
+from subprocess import check_output
 def warning(*objs):
     print(time.strftime("%H:%M:%S Error:", time.localtime()), *objs, file=sys.stderr)
 def information(*objs):
@@ -158,12 +159,14 @@ if __name__ == "__main__":
     '''
 
     # hard parameters
-    if sys.platform == 'darwin':
-        FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
-        fontface = Face("/Library/Fonts/Andale Mono.ttf")
-    elif sys.platform == 'linux2': # Ubuntu (Docker install)
-        FFMPEG_BIN = '/usr/bin/ffmpeg'
-        fontface = Face("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
+    FFMPEG_BIN = check_output("which ffmpeg", shell=True).replace('\n','')
+    #FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+    fontfile="/Library/Fonts/Andale Mono.ttf"    # Mac OS location
+    if not os.path.isfile(fontfile):
+        fontfile="/usr/share/fonts/truetype/freefont/FreeMono.ttf"  # Linux Ubuntu 16.04 location
+        if not os.path.isfile(fontfile):
+            sys.exit("You need to install some fonts and specify the correct path to the .ttf file!")
+    fontface = Face(fontfile)
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -196,8 +199,8 @@ if __name__ == "__main__":
         p = yaml.load(pfile)
 
     # assign shorthand directory names
-    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
-    movie_dir = p['experiment_directory'] + p['movie_directory']
+    TIFF_dir = os.path.join(p['experiment_directory'],p['image_directory']) # source of images
+    movie_dir = os.path.join(p['experiment_directory'],p['movie_directory'])
 
     # set up movie folder if it does not already exist
     if not os.path.exists(movie_dir):
@@ -205,7 +208,7 @@ if __name__ == "__main__":
 
     # find FOV list
     fov_list = [] # list will hold integers which correspond to FOV ids
-    fov_images = glob.glob(TIFF_dir + '*.tif')
+    fov_images = glob.glob(os.path.join(TIFF_dir,'*.tif'))
     for image_name in fov_images:
         # add FOV number from filename to list
         fov_list.append(int(image_name.split('xy')[1].split('.tif')[0]))
@@ -223,9 +226,9 @@ if __name__ == "__main__":
             continue
 
         # grab the images for this fov
-        images = glob.glob(TIFF_dir + '*xy%03d*.tif' % (fov))
+        images = glob.glob(os.path.join(TIFF_dir,'*xy%03d*.tif' % (fov)))
         if len(images) == 0:
-            images = glob.glob(TIFF_dir + '*xy%02d*.tif' % (fov)) # for filenames with 2 digit FOV
+            images = glob.glob(os.path.join(TIFF_dir,'*xy%02d*.tif' % (fov))) # for filenames with 2 digit FOV
         if len(images) == 0:
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
@@ -263,7 +266,7 @@ if __name__ == "__main__":
                 #'-bufsize', '300k',
 
                 # set the movie name
-                movie_dir + p['experiment_name'] + '_xy%03d.mp4' % fov]
+                os.path.join(movie_dir,p['experiment_name']+'_xy%03d.mp4' % fov)]
 
         information('Writing movie for FOV %d.' % fov)
 

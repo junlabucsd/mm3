@@ -51,7 +51,7 @@ def find_unknown_files(processed_files):
     '''
 
     # get all the TIFFs in the folder
-    found_files = glob.glob(p['TIFF_dir'] + '*.tif') # get all tiffs
+    found_files = glob.glob(os.path.join(p['TIFF_dir'],'*.tif')) # get all tiffs
     found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
     found_files = set(found_files) # make a set so we can do comparisons
 
@@ -83,7 +83,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
     mm3.information('Loading images and collecting metadata for FOV %d' % fov_id)
     for filename in filenames:
         # load image
-        with tiff.TiffFile(p['TIFF_dir'] + filename) as tif:
+        with tiff.TiffFile(os.path.join(p['TIFF_dir'],filename)) as tif:
             image_data = tif.asarray()
 
         # channel finding was also done on images after orientation was fixed
@@ -198,7 +198,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
 
     # Save everything to HDF5
     mm3.information('Saving to HDF5 for FOV %d' % fov_id)
-    h5f = h5py.File(p['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r+')
+    h5f = h5py.File(os.path.join(p['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
 
     # new length, current length plus how many images we are adding now
     old_length = h5f[u'filenames'].shape[0]
@@ -270,11 +270,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     # Load the channel_masks file
-    with open(p['ana_dir'] + '/channel_masks.pkl', 'r') as cmask_file:
+    with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
         channel_masks = pickle.load(cmask_file)
 
     # Load specs file
-    with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
         specs = pickle.load(specs_file)
 
     # make list of FOVs to process (keys of specs file)
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     processed_files = []
     # you can do this by looping through the HDF5 files and looking at the list 'filenames'
     for fov_id in fov_id_list:
-        with h5py.File(p['hdf5_dir'] + 'xy%03d.hdf5' % fov_id, 'r') as h5f:
+        with h5py.File(os.path.join(p['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r') as h5f:
             # add all processed files to a big list
             for filename in h5f[u'filenames']:
                 processed_files.append(str(filename[0]))

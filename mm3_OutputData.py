@@ -57,11 +57,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
-    with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
         specs = pickle.load(specs_file)
 
     # load cell data dict.
-    with open(p['cell_dir'] + 'complete_cells.pkl', 'r') as cell_file:
+    with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'r') as cell_file:
         Cells = pickle.load(cell_file)
 
     ### Filters you may want to apply
@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
         # save cell pickle of filtered cells.
         if False:
-            with open(p['cell_dir'] + 'complete_cells_filtered.pkl', 'wb') as cell_file:
+            with open(os.path.join(p['cell_dir'],'complete_cells_filtered.pkl'), 'wb') as cell_file:
                 pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     ### From here, change flags to True for different data transformations that you want
@@ -88,19 +88,19 @@ if __name__ == "__main__":
 
         if False:
             # save pickle version.
-            with open(p['cell_dir'] + '/cells_dict.pkl', 'wb') as cell_file:
+            with open(os.path.join(p['cell_dir'],'/cells_dict.pkl'), 'wb') as cell_file:
                 pickle.dump(Cells_dict, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         if False:
             # The text file version of the dictionary is good for easy glancing
-            with open(p['cell_dir'] + '/cells_dict.txt', 'w') as cell_file:
+            with open(os.path.join(p['cell_dir'],'/cells_dict.txt'), 'w') as cell_file:
                 pprint(Cells_dict, stream=cell_file)
 
     # Saved to a matlab file.
     if False:
         mm3.information('Saving .mat file of cells.')
 
-        with open(p['cell_dir'] + '/complete_cells.mat', 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'],'/complete_cells.mat'), 'wb') as cell_file:
             savemat(cell_file, Cells)
 
     # Save a big .csv of all the cell data (JT's format)
@@ -133,7 +133,7 @@ if __name__ == "__main__":
         float_columns = ['sb', 'sd', 'delta', 'elong_rate', 'tau', 'septum_position']
         Cells_df[float_columns] = Cells_df[float_columns].astype(np.float)
 
-        Cells_df.to_csv(p['cell_dir'] + 'complete_cells.csv', sep=',', float_format='%.4f',
+        Cells_df.to_csv(os.path.join(p['cell_dir'],'complete_cells.csv'), sep=',', float_format='%.4f',
                         header=True, index=False)
 
     # Save csv in Sattar's format for Igor plotting
@@ -176,7 +176,7 @@ if __name__ == "__main__":
             return cells_df, lineage_df
 
         # make a directory to hold these csvs
-        igor_dir = p['cell_dir'] + 'igor_csvs/'
+        igor_dir = os.path.join(p['cell_dir'],'igor_csvs')
         if not os.path.exists(igor_dir):
             os.makedirs(igor_dir)
 
@@ -228,7 +228,7 @@ if __name__ == "__main__":
                     lineage_df[int_columns] = lineage_df[int_columns].astype(np.int)
 
                     # save it
-                    lineage_filepath = igor_dir + p['experiment_name'] + '_FOV%02d_Ch%03d.txt' % (fov_id, channel_id)
+                    lineage_filepath = os.path.join(igor_dir,p['experiment_name'] + '_FOV%02d_Ch%03d.txt' % (fov_id, channel_id))
                     lineage_df.to_csv(lineage_filepath, sep='\t', float_format='%.4f',
                                         header=True, index=False)
                 # update channel id
@@ -241,7 +241,7 @@ if __name__ == "__main__":
         cells_df[int_columns] = cells_df[int_columns].astype(np.int)
 
         # save em
-        cells_df_filepath = igor_dir + p['experiment_name'] + '_data.txt'
+        cells_df_filepath = os.path.join(igor_dir,p['experiment_name'] + '_data.txt')
         cells_df.to_csv(cells_df_filepath, sep='\t', float_format='%.4f',
                             header=True, index=False)
 
@@ -250,7 +250,7 @@ if __name__ == "__main__":
         # This shall use the cells as filtered above.
 
         # make a directory to hold these csvs
-        plot_dir = p['cell_dir'] + 'plots/'
+        plot_dir = os.path.join(p['cell_dir'],'plots')
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 
@@ -259,29 +259,29 @@ if __name__ == "__main__":
 
         mm3.information('Plotting violin plots by FOV.')
         fig, ax = mm3_plots.violin_fovs(Cells_df)
-        fig.savefig(plot_dir + 'cell_parameters_by_fov.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'cell_parameters_by_fov.png'), dpi=100)
 
         mm3.information('Plotting stats by birth label.')
         fig, ax = mm3_plots.violin_birth_label(Cells_df)
-        fig.savefig(plot_dir + 'cell_parameters_by_birth_label.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'cell_parameters_by_birth_label.png'), dpi=100)
 
         mm3.information('Plotting stats over time.')
         fig, ax = mm3_plots.hex_time_plot(Cells_df, time_mark='birth_time')
-        fig.savefig(plot_dir + 'cell_parameters_over_time.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'cell_parameters_over_time.png'), dpi=100)
 
         mm3.information('Plotting traces over time.')
         fig, ax = mm3_plots.plot_traces(Cells)
-        fig.savefig('./plots/traces.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'traces.png'), dpi=100)
 
         mm3.information('Plotting parameter distributions.')
         fig, ax = mm3_plots.plot_distributions(Cells_df)
-        fig.savefig(plot_dir + 'distributions.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'distributions.png'), dpi=100)
 
         mm3.information('Plotting rescaled parameter ditributions.')
         fig, ax = mm3_plots.plot_rescaled_distributions(Cells_df)
-        fig.savefig(plot_dir + 'rescaled_distributions.png', dpi=100)
+        fig.savefig(os.path.join(plot_dir,'rescaled_distributions.png'), dpi=100)
 
         mm3.information('Plotting rescaled parameter correlations.')
         Cells_df_r = mm3_plots.cells2df(Cells, rescale=True)
         g = mm3_plots.plot_correlations(Cells_df_r, rescale=True)
-        g.fig.savefig(plot_dir + 'correlations_rescaled.png', dpi=100)
+        g.fig.savefig(os.path.join(plot_dir,'correlations_rescaled.png'), dpi=100)

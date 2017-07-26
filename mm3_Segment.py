@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     # load specs file
     try:
-        with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
             specs = pickle.load(specs_file)
     except:
         mm3.warning('Could not load specs file.')
@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
-        with open(p['cell_dir'] + '/complete_cells.pkl', 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving cell data.")

@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
     # load specs file
     try:
-        with open(p['ana_dir'] + '/specs.pkl', 'r') as specs_file:
+        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
             specs = pickle.load(specs_file)
     except:
         warning('Could not load specs file.')
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     information("Processing %d FOVs." % len(fov_id_list))
 
     # load cell data dict
-    with open(p['cell_dir'] + 'complete_cells.pkl', 'r') as cell_file:
+    with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'r') as cell_file:
         Complete_Cells = pickle.load(cell_file)
 
     # create dictionary which organizes cells by fov and peak_id
@@ -108,5 +108,5 @@ if __name__ == "__main__":
 
     # save the data out again
     # Just the complete cells, those with mother and daugther
-    with open(p['cell_dir']+ '/complete_cells_fl.pkl', 'wb') as cell_file:
+    with open(os.path.join(p['cell_dir'],'complete_cells_fl.pkl'), 'wb') as cell_file:
         pickle.dump(Complete_Cells, cell_file)

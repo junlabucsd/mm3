@@ -214,7 +214,7 @@ def preload_images(specs, fov_id_list):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    do_crosscorrs = True 
+    do_crosscorrs = True
     do_picking = True
 
     # get switches and parameters
@@ -253,13 +253,13 @@ if __name__ == "__main__":
     num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
-    ana_dir = p['experiment_directory'] + p['analysis_directory']
-    chnl_dir = p['experiment_directory'] + p['analysis_directory'] + 'channels/'
-    hdf5_dir = p['experiment_directory'] + p['analysis_directory'] + 'hdf5/'
+    ana_dir = os.path.join(p['experiment_directory'],p['analysis_directory'])
+    chnl_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'channels')
+    hdf5_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'hdf5')
 
     # load channel masks
     try:
-        with open(ana_dir + '/channel_masks.pkl', 'r') as cmask_file:
+        with open(os.path.join(ana_dir,'channel_masks.pkl'), 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
     except:
         mm3.warning('Could not load channel mask file.')
@@ -278,7 +278,7 @@ if __name__ == "__main__":
     if not do_crosscorrs: # load precalculate ones if indicated
         mm3.information('Loading precalculated cross-correlations.')
 
-        with open(ana_dir + 'crosscorrs.pkl', 'r') as xcorrs_file:
+        with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
             crosscorrs = pickle.load(xcorrs_file)
 
     else:
@@ -327,9 +327,9 @@ if __name__ == "__main__":
 
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
-        with open(ana_dir+ "/crosscorrs.pkl", 'w') as xcorrs_file:
+        with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'w') as xcorrs_file:
             pickle.dump(crosscorrs, xcorrs_file)
-        with open(ana_dir + "/crosscorrs.txt", 'w') as xcorrs_file:
+        with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")
 
@@ -362,9 +362,9 @@ if __name__ == "__main__":
 
         # write specfications to pickle and text
         mm3.information("Writing specifications file.")
-        with open(ana_dir+ "/specs.pkl", 'w') as specs_file:
+        with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
             pickle.dump(specs, specs_file)
-        with open(ana_dir + "/specs.txt", 'w') as specs_file:
+        with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
             pprint(specs, stream=specs_file)
 
         mm3.information("Finished.")
