@@ -161,9 +161,9 @@ if __name__ == "__main__":
     # hard parameters
     FFMPEG_BIN = check_output("which ffmpeg", shell=True).replace('\n','')
     #FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
-    fontfile="/Library/Fonts/Andale Mono.ttf"    # Mac OS location
+    fontfile = "/Library/Fonts/Andale Mono.ttf"    # Mac OS location
     if not os.path.isfile(fontfile):
-        fontfile="/usr/share/fonts/truetype/freefont/FreeMono.ttf"  # Linux Ubuntu 16.04 location
+        fontfile = "/usr/share/fonts/truetype/freefont/FreeMono.ttf"  # Linux Ubuntu 16.04 location
         if not os.path.isfile(fontfile):
             sys.exit("You need to install some fonts and specify the correct path to the .ttf file!")
     fontface = Face(fontfile)

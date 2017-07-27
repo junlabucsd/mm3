@@ -104,17 +104,17 @@ if __name__ == "__main__":
         pass # just skip this part and go to subtraction
 
     else:
-        mm3.information("Calculating averaged empties.")
+        mm3.information("Calculating phase averaged empties.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            averaging_result = mm3.average_empties_stack(fov_id, specs)
+            averaging_result = mm3.average_empties_stack(fov_id, specs, color=p['phase_plane'])
 
     ### Subtract ##################################################################################
     if do_subtraction:
         mm3.information("Subtracting channels.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            subtraction_result = mm3.subtract_fov_stack(fov_id, specs)
+            subtraction_result = mm3.subtract_fov_stack(fov_id, specs, color=p['phase_plane'])
         mm3.information("Finished subtraction.")
 
     # Else just end, they only wanted to do empty averaging.

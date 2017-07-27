@@ -201,7 +201,7 @@ def preload_images(specs, fov_id_list):
     for fov_id in fov_id_list:
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
-            image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+            image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
             UI_images[fov_id][peak_id]['first'] = imresize(image_data[0,:,:], 0.5)

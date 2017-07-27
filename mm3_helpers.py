@@ -98,7 +98,7 @@ def init_mm3_helpers(param_file_path):
 # loads and image stack from TIFF or HDF5 using mm3 conventions
 def load_stack(fov_id, peak_id, color='c1'):
     '''
-    Loads a image stack.
+    Loads an image stack.
 
     Supports reading TIFF stacks or HDF5 files.
 
@@ -123,7 +123,7 @@ def load_stack(fov_id, peak_id, color='c1'):
     '''
 
     # things are slightly different for empty channels
-    if color == 'empty':
+    if 'empty' in color:
         if params['output'] == 'TIFF':
             img_filename = params['experiment_name'] + '_xy%03d_%s.tif' % (fov_id, color)
 
@@ -132,7 +132,7 @@ def load_stack(fov_id, peak_id, color='c1'):
 
         if params['output'] == 'HDF5':
             with h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r') as h5f:
-                img_stack = h5f['empty_channel'][:]
+                img_stack = h5f[color][:]
 
         return img_stack
 
@@ -140,18 +140,18 @@ def load_stack(fov_id, peak_id, color='c1'):
     if params['output'] == 'TIFF':
         if color[0] == 'c':
             img_dir = params['chnl_dir']
-        elif color == 'sub':
+        elif 'sub' in color:
             img_dir = params['sub_dir']
-        elif color == 'seg':
+        elif 'seg' in color:
             img_dir = params['seg_dir']
 
         img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, color)
 
-        with tiff.TiffFile(os.path.join(img_dir,img_filename)) as tif:
+        with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
             img_stack = tif.asarray()
 
     if params['output'] == 'HDF5':
-        with h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r') as h5f:
+        with h5py.File(os.path.join(params['hdf5_dir'], 'xy%03d.hdf5' % fov_id), 'r') as h5f:
             # normal naming
             # need to use [:] to get a copy, else it references the closed hdf5 dataset
             img_stack = h5f['channel_%04d/p%04d_%s' % (peak_id, peak_id, color)][:]
@@ -880,7 +880,7 @@ def channel_xcorr(fov_id, peak_id):
     '''
 
     # load the phase contrast images
-    image_data = load_stack(fov_id, peak_id, color='c1')
+    image_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
     # just use the first plane just in case there are many colors (shouldn't be)
     if len(image_data.shape) > 3: # if there happen to be multiple planes
@@ -907,7 +907,7 @@ def channel_xcorr(fov_id, peak_id):
 
 ### functions about subtraction
 # average empty channels from stacks, making another TIFF stack
-def average_empties_stack(fov_id, specs):
+def average_empties_stack(fov_id, specs, color='c1'):
     '''Takes the fov file name and the peak names of the designated empties,
     averages them and saves the image
 
@@ -917,6 +917,8 @@ def average_empties_stack(fov_id, specs):
     specs : dict
         specifies whether a channel should be analyzed (1), used for making
         an average empty (0), or ignored (-1).
+    color : string
+        Which plane to use.
 
     Returns
         True if succesful.
@@ -945,11 +947,11 @@ def average_empties_stack(fov_id, specs):
         information("One empty channel (%d) designated for FOV %d." % (peak_id, fov_id))
 
         # load the one phase contrast as the empties
-        avg_empty_stack = load_stack(fov_id, peak_id, color='c1')
+        avg_empty_stack = load_stack(fov_id, peak_id, color=color)
 
-        # get just the phase data if it is multidimensional (it shouldn't be)
-        if len(avg_empty_stack.shape) > 3:
-            avg_empty_stack = avg_empty_stack[:,:,:,0]
+        # # get just the phase data if it is multidimensional (it shouldn't be)
+        # if len(avg_empty_stack.shape) > 3:
+        #     avg_empty_stack = avg_empty_stack[:,:,:,0]
 
     # but if there is more than one empty you need to align and average them per timepoint
     elif len(empty_peak_ids) > 1:
@@ -957,11 +959,11 @@ def average_empties_stack(fov_id, specs):
         empty_stacks = [] # list which holds phase image stacks of designated empties
         for peak_id in empty_peak_ids:
             # load data and append to list
-            image_data = load_stack(fov_id, peak_id, color='c1')
+            image_data = load_stack(fov_id, peak_id, color=color)
 
-            # just get phase data and put it in list
-            if len(image_data.shape) > 3:
-                image_data = image_data[:,:,:,0]
+            # # just get phase data and put it in list
+            # if len(image_data.shape) > 3:
+            #     image_data = image_data[:,:,:,0]
 
             empty_stacks.append(image_data)
 
@@ -973,7 +975,7 @@ def average_empties_stack(fov_id, specs):
         for t in time_points:
             # get images from one timepoint at a time and send to alignment and averaging
             imgs = [stack[t] for stack in empty_stacks]
-            avg_empty = average_empties(imgs) # function is in mm3
+            avg_empty = average_empties(imgs, align=True) # function is in mm3
             avg_empty_stack.append(avg_empty)
 
         # concatenate list and then save out to tiff stack
@@ -982,7 +984,7 @@ def average_empties_stack(fov_id, specs):
     # save out data
     if params['output'] == 'TIFF':
         # make new name and save it
-        empty_filename = params['experiment_name'] + '_xy%03d_empty.tif' % fov_id
+        empty_filename = params['experiment_name'] + '_xy%03d_empty_%s.tif' % (fov_id, color)
         tiff.imsave(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compress=4)
 
     if params['output'] == 'HDF5':
@@ -993,7 +995,7 @@ def average_empties_stack(fov_id, specs):
             del h5f[u'empty_channel']
 
         # the empty channel should be it's own dataset
-        h5ds = h5f.create_dataset(u'empty_channel',
+        h5ds = h5f.create_dataset(u'empty_%s' % color,
                         data=avg_empty_stack,
                         chunks=(1, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
                         maxshape=(None, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
@@ -1008,62 +1010,70 @@ def average_empties_stack(fov_id, specs):
     return True
 
 # averages a list of empty channels
-def average_empties(imgs):
+def average_empties(imgs, align=True):
     '''
     This function averages a set of images (empty channels) and returns a single image
     of the same size. It first aligns the images to the first image before averaging.
 
     Alignment is done by enlarging the first image using edge padding.
     Subsequent images are then aligned to this image and the offset recorded.
-    These images are padded such that they are the same size as the first (padde) image but
+    These images are padded such that they are the same size as the first (padded) image but
     with the image in the correct (aligned) place. Edge padding is again used.
     The images are then placed in a stack and aveaged. This image is trimmed so it is the size
     of the original images
 
     Called by
     average_empties_stack
-
     '''
 
-    aligned_imgs = [] # list contains the alingned, padded images
+    aligned_imgs = [] # list contains the aligned, padded images
     pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
 
-    for n, img in enumerate(imgs):
-        # if this is the first image, pad it and add it to the stack
-        if n == 0:
-            ref_img = np.pad(img, pad_size, mode='reflect') # padded reference image
-            aligned_imgs.append(ref_img)
+    if align:
+        for n, img in enumerate(imgs):
+            # if this is the first image, pad it and add it to the stack
+            if n == 0:
+                ref_img = np.pad(img, pad_size, mode='reflect') # padded reference image
+                aligned_imgs.append(ref_img)
 
-        # otherwise align this image to the first padded image
-        else:
-            # find correlation between a convolution of img against the padded reference
-            match_result = match_template(ref_img, img)
+            # otherwise align this image to the first padded image
+            else:
+                # find correlation between a convolution of img against the padded reference
+                match_result = match_template(ref_img, img)
 
-            # find index of highest correlation (relative to top left corner of img)
-            y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
+                # find index of highest correlation (relative to top left corner of img)
+                y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
-            # pad img so it aligns and is the same size as reference image
-            pad_img = np.pad(img, ((y, ref_img.shape[0] - (y + img.shape[0])),
-                                   (x, ref_img.shape[1] - (x + img.shape[1]))), mode='reflect')
-            aligned_imgs.append(pad_img)
+                # pad img so it aligns and is the same size as reference image
+                pad_img = np.pad(img, ((y, ref_img.shape[0] - (y + img.shape[0])),
+                                       (x, ref_img.shape[1] - (x + img.shape[1]))), mode='reflect')
+                aligned_imgs.append(pad_img)
+    else:
+        # don't align, just link the names to go forward easily
+        aligned_imgs = imgs
 
     # stack the aligned data along 3rd axis
     aligned_imgs = np.dstack(aligned_imgs)
     # get a mean image along 3rd axis
     avg_empty = np.nanmean(aligned_imgs, axis=2)
-    # trim off the padded edges
-    avg_empty = avg_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
+    # trim off the padded edges (only if images were alinged, otherwise there was no padding)
+    if align:
+        avg_empty = avg_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
     # change type back to unsigned 16 bit not floats
     avg_empty = avg_empty.astype(dtype='uint16')
 
     return avg_empty
 
 # Do subtraction for an fov over many timepoints
-def subtract_fov_stack(fov_id, specs):
+def subtract_fov_stack(fov_id, specs, color='c1'):
     '''
     For a given FOV, loads the precomputed empty stack and does subtraction on
     all peaks in the FOV designated to be analyzed
 
+    Parameters
+    ----------
+    color : string, 'c1', 'c2', etc.
+        This is the channel to subtraction. will be appended to the word empty.
 
     Called by
     mm3_Subtract.py
@@ -1076,7 +1086,7 @@ def subtract_fov_stack(fov_id, specs):
     information('Subtracting peaks for FOV %d.' % fov_id)
 
     # load empty stack feed dummy peak number to get empty
-    avg_empty_stack = load_stack(fov_id, 0, color='empty')
+    avg_empty_stack = load_stack(fov_id, 0, color='empty_{}'.format(color))
 
     # determine which peaks are to be analyzed
     ana_peak_ids = []
@@ -1094,11 +1104,11 @@ def subtract_fov_stack(fov_id, specs):
     for peak_id in ana_peak_ids:
         information('Subtracting peak %d.' % peak_id)
 
-        image_data = load_stack(fov_id, peak_id, color='c1')
+        image_data = load_stack(fov_id, peak_id, color=color)
 
-        # it should just be the phase data, but check just to make sure.
-        if len(image_data.shape) > 3:
-            image_data = image_data[:,:,:,0] # just get phase data and put it in list
+        # # it should just be the phase data, but check just to make sure.
+        # if len(image_data.shape) > 3:
+        #     image_data = image_data[:,:,:,0] # just get phase data and put it in list
 
         # make a list for all time points to send to a multiprocessing pool
         # list will length of image_data with tuples (image, empty)
@@ -1117,7 +1127,7 @@ def subtract_fov_stack(fov_id, specs):
 
         # save out the subtracted stack
         if params['output'] == 'TIFF':
-            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub.tif' % (fov_id, peak_id)
+            sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub_%s.tif' % (fov_id, peak_id, color)
             tiff.imsave(os.path.join(params['sub_dir'],sub_filename), subtracted_stack, compress=4) # save it
 
         if params['output'] == 'HDF5':
@@ -1130,7 +1140,7 @@ def subtract_fov_stack(fov_id, specs):
             if 'p%04d_sub' % peak_id in h5g:
                 del h5g['p%04d_sub' % peak_id]
 
-            h5ds = h5g.create_dataset(u'p%04d_sub' % peak_id,
+            h5ds = h5g.create_dataset(u'p%04d_sub_%s' % (peak_id, color),
                             data=subtracted_stack,
                             chunks=(1, subtracted_stack.shape[1], subtracted_stack.shape[2]),
                             maxshape=(None, subtracted_stack.shape[1], subtracted_stack.shape[2]),
@@ -1167,25 +1177,28 @@ def subtract_phase(image_pair):
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
     ### Pad cropped channel.
-    pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
-    padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
+    if False:
+        pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
+        padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
-    # ### Align channel to empty using match template.
-    # use match template to get a correlation array and find the position of maximum overlap
-    match_result = match_template(padded_chnl, empty_channel)
-    # get row and colum of max correlation value in correlation array
-    y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
+        # ### Align channel to empty using match template.
+        # use match template to get a correlation array and find the position of maximum overlap
+        match_result = match_template(padded_chnl, empty_channel)
+        # get row and colum of max correlation value in correlation array
+        y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
-    # pad the empty channel according to alignment to be overlayed on padded channel.
-    empty_paddings = [[y, padded_chnl.shape[0] - (y + empty_channel.shape[0])],
-                      [x, padded_chnl.shape[1] - (x + empty_channel.shape[1])]]
-    aligned_empty = np.pad(empty_channel, empty_paddings, mode='reflect')
-    # now trim it off so it is the same size as the original channel
-    aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
+        # pad the empty channel according to alignment to be overlayed on padded channel.
+        empty_paddings = [[y, padded_chnl.shape[0] - (y + empty_channel.shape[0])],
+                          [x, padded_chnl.shape[1] - (x + empty_channel.shape[1])]]
+        aligned_empty = np.pad(empty_channel, empty_paddings, mode='reflect')
+        # now trim it off so it is the same size as the original channel
+        aligned_empty = aligned_empty[pad_size:-1*pad_size, pad_size:-1*pad_size]
+    else:
+        aligned_empty = empty_channel
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract cropped cell image from empty channel.
-    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
+    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
 
     # just zero out anything less than 0. This is what Sattar does
     channel_subtracted[channel_subtracted < 0] = 0
@@ -1210,7 +1223,7 @@ def segment_chnl_stack(fov_id, peak_id):
     information('Segmenting FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load subtracted images
-    sub_stack = load_stack(fov_id, peak_id, color='sub')
+    sub_stack = load_stack(fov_id, peak_id, color='sub_{}'.format(params['phase_plane']))
 
     # set up multiprocessing pool to do segmentation. Will do everything before going on.
     pool = Pool(processes=params['num_analyzers'])
