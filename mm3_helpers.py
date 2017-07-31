@@ -1198,7 +1198,7 @@ def subtract_phase(image_pair):
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract cropped cell image from empty channel.
-    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
+    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
 
     # just zero out anything less than 0. This is what Sattar does
     channel_subtracted[channel_subtracted < 0] = 0
