@@ -22,6 +22,9 @@ output: 'TIFF' # 'HDF5'
 # nominal time between indexes for a single FOV used during image acquisition
 seconds_per_time_index: 60
 
+# indicate which color channel (plane) has the phase images. Used by channel picker
+phase_plane: 'c1'
+
 # conversion factor from pixels to microns
 # use 0.065 for 100X, use 0.108 for 60X
 pxl2um: 0.065

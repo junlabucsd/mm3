@@ -127,8 +127,8 @@ if __name__ == "__main__":
 
         ### save the cell data. Use the script mm3_OutputData for additional outputs.
         # All cell data (includes incomplete cells)
-        # with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
-        #     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
+            pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
