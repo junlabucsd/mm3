@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
         # if user has specified only certain FOVs, filter for those
         if specify_fovs:
-            mm3.information('Filetering TIFFs by FOV.')
+            mm3.information('Filtering TIFFs by FOV.')
             fitered_files = []
             for fov_id in user_spec_fovs:
                 fov_string = 'xy%02d' % fov_id # xy01

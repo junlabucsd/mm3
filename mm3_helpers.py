@@ -991,8 +991,8 @@ def average_empties_stack(fov_id, specs, color='c1'):
         h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
 
         # delete the dataset if it exists (important for debug)
-        if 'empty_channel' in h5f:
-            del h5f[u'empty_channel']
+        if 'empty_%s' % color in h5f:
+            del h5f[u'empty_%s' % color]
 
         # the empty channel should be it's own dataset
         h5ds = h5f.create_dataset(u'empty_%s' % color,
@@ -1137,8 +1137,8 @@ def subtract_fov_stack(fov_id, specs, color='c1'):
             h5g = h5f['channel_%04d' % peak_id]
 
             # delete the dataset if it exists (important for debug)
-            if 'p%04d_sub' % peak_id in h5g:
-                del h5g['p%04d_sub' % peak_id]
+            if 'p%04d_sub_%s' % (peak_id, color) in h5g:
+                del h5g['p%04d_sub_%s' % (peak_id, color)]
 
             h5ds = h5g.create_dataset(u'p%04d_sub_%s' % (peak_id, color),
                             data=subtracted_stack,
@@ -1177,7 +1177,7 @@ def subtract_phase(image_pair):
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
     ### Pad cropped channel.
-    if False:
+    if True:
         pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
         padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
