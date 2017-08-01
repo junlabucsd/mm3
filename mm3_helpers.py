@@ -1009,6 +1009,40 @@ def average_empties_stack(fov_id, specs, color='c1'):
 
     return True
 
+def copy_empty_stack(from_fov, to_fov, color='c1'):
+    '''Copy an empty stack from one FOV to another'''
+
+
+    # load empty stack from one FOV
+    information('Loading empty stack from FOV {} to save for FOV {}'.format(from_fov, to_fov))
+    avg_empty_stack = load_stack(from_fov, 0, color='empty_{}'.format(color))
+
+    # save out data
+    if params['output'] == 'TIFF':
+        # make new name and save it
+        empty_filename = params['experiment_name'] + '_xy%03d_empty_%s.tif' % (to_fov, color)
+        tiff.imsave(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compress=4)
+
+    if params['output'] == 'HDF5':
+        h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % to_fov), 'r+')
+
+        # delete the dataset if it exists (important for debug)
+        if 'empty_%s' % color in h5f:
+            del h5f[u'empty_%s' % color]
+
+        # the empty channel should be it's own dataset
+        h5ds = h5f.create_dataset(u'empty_%s' % color,
+                        data=avg_empty_stack,
+                        chunks=(1, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        maxshape=(None, avg_empty_stack.shape[1], avg_empty_stack.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+
+        # give attribute which says which channels contribute. Just put 0
+        h5ds.attrs.create('empty_channels', [0])
+        h5f.close()
+
+    information("Saved empty channel for FOV %d." % to_fov)
+
 # averages a list of empty channels
 def average_empties(imgs, align=True):
     '''
