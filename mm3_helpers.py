@@ -886,13 +886,13 @@ def channel_xcorr(fov_id, peak_id):
     if len(image_data.shape) > 3: # if there happen to be multiple planes
         image_data = image_data[:,:,:,0]
 
-    # if there are more than 100 images, use 100 images evenly
+    # if there are more than 10 images, use 10 images evenly
     # spaced across the range
-    if image_data.shape[0] > 100:
-        spacing = int(image_data.shape[0] / 100)
+    if image_data.shape[0] > 10:
+        spacing = int(image_data.shape[0] / 10)
         image_data = image_data[::spacing,:,:]
-        if image_data.shape[0] > 100:
-            image_data = image_data[:100,:,:]
+        if image_data.shape[0] > 10:
+            image_data = image_data[:10,:,:]
 
     # we will compare all images to this one, needs to be padded to account for image drift
     first_img = np.pad(image_data[0,:,:], 10, mode='reflect')
