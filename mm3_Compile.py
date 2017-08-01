@@ -169,7 +169,7 @@ if __name__ == "__main__":
         # save metadata to a .pkl and a human readable txt file
         mm3.information('Saving metadata from analyzed images...')
         with open(os.path.join(p['ana_dir'],'TIFF_metadata.pkl'), 'wb') as tiff_metadata:
-            pickle.dump(analyzed_imgs, tiff_metadata)
+            pickle.dump(analyzed_imgs, tiff_metadata, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(p['ana_dir'],'TIFF_metadata.txt'), 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
         mm3.information('Saved metadata from analyzed images.')
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
         #save the channel mask dictionary to a pickle and a text file
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'wb') as cmask_file:
-            pickle.dump(channel_masks, cmask_file)
+            pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(p['ana_dir'],'channel_masks.txt'), 'w') as cmask_file:
             pprint(channel_masks, stream=cmask_file)
 

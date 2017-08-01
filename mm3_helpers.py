@@ -531,7 +531,7 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             # The function should recognize the shape length as 4 and cut all time points
             channel_stack = cut_slice(image_fov_stack, channel_loc)
 
-            # save a different dataset  for all colors
+            # save a different dataset for all colors
             for color_index in range(channel_stack.shape[3]):
 
                 # create the dataset for the image. Review docs for these options.
@@ -541,7 +541,7 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
                                 maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
 
-                h5ds.attrs.create('plane', image_planes[color_index].encode('utf8'))
+                # h5ds.attrs.create('plane', image_planes[color_index].encode('utf8'))
 
                 # write the data even though we have more to write (free up memory)
                 h5f.flush()

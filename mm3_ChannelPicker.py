@@ -328,7 +328,7 @@ if __name__ == "__main__":
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
         with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'w') as xcorrs_file:
-            pickle.dump(crosscorrs, xcorrs_file)
+            pickle.dump(crosscorrs, xcorrs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")
@@ -363,7 +363,7 @@ if __name__ == "__main__":
         # write specfications to pickle and text
         mm3.information("Writing specifications file.")
         with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
-            pickle.dump(specs, specs_file)
+            pickle.dump(specs, specs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
             pprint(specs, stream=specs_file)
 
