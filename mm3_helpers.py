@@ -1014,7 +1014,7 @@ def copy_empty_stack(from_fov, to_fov, color='c1'):
 
 
     # load empty stack from one FOV
-    information('Loading empty stack from FOV {} to save for FOV {}'.format(from_fov, to_fov))
+    information('Loading empty stack from FOV {} to save for FOV {}.'.format(from_fov, to_fov))
     avg_empty_stack = load_stack(from_fov, 0, color='empty_{}'.format(color))
 
     # save out data
