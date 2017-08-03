@@ -769,14 +769,23 @@ def plot_correlations(Cells_df, rescale=False):
     return g
 
 ### Debugginp plots
-def plot_lineage_images(Cells, fov_id, peak_id):
+def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, color='sub_c1'):
+    '''
+    Plot linages over images across time points for one FOV/peak.
+
+    Parameters
+    ----------
+    color : designation of background to use. subtracted images look best
+    Cells1 : second set of linages to overlay. Useful for comparing lineage output.
+
+    '''
     mm3.information('Creating lineage image.')
 
     # filter cells
     Cells = find_cells_of_fov_and_peak(Cells, fov_id, peak_id)
 
     # load subtracted and segmented data
-    image_data_sub = mm3.load_stack(fov_id, peak_id, color='sub_c2')
+    image_data_sub = mm3.load_stack(fov_id, peak_id, color=color)
     image_data_seg = mm3.load_stack(fov_id, peak_id, color='seg')
 
     # calculate the regions across the segmented images
@@ -889,6 +898,68 @@ def plot_lineage_images(Cells, fov_id, peak_id):
                         fig.lines.append(line)
             except:
                 pass
+
+
+    if Cells2:
+        Cells2 = find_cells_of_fov_and_peak(Cells2, fov_id, peak_id)
+        for cell_id in Cells2:
+            for n, t in enumerate(Cells2[cell_id].times):
+                x = Cells2[cell_id].x_positions[n]
+                y = Cells2[cell_id].y_positions[n]
+
+                # add a circle at the centroid for every point in this cell's life
+                circle = mpatches.Circle(xy=(x, y), radius=3, color='yellow', lw=0, alpha=0.5)
+                ax[t].add_patch(circle)
+
+                # draw connecting lines between the centroids of cells in same lineage
+                if n < len(Cells2[cell_id].times)-1:
+                    # coordinates of the next centroid
+                    x_next = Cells2[cell_id].x_positions[n+1]
+                    y_next = Cells2[cell_id].y_positions[n+1]
+                    t_next = Cells2[cell_id].times[n+1]
+
+                    # get coordinates for the whole figure
+                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                    coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+
+                    # create line
+                    line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
+                                            transform=fig.transFigure,
+                                            color='yellow', lw=2, alpha=0.3)
+
+                    # add it to plot
+                    fig.lines.append(line)
+
+                # draw connecting between mother and daughters
+                try:
+                    if n == len(Cells2[cell_id].times)-1 and Cells2[cell_id].daughters:
+                        # daughter ids
+                        d1_id = Cells2[cell_id].daughters[0]
+                        d2_id = Cells2[cell_id].daughters[1]
+
+                        # both daughters should have been born at the same time.
+                        t_next = Cells2[d1_id].times[0]
+
+                        # coordinates of the two daughters
+                        x_d1 = Cells2[d1_id].x_positions[0]
+                        y_d1 = Cells2[d1_id].y_positions[0]
+                        x_d2 = Cells2[d2_id].x_positions[0]
+                        y_d2 = Cells2[d2_id].y_positions[0]
+
+                        # get coordinates for the whole figure
+                        coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                        coordd1 = transFigure.transform(ax[t_next].transData.transform([x_d1, y_d1]))
+                        coordd2 = transFigure.transform(ax[t_next].transData.transform([x_d2, y_d2]))
+
+                        # create line and add it to plot for both
+                        for coord in [coordd1, coordd2]:
+                            line = mpl.lines.Line2D((coord1[0],coord[0]),(coord1[1],coord[1]),
+                                                    transform=fig.transFigure,
+                                                    color='yellow', lw=2, alpha=0.3, ls='dashed')
+                            # add it to plot
+                            fig.lines.append(line)
+                except:
+                    pass
 
     #         # this is for putting cell id on first time cell appears and when it divides
     #         if n == 0 or n == len(Cells[cell_id].times)-1:

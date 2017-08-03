@@ -5,7 +5,7 @@ from __future__ import print_function
 import sys # input, output, errors, and files
 import os # interacting with file systems
 import time # getting time
-import inspect # getting passed parameters
+import inspect # get     tting passed parameters
 import yaml # parameter importing
 import json # for importing tiff metadata
 try:
@@ -879,6 +879,9 @@ def channel_xcorr(fov_id, peak_id):
     The very first value should be 1.
     '''
 
+    # Use this number of images to calculate cross correlations
+    number_of_images = 10
+
     # load the phase contrast images
     image_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
@@ -886,13 +889,13 @@ def channel_xcorr(fov_id, peak_id):
     if len(image_data.shape) > 3: # if there happen to be multiple planes
         image_data = image_data[:,:,:,0]
 
-    # if there are more than 10 images, use 10 images evenly
+    # if there are more than images than number_of_images, use number_of_images images evenly
     # spaced across the range
-    if image_data.shape[0] > 10:
-        spacing = int(image_data.shape[0] / 10)
+    if image_data.shape[0] > number_of_images:
+        spacing = int(image_data.shape[0] / number_of_images)
         image_data = image_data[::spacing,:,:]
-        if image_data.shape[0] > 10:
-            image_data = image_data[:10,:,:]
+        if image_data.shape[0] > number_of_images:
+            image_data = image_data[:number_of_images,:,:]
 
     # we will compare all images to this one, needs to be padded to account for image drift
     first_img = np.pad(image_data[0,:,:], 10, mode='reflect')
@@ -1009,6 +1012,7 @@ def average_empties_stack(fov_id, specs, color='c1'):
 
     return True
 
+# this function is used when one FOV doesn't have an empty
 def copy_empty_stack(from_fov, to_fov, color='c1'):
     '''Copy an empty stack from one FOV to another'''
 
@@ -1210,8 +1214,9 @@ def subtract_phase(image_pair):
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
 
-    ### Pad cropped channel.
+    # this is for aligning the empty channel to the cell channel.
     if True:
+        ### Pad cropped channel.
         pad_size = 10 # pixel size to use for padding (ammount that alignment could be off)
         padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
@@ -1349,7 +1354,7 @@ def segment_image(image):
     # find highest value, aka width of fattest cell
     max_width = max(line_profile)
     # find indexes of rows where sum is less than 1/5th of this value.
-    zero_these_indicies = np.all([line_profile < (max_width/4), line_profile > 0], axis=0)
+    zero_these_indicies = np.all([line_profile < (max_width/3), line_profile > 0], axis=0)
     zero_these_indicies = np.where(zero_these_indicies)
     # zero out those rows
     morph[zero_these_indicies] = 0
@@ -1486,8 +1491,8 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # go through regions by timepoint and build lineages
     for t, regions in enumerate(regions_by_time):
-        # if there are cell leaves where too much time has passed
-        # since they have grown or divided, remove them from the running
+        # if there are cell leaves who are still waiting to be linked, but
+        # too much time has passed, remove them.
         for leaf_id in cell_leaves:
             if t - Cells[leaf_id].times[-1] > lost_cell_time:
                 cell_leaves.remove(leaf_id)
@@ -1791,11 +1796,17 @@ def check_growth_by_region(cell, region):
     if cell.lengths[-1]*min_growth_area > region.area:
         return False
 
-    # check if y position of region is within
-    # the quarter positions of the bounding box
-    lower_quarter = cell.bboxes[-1][0] + (region.major_axis_length / 4)
-    upper_quarter = cell.bboxes[-1][2] - (region.major_axis_length / 4)
-    if lower_quarter > region.centroid[0] or upper_quarter < region.centroid[0]:
+    # # check if y position of region is within
+    # # the quarter positions of the bounding box
+    # lower_quarter = cell.bboxes[-1][0] + (region.major_axis_length / 4)
+    # upper_quarter = cell.bboxes[-1][2] - (region.major_axis_length / 4)
+    # if lower_quarter > region.centroid[0] or upper_quarter < region.centroid[0]:
+    #     return False
+
+    # check if y position of region is within the bounding box of previous region
+    lower_bound = cell.bboxes[-1][0]
+    upper_bound = cell.bboxes[-1][2]
+    if lower_bound > region.centroid[0] or upper_bound < region.centroid[0]:
         return False
 
     # return true if you get this far
