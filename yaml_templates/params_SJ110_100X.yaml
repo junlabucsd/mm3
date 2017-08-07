@@ -74,25 +74,21 @@ second_opening_size: 2
 # unit is pixels^2
 min_object_size: 25
 
-# boolean for printing out segmentations and lineages over time. This is extremly slow,
-# so only do this a few channels and shorter times. Good for debugging.
-print_lineages: False
-
 # amount of frames after which a cell is dropped because no new regions linked to it
 lost_cell_time: 3
 
 # parameters for the minimum and maximum a region can when linking new regions to
 # existing potential cell
 # Unit is ratio
-max_growth_length: 1.2
-min_growth_length: 0.95
-max_growth_area: 1.2
-min_growth_area: 0.95
+max_growth_length: 1.3
+min_growth_length: 0.8
+max_growth_area: 1.3
+min_growth_area: 0.8
 
 # regions only less than this value down the channel from the closed end will be considered
 # to start potential new cells. Does not apply to daughters
 # unit is pixels
-new_cell_y_cutoff: 200
+new_cell_y_cutoff: 150
 
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment

@@ -210,7 +210,6 @@ def preload_images(specs, fov_id_list):
 
     return UI_images
 
-
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
@@ -253,9 +252,9 @@ if __name__ == "__main__":
     num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
-    ana_dir = os.path.join(p['experiment_directory'],p['analysis_directory'])
-    chnl_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'channels')
-    hdf5_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'hdf5')
+    ana_dir = os.path.join(p['experiment_directory'], p['analysis_directory'])
+    chnl_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'channels')
+    hdf5_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'hdf5')
 
     # load channel masks
     try:
