@@ -385,11 +385,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
-        bin_extents = [(x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 12),
-                      (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 120),
-                      (x_extents[0], x_extents[1], 0, 0.04),
+        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 8),
+                      (x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 160),
+                      (x_extents[0], x_extents[1], 0, 0.10),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
@@ -547,7 +547,7 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
     if FOVs == None:
         FOVs = range(1, max(Lineages.keys())+1)
 
-    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 2.5*len(FOVs)), squeeze=False)
+    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 5*len(FOVs)), squeeze=False)
     ax = axes.flat
 
     for i, fov in enumerate(FOVs):
@@ -586,11 +586,11 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
                     max_div_length = last_length
 
         title_string = 'FOV %d' % fov
-        ax[i].set_title(title_string, size=18)
-        ax[i].set_ylabel('Log(Length [um])', size=16)
+        ax[i].set_title(title_string, size=14)
+        ax[i].set_ylabel('Log(Length [um])', size=12)
         ax[i].set_ylim([0, max_div_length + 2])
 
-    ax[-1].set_xlabel('Time [min]', size=16)
+    ax[-1].set_xlabel('Time [min]', size=12)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)

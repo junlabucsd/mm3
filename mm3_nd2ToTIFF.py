@@ -55,7 +55,7 @@ if __name__ == "__main__":
     vertical_crop = [] # [y1, y2]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 1
+    tif_compress = 4
 
     # parameters will be overwritten by switches
     param_file = ""
