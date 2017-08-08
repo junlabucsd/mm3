@@ -28,9 +28,11 @@ Generally, there is one script for one process. The mm3 library file mm3_helpers
 mm3 Python scripts are run from the Terminal and point to a parameter file (.yaml file) that contains all the pertinent information about the experiment. See **Setting up .yaml file** for a guide to the parameters in the .yaml file. The most important information is arguably the paths to the images and where the analyzed images should be saved. See **Guide to folders and files** for more information about the organization of the raw and analyzed data in the experiment folder.
 
 As an example, we'll assume that the current working directory contains:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 └── params.yaml
+```
 
 ### 2. Curate input data.
 
