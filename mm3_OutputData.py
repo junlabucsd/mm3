@@ -70,7 +70,7 @@ if __name__ == "__main__":
         Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1,2])
 
         # Filter based on birth time point
-        Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
+        # Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
 
         # Filter based on statistics
         Cells = mm3_plots.filter_by_stat(Cells, center_stat='mean', std_distance=3)
@@ -270,7 +270,7 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(plot_dir,'cell_parameters_over_time.png'), dpi=100)
 
         mm3.information('Plotting traces over time.')
-        fig, ax = mm3_plots.plot_traces(Cells)
+        fig, ax = mm3_plots.plot_traces(Cells, trace_limit=500)
         fig.savefig(os.path.join(plot_dir,'traces.png'), dpi=100)
 
         mm3.information('Plotting parameter distributions.')

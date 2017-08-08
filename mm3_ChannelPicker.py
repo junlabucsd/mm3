@@ -71,7 +71,10 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     # define functions here so they have access to variables
     # for UI. change specification of channel
     def onclick_cells(event):
-        peak_id = int(event.inaxes.get_title())
+        try:
+            peak_id = int(event.inaxes.get_title())
+        except AttributeError:
+            return
 
         # reset image to be updated based on user clicks
         ax_id = sorted_peaks.index(peak_id) * 3 + 1

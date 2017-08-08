@@ -385,11 +385,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
-        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
-                      (x_extents[0], x_extents[1], 0, 8),
-                      (x_extents[0], x_extents[1], 0, 4),
+        bin_extents = [(x_extents[0], x_extents[1], 0, 6),
+                      (x_extents[0], x_extents[1], 0, 6),
+                      (x_extents[0], x_extents[1], 0, 6),
                       (x_extents[0], x_extents[1], 0, 160),
-                      (x_extents[0], x_extents[1], 0, 0.10),
+                      (x_extents[0], x_extents[1], 0, 0.04),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
@@ -507,7 +507,7 @@ def plot_traces(Cells, trace_limit=1000):
     fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
     ax = axes.flat # same as axes.ravel()
 
-    if trace_limit:
+    if trace_limit and trace_limit < len(Cells):
         cell_id_subset = sample(list(Cells), trace_limit)
         Cells = {cell_id : Cells[cell_id] for cell_id in cell_id_subset}
 
