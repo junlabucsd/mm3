@@ -72,7 +72,7 @@ second_opening_size: 2
 
 # markers for potential cells smaller than this area will be zeroed
 # unit is pixels^2
-min_object_size: 25
+min_object_size: 20
 
 # amount of frames after which a cell is dropped because no new regions linked to it
 lost_cell_time: 3
