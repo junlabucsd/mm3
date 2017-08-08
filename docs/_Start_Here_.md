@@ -39,10 +39,12 @@ As an example, we'll assume that the current working directory contains:
 mm3 currently currently takes individual TIFF images as its input. If there are multiple color layers, then each TIFF image should be a stack of planes corresponding to a color. There is a script to convert Nikon Elements .nd2 files into TIFF images of this form. See **mm3_nd2ToTIFF guide** for usage of that script. The quality of your images is important for mm3 to work properly. See **Input images guidelines** for more information.
 
 The working directory now contains:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
 └── params.yaml
+```
 
 ### 4. Locate channels, create channel stacks, and return metadata (mm3_Compile.py).
 
@@ -51,6 +53,7 @@ mm3_Compile.py is responsible for the initial bookkeeping. It attempts to automa
 It is also at this time that metadata is drawn from the images and saved. See **mm3_Compile guide** for usage and details.
 
 The working directory now contains:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
@@ -61,12 +64,14 @@ The working directory now contains:
 │   ├── channel_masks.txt
 │   └── channels
 └── params.yaml
+```
 
 ### 5. User guided selection of empty and full channels (mm3_ChannelPicker.py).
 
 mm3_Compile.py identifies all growth channels, regardless of if they contain or do not contain cells. mm3_ChannelPicker.py first attempts to guess, and then presents the user with a GUI to decide which channels should be analyzed, which channels should be ignored, and which channels should be used as empty channels during subtraction. See **mm3_ChannelPicker guide** for usage and details.
 
 The working directory is now:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
@@ -81,12 +86,14 @@ The working directory is now:
 │   ├── specs.pkl
 │   └── specs.txt
 └── params.yaml
+```
 
 ### 6. Subtract phase contrast images (mm3_Subtract.py).
 
 Downstream analysis of phase contrast (brightfield) images requires background subtraction to remove artifacts of the PDMS device in the images. See **mm3_Subtract guide**.
 
 The working directory is now:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
@@ -103,12 +110,14 @@ The working directory is now:
 │   ├── specs.txt
 │   └── subtracted
 └── params.yaml
+```
 
 ### 7. Segment images and create cell lineages (mm3_Segment.py).
 
 mm3 Uses a relies on Otsu thresholding and watershedding algorithms to locate cells from the subtracted images. After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages. See **mm3_Segment guide** for usage and details.
 
 The working directory is now:
+```
 .
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
@@ -128,6 +137,7 @@ The working directory is now:
 │   ├── specs.txt
 │   └── subtracted
 └── params.yaml
+```
 
 ## Other scripts
 
