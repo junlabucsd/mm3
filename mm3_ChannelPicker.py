@@ -201,7 +201,7 @@ def preload_images(specs, fov_id_list):
     for fov_id in fov_id_list:
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
-            image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+            image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
             UI_images[fov_id][peak_id]['first'] = imresize(image_data[0,:,:], 0.5)
@@ -209,7 +209,6 @@ def preload_images(specs, fov_id_list):
             UI_images[fov_id][peak_id]['last'] = imresize(image_data[-1,:,:], 0.5)
 
     return UI_images
-
 
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
@@ -253,9 +252,9 @@ if __name__ == "__main__":
     num_analyzers = cpu_count*2 - 2
 
     # assign shorthand directory names
-    ana_dir = os.path.join(p['experiment_directory'],p['analysis_directory'])
-    chnl_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'channels')
-    hdf5_dir = os.path.join(p['experiment_directory'],p['analysis_directory'],'hdf5')
+    ana_dir = os.path.join(p['experiment_directory'], p['analysis_directory'])
+    chnl_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'channels')
+    hdf5_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'hdf5')
 
     # load channel masks
     try:
@@ -328,7 +327,7 @@ if __name__ == "__main__":
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
         with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'w') as xcorrs_file:
-            pickle.dump(crosscorrs, xcorrs_file)
+            pickle.dump(crosscorrs, xcorrs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")
@@ -363,7 +362,7 @@ if __name__ == "__main__":
         # write specfications to pickle and text
         mm3.information("Writing specifications file.")
         with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
-            pickle.dump(specs, specs_file)
+            pickle.dump(specs, specs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
             pprint(specs, stream=specs_file)
 

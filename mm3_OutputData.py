@@ -67,10 +67,10 @@ if __name__ == "__main__":
     ### Filters you may want to apply
     if True:
         # Filter based on birth_label. mother cells : label_num=1
-        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1,2,3])
+        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1,2])
 
         # Filter based on birth time point
-        # Cells = mm3_plots.find_cells_born_before(Cells, born_before=1000)
+        Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
 
         # Filter based on statistics
         Cells = mm3_plots.filter_by_stat(Cells, center_stat='mean', std_distance=3)

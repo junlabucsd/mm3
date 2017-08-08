@@ -1,6 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-from subprocess import check_output
 def warning(*objs):
     print(time.strftime("%H:%M:%S Error:", time.localtime()), *objs, file=sys.stderr)
 def information(*objs):
@@ -158,21 +157,22 @@ if __name__ == "__main__":
     Edited 20160830 jt
     '''
 
-    # hard parameters
-    FFMPEG_BIN = check_output("which ffmpeg", shell=True).replace('\n','')
-    #FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
-    fontfile = "/Library/Fonts/Andale Mono.ttf"    # Mac OS location
-    if not os.path.isfile(fontfile):
-        # fontfile = "/usr/share/fonts/truetype/freefont/FreeMono.ttf"  # Linux Ubuntu 16.04 location
-        fontfile = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" # Another font
-        if not os.path.isfile(fontfile):
-            sys.exit("You need to install some fonts and specify the correct path to the .ttf file!")
-    fontface = Face(fontfile)
+    if sys.platform == 'darwin':
+        FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+        fontface = Face("/Library/Fonts/Andale Mono.ttf")
+    elif sys.platform == 'linux2': # Ubuntu (Docker install)
+        FFMPEG_BIN = '/usr/bin/ffmpeg'
+        fontface = Face("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
     specify_fovs = []
     start_fov = -1
+
+    # hard parameters
+    shift_time = 215 # put in a timepoint to indicate the timing of a shift (colors the text)
+    phase_plane_index = 0 # index of the phase plane
+    fl_plane_index = 1 # index of the fluorescent plane
 
     # switches
     try:
@@ -200,8 +200,8 @@ if __name__ == "__main__":
         p = yaml.load(pfile)
 
     # assign shorthand directory names
-    TIFF_dir = os.path.join(p['experiment_directory'],p['image_directory']) # source of images
-    movie_dir = os.path.join(p['experiment_directory'],p['movie_directory'])
+    TIFF_dir = p['experiment_directory'] + p['image_directory'] # source of images
+    movie_dir = p['experiment_directory'] + p['movie_directory']
 
     # set up movie folder if it does not already exist
     if not os.path.exists(movie_dir):
@@ -209,7 +209,7 @@ if __name__ == "__main__":
 
     # find FOV list
     fov_list = [] # list will hold integers which correspond to FOV ids
-    fov_images = glob.glob(os.path.join(TIFF_dir,'*.tif'))
+    fov_images = glob.glob(TIFF_dir + '*.tif')
     for image_name in fov_images:
         # add FOV number from filename to list
         fov_list.append(int(image_name.split('xy')[1].split('.tif')[0]))
@@ -227,9 +227,9 @@ if __name__ == "__main__":
             continue
 
         # grab the images for this fov
-        images = glob.glob(os.path.join(TIFF_dir,'*xy%03d*.tif' % (fov)))
+        images = glob.glob(TIFF_dir + '*xy%03d*.tif' % (fov))
         if len(images) == 0:
-            images = glob.glob(os.path.join(TIFF_dir,'*xy%02d*.tif' % (fov))) # for filenames with 2 digit FOV
+            images = glob.glob(TIFF_dir + '*xy%02d*.tif' % (fov)) # for filenames with 2 digit FOV
         if len(images) == 0:
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
@@ -237,12 +237,14 @@ if __name__ == "__main__":
         # get min max pixel intensity for scaling the data
         imin = {}
         imax = {}
-        imin['phase'], imax['phase'] = find_img_min_max(images[::100])
+        # imin['phase'], imax['phase'] = find_img_min_max(images[::100])
+        imin['phase'], imax['phase'] = 200, 1750
+        imin['488'], imax['488'] = 150, 500
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
         if image.shape[0] < 10:
-            image = image[0] # get phase plane
+            image = image[phase_plane_index] # get phase plane
         size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
 
         # set command to give to ffmpeg
@@ -267,7 +269,7 @@ if __name__ == "__main__":
                 #'-bufsize', '300k',
 
                 # set the movie name
-                os.path.join(movie_dir,p['experiment_name']+'_xy%03d.mp4' % fov)]
+                movie_dir + p['experiment_name'] + '_xy%03d.mp4' % fov]
 
         information('Writing movie for FOV %d.' % fov)
 
@@ -281,18 +283,33 @@ if __name__ == "__main__":
 
             image = tiff.imread(img) # get the image
 
-            if image.shape[0] < 10:
-                image = image[0] # get phase plane
+            # print('image shape', np.shape(image))
+
+            phase = image[phase_plane_index ] # get phase plane
 
             # process phase image
-            phase = image.astype('float64')
+            phase = phase.astype('float64')
             # normalize
             phase -= imin['phase']
             phase[phase < 0] = 0
             phase /= (imax['phase'] - imin['phase'])
             phase[phase > 1] = 1
+            phase = phase * 0.75
             # three color stack
-            image = np.dstack((phase, phase, phase))
+            # print('phase shape', np.shape(phase))
+            phase = np.dstack((phase, phase, phase))
+
+            fl488 = image[fl_plane_index].astype('float64') # pick red image
+            # normalize
+            fl488 -= imin['488']
+            fl488[fl488 < 0] = 0
+            fl488 /= (imax['488'] - imin['488'])
+            fl488[fl488 > 1] = 1
+            # print('fl shape', np.shape(fl488))
+            # three color stack
+            fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
+
+            image = 1 - ((1 - fl488) * (1 - phase))
 
             # put in time stamp
             seconds = float(t * p['seconds_per_time_index'])
@@ -305,7 +322,12 @@ if __name__ == "__main__":
                                                (size_x - 10 - r_timestamp.shape[1], 10)),
                                                mode = 'constant')
             r_timestamp /= 255.0
-            r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
+
+            # create label
+            if shift_time and t >= shift_time:
+                r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
+            else:
+                r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
             image = 1 - ((1 - image) * (1 - r_timestamp))
 

@@ -104,17 +104,28 @@ if __name__ == "__main__":
         pass # just skip this part and go to subtraction
 
     else:
-        mm3.information("Calculating averaged empties.")
+        mm3.information("Calculating phase averaged empties.")
+        need_empty = [] # list holds fov_ids of fov's that did not have empties
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            averaging_result = mm3.average_empties_stack(fov_id, specs)
+            averaging_result = mm3.average_empties_stack(fov_id, specs, color=p['phase_plane'])
+
+            # add to list for FOVs that need to be given empties from other FOvs
+            if not averaging_result:
+                need_empty.append(fov_id)
+
+        # deal with those problem FOVs without empties
+        have_empty = list(set(fov_id_list).difference(set(need_empty))) # fovs with empties
+        for fov_id in need_empty:
+            from_fov = min(have_empty, key=lambda x: abs(x-5)) # find closest FOV with an empty
+            copy_result = mm3.copy_empty_stack(from_fov, fov_id, color=p['phase_plane'])
 
     ### Subtract ##################################################################################
     if do_subtraction:
         mm3.information("Subtracting channels.")
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            subtraction_result = mm3.subtract_fov_stack(fov_id, specs)
+            subtraction_result = mm3.subtract_fov_stack(fov_id, specs, color=p['phase_plane'])
         mm3.information("Finished subtraction.")
 
     # Else just end, they only wanted to do empty averaging.
