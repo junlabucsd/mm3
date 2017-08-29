@@ -556,13 +556,13 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
             peak_color = plt.cm.jet(int(255*peak/tif_width))
 
             for cell_id, cell in lin:
-                ax[i].semilogy(np.array(cell.times_w_div) * 4, cell.lengths_w_div,
+                ax[i].semilogy(np.array(cell.times_w_div), cell.lengths_w_div,
                                color=peak_color, lw=1, alpha=0.75)
 
                 if mothers:
                     # draw a connecting lines betwee mother and daughter
                     if cell.birth_time == last_div_time:
-                        ax[i].semilogy([last_div_time * 4, cell.birth_time * 4],
+                        ax[i].semilogy([last_div_time, cell.birth_time],
                                        [last_length, cell.sb],
                                        color=peak_color, lw=1, alpha=0.75)
 
@@ -577,7 +577,7 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
         title_string = 'FOV %d' % fov
         ax[i].set_title(title_string, size=18)
         ax[i].set_ylabel('Length [um]', size=16)
-        ax[i].set_ylim([0, max_div_length + 2])
+        # ax[i].set_ylim([0, max_div_length + 2])
 
     ax[-1].set_xlabel('Time [min]', size=16)
 
