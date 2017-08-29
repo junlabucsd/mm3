@@ -2,25 +2,20 @@
 from __future__ import print_function
 
 # import modules
-import os # interacting with file systems
 
 # number modules
 import numpy as np
 import scipy.stats as sps
+from scipy.optimize import least_squares, curve_fit
 import pandas as pd
 from random import sample
-
-# image analysis modules
-from skimage.measure import regionprops # used for creating lineages
 
 # plotting modules
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import seaborn as sns
 sns.set(style="ticks", color_codes=True, font_scale=1.25)
 
-import mm3_helpers as mm3
 
 ### Data conversion functions ######################################################################
 def cells2df(Cells, rescale=False):
@@ -91,23 +86,6 @@ def find_cells_of_fov(Cells, FOVs=[]):
 
     for cell_id in Cells:
         if Cells[cell_id].fov in FOVs:
-            fCells[cell_id] = Cells[cell_id]
-
-    return fCells
-
-def find_cells_of_fov_and_peak(Cells, fov_id, peak_id):
-    '''Return only cells from a specific fov/peak
-
-    Parameters
-    ----------
-    fov_id : int corresponding to FOV
-    peak_id : int correstonging to peak
-    '''
-
-    fCells = {} # f is for filtered
-
-    for cell_id in Cells:
-        if Cells[cell_id].fov == fov_id and Cells[cell_id].peak == peak_id:
             fCells[cell_id] = Cells[cell_id]
 
     return fCells
@@ -247,10 +225,19 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
                 # check to make sure it makes the second cut off
                 if last_daughter.birth_time > t2:
                     # print(fov, peak, 'Made it')
+
+                    # now filter it to only those cells within the two times
+                    Cells = find_cells_born_after(Cells, born_after=t1)
+                    Cells = find_cells_born_before(Cells, born_before=t2)
+
                     # and add it to the big dictionary if possible
                     Continuous_Lineages[fov][peak] = Cells
-        else:
-            continue
+        # else:
+        #     continue
+
+        # remove keys that do not have any lineages
+        if not Continuous_Lineages[fov]:
+            Continuous_Lineages.pop(fov)
 
     return Continuous_Lineages
 
@@ -274,6 +261,7 @@ def stats_table(Cells_df):
     cell_stats = cell_stats.rename(index={'50%': 'median'})
 
     return cell_stats
+
 
 ### Plotting functions #############################################################################
 def violin_fovs(Cells_df):
@@ -386,9 +374,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 6),
+                      (x_extents[0], x_extents[1], 0, 12),
                       (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 160),
+                      (x_extents[0], x_extents[1], 0, 120),
                       (x_extents[0], x_extents[1], 0, 0.04),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -507,7 +495,7 @@ def plot_traces(Cells, trace_limit=1000):
     fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
     ax = axes.flat # same as axes.ravel()
 
-    if trace_limit and trace_limit < len(Cells):
+    if trace_limit:
         cell_id_subset = sample(list(Cells), trace_limit)
         Cells = {cell_id : Cells[cell_id] for cell_id in cell_id_subset}
 
@@ -544,10 +532,11 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
 
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
+    # if specific FOVs not noted
     if FOVs == None:
-        FOVs = range(1, max(Lineages.keys())+1)
+        FOVs = Lineages.keys()
 
-    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 5*len(FOVs)), squeeze=False)
+    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 2.5*len(FOVs)), squeeze=False)
     ax = axes.flat
 
     for i, fov in enumerate(FOVs):
@@ -567,13 +556,13 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
             peak_color = plt.cm.jet(int(255*peak/tif_width))
 
             for cell_id, cell in lin:
-                ax[i].semilogy(cell.times_w_div, cell.lengths_w_div,
+                ax[i].semilogy(np.array(cell.times_w_div) * 4, cell.lengths_w_div,
                                color=peak_color, lw=1, alpha=0.75)
 
                 if mothers:
                     # draw a connecting lines betwee mother and daughter
                     if cell.birth_time == last_div_time:
-                        ax[i].semilogy([last_div_time, cell.birth_time],
+                        ax[i].semilogy([last_div_time * 4, cell.birth_time * 4],
                                        [last_length, cell.sb],
                                        color=peak_color, lw=1, alpha=0.75)
 
@@ -586,11 +575,11 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
                     max_div_length = last_length
 
         title_string = 'FOV %d' % fov
-        ax[i].set_title(title_string, size=14)
-        ax[i].set_ylabel('Log(Length [um])', size=12)
+        ax[i].set_title(title_string, size=18)
+        ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_ylim([0, max_div_length + 2])
 
-    ax[-1].set_xlabel('Time [min]', size=12)
+    ax[-1].set_xlabel('Time [min]', size=16)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
@@ -768,211 +757,238 @@ def plot_correlations(Cells_df, rescale=False):
 
     return g
 
-### Debugginp plots
-def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, color='sub_c1'):
+### Plotting functions that are for the bilinear and cumulative stuff
+def produce_fit(Cell):
     '''
-    Plot linages over images across time points for one FOV/peak.
-
-    Parameters
-    ----------
-    color : designation of background to use. subtracted images look best
-    Cells1 : second set of linages to overlay. Useful for comparing lineage output.
-
+    Given a cell object, produce a fit for its elongation.
+    Use log of length and linear regression. However,
+    return what the actual lengths would be.
     '''
-    mm3.information('Creating lineage image.')
 
-    # filter cells
-    Cells = find_cells_of_fov_and_peak(Cells, fov_id, peak_id)
+    x = Cell.times_w_div - Cell.times_w_div[0] # time points
+    y = np.log(Cell.lengths_w_div) # log(lengths)
 
-    # load subtracted and segmented data
-    image_data_sub = mm3.load_stack(fov_id, peak_id, color=color)
-    image_data_seg = mm3.load_stack(fov_id, peak_id, color='seg')
+    slope, intercept, r_value, p_value, std_err = sps.linregress(x, y)
+    r_squared = r_value**2
 
-    # calculate the regions across the segmented images
-    regions_by_time = [regionprops(timepoint) for timepoint in image_data_seg]
-    n_imgs = len(regions_by_time)
-    image_indicies = range(n_imgs)
+    y_fit = x * slope + intercept
+    y_fit = np.exp(y_fit)
 
-    mm3.information('Loaded stacks and created region props.')
+#     print(Cell.elong_rate, slope)
+#     print(y, y_fit, r_squared, intercept)
 
-    # Color map for good label colors
-    cmap = plt.cm.jet
-    cmap.set_under(color='black')
-    vmin = 0.1 # values under this color go to black
-    vmax = image_data_seg.shape[1] # max y value
-    # Trying to get the image size down
-    figxsize = image_data_seg.shape[2] * n_imgs / 100.0
-    figysize = image_data_seg.shape[1] / 100.0
+    return y_fit, r_squared
 
-    # plot the images in a series
-    fig, axes = plt.subplots(ncols=n_imgs, nrows=1,
-                             figsize=(figxsize, figysize))
-    fig.subplots_adjust(wspace=0, hspace=0, left=0, right=1, top=1, bottom=0)
-    transFigure = fig.transFigure.inverted()
+# Define functions and classes
+class FitRes:
+    """
+    Object used to fit a data set to a particular function.
+    Input:
+        o x: x coordinates of the input data set.
+        o y: y coordinates of the input data set.
+        o s: standard deviations for the y values.
+        o funcfit: fitting function.
+    """
+    def __init__(self, x, y,funcfit_f, funcfit_df, yerr=None):
+        self.x = np.array(x)
+        self.y = np.array(y)
+        self.funcfit_f = funcfit_f
+        self.funcfit_df = funcfit_df
+        if (yerr == None):
+            self.yerr = np.ones(self.x.shape)
+        else:
+            self.yerr = yerr
 
-    # change settings for each axis
-    ax = axes.flat # same as axes.ravel()
-    for a in ax:
-        a.set_axis_off()
-        a.set_aspect('equal')
-        ttl = a.title
-        ttl.set_position([0.5, 0.05])
+    def residual_f(self, par):
+        """
+        Return the vector of residuals.
+        """
+        fx = np.array([self.funcfit_f(par,xi) for xi in self.x])
+        return (fx-self.y)/self.yerr
 
-    for i in image_indicies:
-        ax[i].imshow(image_data_sub[i], cmap=plt.cm.gray, aspect='equal')
+    def residual_df(self, par):
+        dfx = np.array([np.array(self.funcfit_df(par,xi))/si for (xi,si) in zip(self.x,self.yerr)])
+        return dfx
 
-        # make a new version of the segmented image where the
-        # regions are relabeled by their y centroid position.
-        seg_relabeled = image_data_seg[i].copy()
-        for region in regions_by_time[i]:
-            seg_relabeled[seg_relabeled == region.label] = region.centroid[0]
+def coefficient_determination_r2(y,yfit):
+    """
+    Determine the coefficient of determination (r^2) obtained for the
+    linear fit yfit to the input data y.
+    """
+    ymean = np.mean(y)
+    s_res = np.sum((y-yfit)**2)
+    s_tot = np.sum((y-ymean)**2)
+    r2 = 1.0 - s_res / s_tot
+    return r2
 
-        ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
-        ax[i].set_title(str(i), color='white')
+def fit_xy(x, y, p_init, funcfit_f, funcfit_df=None, least_squares_args={'loss':'cauchy'},):
+    """
+    1) Extract x- (y-) coordinates from attribute key_x (key_y).
+    2) Fit the resulting data set according to a model function funcfit_f
+    """
+    # define FitRes object -- define the residuals
+    fitres = FitRes(x, y, funcfit_f=funcfit_f, funcfit_df=funcfit_df)
 
-    # save just the segmented images
-    # lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
-    # if not os.path.exists(lin_dir):
-    #     os.makedirs(lin_dir)
-    # lin_filename = params['experiment_name'] + '_xy%03d_p%04d_nolin.png' % (fov_id, peak_id)
-    # lin_filepath = lin_dir + lin_filename
-    # fig.savefig(lin_filepath, dpi=75)
-    # plt.close()
+    # perform the least_square minimization
+    try:
+        if (funcfit_df == None):
+            res = least_squares(x0=p_init, fun=fitres.residual_f, **least_squares_args)
+        else:
+            res = least_squares(x0=p_init, fun=fitres.residual_f,
+                                jac=fitres.residual_df, **least_squares_args)
+        par=res.x
 
-    # Annotate each cell with information
-    for cell_id in Cells:
-        for n, t in enumerate(Cells[cell_id].times):
-            x = Cells[cell_id].x_positions[n]
-            y = Cells[cell_id].y_positions[n]
+    except ValueError as e:
+        print(e)
+#         sys.exit(1)
+#    print res
+    return par
 
-            # add a circle at the centroid for every point in this cell's life
-            circle = mpatches.Circle(xy=(x, y), radius=3, color='white', lw=0, alpha=0.5)
-            ax[t].add_patch(circle)
+def bilinear_f(par,xi):
+    """
+    f(x) =  a + b (x-x0), if x <= x0
+            a + c (x-x0), otherwise
+    """
+    a = par[0]
+    b = par[1]
+    c = par[2]
+    x0 = par[3]
 
-            # draw connecting lines between the centroids of cells in same lineage
-            if n < len(Cells[cell_id].times)-1:
-                # coordinates of the next centroid
-                x_next = Cells[cell_id].x_positions[n+1]
-                y_next = Cells[cell_id].y_positions[n+1]
-                t_next = Cells[cell_id].times[n+1]
+    if not (xi > x0):
+        return a + b*(xi-x0)
+    else:
+        return a + c*(xi-x0)
 
-                # get coordinates for the whole figure
-                coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+def bilinear_df(par,xi):
+    """
+    f(x) =  a + b (x-x0), if x <= x0
+            a + c (x-x0), otherwise
+    """
+    a = par[0]
+    b = par[1]
+    c = par[2]
+    x0 = par[3]
+    if not (xi > x0):
+        return np.array([ 1.0, xi-x0, 0, -b])
+    else:
+        return np.array([ 1.0, 0, xi-x0, -c])
 
-                # create line
-                line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
-                                        transform=fig.transFigure,
-                                        color='white', lw=2, alpha=0.3)
+def bilinear_init(x, y):
+    x = np.array(x)
+    y = np.array(y)
+    idx = np.argsort(x)
+    x = x[idx]
+    y = y[idx]
 
-                # add it to plot
-                fig.lines.append(line)
+    # main secant
+    xN = x[-1]
+    x0 = x[0]
+    yN = y[-1]
+    y0 = y[0]
+    vdir = np.array([1.0, (yN-y0)/(xN-x0)])
+    # distances to main secant
+    hs = -vdir[1]*(x-x0) + vdir[0]*(y-y0)
 
-            # draw connecting between mother and daughters
-            try:
-                if n == len(Cells[cell_id].times)-1 and Cells[cell_id].daughters:
-                    # daughter ids
-                    d1_id = Cells[cell_id].daughters[0]
-                    d2_id = Cells[cell_id].daughters[1]
+    # maximum distance
+    imid = np.argmin(hs)
+    xmid = x[imid]
+    ymid = y[imid]
 
-                    # both daughters should have been born at the same time.
-                    t_next = Cells[d1_id].times[0]
+    # return bilinear init
+    if ( xmid == x0):
+        return np.array([ymid,0.0,(yN-ymid)/(xN-xmid),xmid])
+    elif ( xmid == xN):
+        return np.array([ymid,(ymid-y0)/(xmid-x0),0.0,xmid])
+    else:
+        return np.array([ymid,(ymid-y0)/(xmid-x0),(yN-ymid)/(xN-xmid),xmid])
 
-                    # coordinates of the two daughters
-                    x_d1 = Cells[d1_id].x_positions[0]
-                    y_d1 = Cells[d1_id].y_positions[0]
-                    x_d2 = Cells[d2_id].x_positions[0]
-                    y_d2 = Cells[d2_id].y_positions[0]
+def produce_bilin_fit(Cell):
+    '''
+    Use Guillaume's code to produce a bilinear fit
+    '''
 
-                    # get coordinates for the whole figure
-                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                    coordd1 = transFigure.transform(ax[t_next].transData.transform([x_d1, y_d1]))
-                    coordd2 = transFigure.transform(ax[t_next].transData.transform([x_d2, y_d2]))
+    # Get X and Y. X is time, Y is length
+    X = np.array(Cell.times_w_div, dtype=np.float_)
+    Y = np.log(Cell.lengths_w_div)
 
-                    # create line and add it to plot for both
-                    for coord in [coordd1, coordd2]:
-                        line = mpl.lines.Line2D((coord1[0],coord[0]),(coord1[1],coord[1]),
-                                                transform=fig.transFigure,
-                                                color='white', lw=2, alpha=0.3, ls='dashed')
-                        # add it to plot
-                        fig.lines.append(line)
-            except:
-                pass
+    ## change origin of times
+    X_t0 = X[0]
+    X = X-X_t0
 
+    # make bilinear fit
+    p_init = bilinear_init(X, Y)
+    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
+    Z = np.array([bilinear_f(par, xi) for xi in X])
+    chi_bilin = np.mean((Y - Z)**2)
+    r2 = coefficient_determination_r2(Y, Z)
+    r_bilin = np.sqrt(r2)
 
-    if Cells2:
-        Cells2 = find_cells_of_fov_and_peak(Cells2, fov_id, peak_id)
-        for cell_id in Cells2:
-            for n, t in enumerate(Cells2[cell_id].times):
-                x = Cells2[cell_id].x_positions[n]
-                y = Cells2[cell_id].y_positions[n]
+    t_shift = par[3] + X_t0
 
-                # add a circle at the centroid for every point in this cell's life
-                circle = mpatches.Circle(xy=(x, y), radius=3, color='yellow', lw=0, alpha=0.5)
-                ax[t].add_patch(circle)
+    # convert back for plotting
+    y_fit = np.exp(Z)
 
-                # draw connecting lines between the centroids of cells in same lineage
-                if n < len(Cells2[cell_id].times)-1:
-                    # coordinates of the next centroid
-                    x_next = Cells2[cell_id].x_positions[n+1]
-                    y_next = Cells2[cell_id].y_positions[n+1]
-                    t_next = Cells2[cell_id].times[n+1]
+    # determine the length at the shift up time for plotting
+    len_at_shift = np.exp(bilinear_f(par, par[3]))
 
-                    # get coordinates for the whole figure
-                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                    coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+    return y_fit, r2, t_shift, len_at_shift
 
-                    # create line
-                    line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
-                                            transform=fig.transFigure,
-                                            color='yellow', lw=2, alpha=0.3)
+def produce_bilin_fit2(Cell):
+    '''
+    Use Guillaume's code to produce a bilinear fit
+    '''
 
-                    # add it to plot
-                    fig.lines.append(line)
+    # Get X and Y. X is time, Y is length
+    X = np.array(cell.times_w_div, dtype=np.float_)
+    Y = np.log(cell.lengths_w_div)
 
-                # draw connecting between mother and daughters
-                try:
-                    if n == len(Cells2[cell_id].times)-1 and Cells2[cell_id].daughters:
-                        # daughter ids
-                        d1_id = Cells2[cell_id].daughters[0]
-                        d2_id = Cells2[cell_id].daughters[1]
+    ## change origin of times
+    X_t0 = X[0]
+    X = X-X_t0
 
-                        # both daughters should have been born at the same time.
-                        t_next = Cells2[d1_id].times[0]
+    # make bilinear fit
+    p_init = bilinear_init(X, Y)
+    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
+    Z = np.array([bilinear_f(par, xi) for xi in X])
+    chi_bilin = np.mean((Y - Z)**2)
+    r2 = coefficient_determination_r2(Y, Z)
+    r_bilin = np.sqrt(r2)
 
-                        # coordinates of the two daughters
-                        x_d1 = Cells2[d1_id].x_positions[0]
-                        y_d1 = Cells2[d1_id].y_positions[0]
-                        x_d2 = Cells2[d2_id].x_positions[0]
-                        y_d2 = Cells2[d2_id].y_positions[0]
+    t_shift = par[3] + X_t0
 
-                        # get coordinates for the whole figure
-                        coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                        coordd1 = transFigure.transform(ax[t_next].transData.transform([x_d1, y_d1]))
-                        coordd2 = transFigure.transform(ax[t_next].transData.transform([x_d2, y_d2]))
+    # convert back fro plotting
+    y_fit = np.exp(Z)
 
-                        # create line and add it to plot for both
-                        for coord in [coordd1, coordd2]:
-                            line = mpl.lines.Line2D((coord1[0],coord[0]),(coord1[1],coord[1]),
-                                                    transform=fig.transFigure,
-                                                    color='yellow', lw=2, alpha=0.3, ls='dashed')
-                            # add it to plot
-                            fig.lines.append(line)
-                except:
-                    pass
+    # determine the length at the shift up time for plotting
+    len_at_shift = np.exp(bilinear_f(par, par[3]))
 
-    #         # this is for putting cell id on first time cell appears and when it divides
-    #         if n == 0 or n == len(Cells[cell_id].times)-1:
-    #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
+    return par
 
-        # # save image to segmentation subfolder
-        # lin_dir = os.path.join(params['experiment_directory'], params['analysis_directory'],
-        #                        'lineages')
-        # if not os.path.exists(lin_dir):
-        #     os.makedirs(lin_dir)
-        # lin_filename = params['experiment_name'] + '_xy%03d_p%04d_lin.png' % (fov_id, peak_id)
-        # lin_filepath = os.path.join(lin_dir,lin_filename)
-        # fig.savefig(lin_filepath, dpi=75)
-        # plt.close()
+def produce_bilin_fit3(X, Y):
+    '''
+    Use Guillaume's code to produce a bilinear fit
+    '''
 
-    return fig, ax
+    ## change origin of times
+    X_t0 = X[0]
+    X = X-X_t0
+
+    # make bilinear fit
+    p_init = bilinear_init(X, Y)
+    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
+    Z = np.array([bilinear_f(par, xi) for xi in X])
+    chi_bilin = np.mean((Y - Z)**2)
+    r2 = coefficient_determination_r2(Y, Z)
+    r_bilin = np.sqrt(r2)
+
+    t_shift = par[3] + X_t0
+
+    # # convert back for plotting
+    # y_fit = np.exp(Z)
+    y_fit = Z
+
+    # determine the length at the shift up time for plotting
+    # len_at_shift = np.exp(bilinear_f(par, par[3]))
+    len_at_shift = bilinear_f(par, par[3])
+
+    return y_fit, r2, t_shift, len_at_shift
