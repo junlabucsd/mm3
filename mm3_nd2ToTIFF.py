@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
-                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
 
@@ -204,7 +204,7 @@ if __name__ == "__main__":
                             metadata_t['fov'] = fov # update metdata
                             metadata_json = json.dumps(metadata_t)
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
-                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
 
