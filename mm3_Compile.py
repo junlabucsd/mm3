@@ -72,13 +72,16 @@ if __name__ == "__main__":
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-
+                
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
+    
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+  
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -104,7 +107,7 @@ if __name__ == "__main__":
         mm3.information("Finding image parameters.")
 
         # get all the TIFFs in the folder
-        found_files = glob.glob(os.path.join(p['TIFF_dir'],'*.tif')) # get all tiffs
+        found_files = glob.glob(os.path.join(p['TIFF_dir'],'*c2.tif')) # get all tiffs
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
@@ -144,8 +147,8 @@ if __name__ == "__main__":
             # get_params gets the image metadata and puts it in analyzed_imgs dictionary
             # for each file name. True means look for channels
 
-            # This is the non-parallelized version (useful for debug)
-            # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
+##             This is the non-parallelized version (useful for debug)
+#             analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
 
             # Parallelized
             analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
@@ -211,6 +214,7 @@ if __name__ == "__main__":
         if p['output'] == 'TIFF':
             #This is for loading the whole raw tiff stack and then slicing through it
             mm3.tiff_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
+            mm3.tiff_stack_slice_and_write_FL(send_to_write, channel_masks, analyzed_imgs)
 
         elif p['output'] == 'HDF5':
             # Or write it to hdf5

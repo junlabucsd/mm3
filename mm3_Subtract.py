@@ -71,7 +71,9 @@ if __name__ == "__main__":
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-
+                
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'       
+                
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")

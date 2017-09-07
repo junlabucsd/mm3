@@ -36,7 +36,7 @@ import mm3_helpers as mm3
 if __name__ == "__main__":
     # hardcoded parameters
     do_segmentation = True # make or load segmentation?
-    do_lineages = True # should lineages be made after segmentation?
+    do_lineages = False # should lineages be made after segmentation?
 
     # get switches and parameters
     try:
@@ -60,6 +60,8 @@ if __name__ == "__main__":
         if opt == '-f':
             param_file_path = arg # parameter file path
 
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
+            
     # Load the project parameters file & initialized the helper library
     p = mm3.init_mm3_helpers(param_file_path)
 

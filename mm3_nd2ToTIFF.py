@@ -92,6 +92,8 @@ if __name__ == "__main__":
             if fov_naming_start < 0:
                 raise ValueError("FOV offset (%s) should probably be positive." % fov_num_offset)
 
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
+                
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")

@@ -261,8 +261,8 @@ def get_tif_metadata_elements(tif):
               'planes': []}
 
     # get the fov and t simply from the file name
-    idata['fov'] = int(tif.fname.split('xy')[1].split('.tif')[0])
-    idata['t'] = int(tif.fname.split('xy')[0].split('t')[-1])
+    idata['fov'] = int(tif.fname.split('xy')[1].split('c2.tif')[0])
+    idata['t'] = int(tif.fname.split('xy')[0].split('SJW104003t')[-1])
 
     # a page is plane, or stack, in the tiff. The other metdata is hidden down in there.
     for page in tif:
@@ -427,7 +427,71 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         for color_index in range(channel_stack.shape[3]):
             # this is the filename for the channel
             # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1))
+            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, 1))
+            # save stack
+            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
+
+    return
+    
+# slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
+def tiff_stack_slice_and_write_FL(images_to_write, channel_masks, analyzed_imgs):
+    '''Writes out 4D stacks of TIFF images per channel.
+    Loads all tiffs from and FOV into memory and then slices all time points at once.
+
+    Called by
+    __main__
+    '''
+
+    # make an array of images and then concatenate them into one big stack
+    image_fov_stack = []
+
+    # go through list of images and get the file path
+    for n, image in enumerate(images_to_write):
+        # analyzed_imgs dictionary will be found in main scope. [0] is the key, [1] is jd
+        image_params = analyzed_imgs[image[0]]
+
+        image_params['filepath'] = image_params['filepath'].replace('c2', 'c1')
+
+        information("Loading %s." % image_params['filepath'].split('/')[-1])
+
+        if n == 1:
+            # declare identification variables for saving using first image
+            fov_id = image_params['fov']
+
+        # load the tif and store it in array
+        with tiff.TiffFile(image_params['filepath']) as tif:
+            image_data = tif.asarray()
+
+        # channel finding was also done on images after orientation was fixed
+        image_data = fix_orientation(image_data)
+
+        # add additional axis if the image is flat
+        if len(image_data.shape) == 2:
+            image_data = np.expand_dims(image_data, 0)
+
+        #change axis so it goes X, Y, Plane
+        image_data = np.rollaxis(image_data, 0, 3)
+
+        # add it to list. The images should be in time order
+        image_fov_stack.append(image_data)
+
+    # concatenate the list into one big ass stack
+    image_fov_stack = np.stack(image_fov_stack, axis=0)
+
+    # cut out the channels as per channel masks for this fov
+    for peak, channel_loc in channel_masks[fov_id].iteritems():
+        #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
+        information('Slicing and saving channel peak %d.' % peak)
+
+        # slice out channel.
+        # The function should recognize the shape length as 4 and cut all time points
+        channel_stack = cut_slice(image_fov_stack, channel_loc)
+
+        # save a different time stack for all colors
+        for color_index in range(channel_stack.shape[3]):
+            # this is the filename for the channel
+            # # chnl_dir and p will be looked for in the scope above (__main__)
+            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, 2))
             # save stack
             tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
 
@@ -880,7 +944,7 @@ def channel_xcorr(fov_id, peak_id):
     '''
 
     # Use this number of images to calculate cross correlations
-    number_of_images = 10
+    number_of_images = 100
 
     # load the phase contrast images
     image_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
@@ -1237,7 +1301,8 @@ def subtract_phase(image_pair):
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract cropped cell image from empty channel.
-    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
+#    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
+    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
 
     # just zero out anything less than 0. This is what Sattar does
     channel_subtracted[channel_subtracted < 0] = 0
@@ -1323,14 +1388,16 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
+    OTSU_threshold = params['OTSU_threshold']
     first_opening_size = params['first_opening_size']
+    line_profile_threshold = params['line_profile_threshold']
     distance_threshold = params['distance_threshold']
     second_opening_size = params['second_opening_size']
     min_object_size = params['min_object_size']
 
     # threshold image
     thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
-    threshholded = image > thresh # will create binary image
+    threshholded = image > OTSU_threshold*thresh # will create binary image
 
     # if there are no cells, good to clear the border
     # because otherwise the OTSU is just for random bullshit, most
@@ -1387,10 +1454,14 @@ def segment_image(image):
     # relabel now that small objects and labels on edges have been cleared
     markers = morphology.label(cleared)
 
+    #the binary image for the watershed #FS20170907
+    threshholded_01 = image > thresh
+    threshholded_01 = segmentation.clear_border(threshholded_01)
+    
     # label using the random walker (diffusion watershed) algorithm
     try:
         # set anything outside of OTSU threshold to -1 so it will not be labeled
-        markers[threshholded == 0] = -1
+        markers[threshholded_01 == 0] = -1
         # here is the main algorithm
         labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
