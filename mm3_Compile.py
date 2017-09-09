@@ -48,6 +48,7 @@ if __name__ == "__main__":
     # hardcoded parameters
     do_metadata = True
     do_channel_masks = True
+    do_slicing = True
     t_end = None # only analyze images up until this t point
 
     # get switches and parameters
@@ -196,24 +197,26 @@ if __name__ == "__main__":
         mm3.information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
-    mm3.information("Saving channel slices.")
+    if do_slicing:
 
-    # do it by FOV. Not set up for multiprocessing
-    for fov, peaks in channel_masks.iteritems():
-        mm3.information("Loading images for FOV %03d." % fov)
+        mm3.information("Saving channel slices.")
 
-        # get filenames just for this fov along with the julian date of acquistion
-        send_to_write = [[k, v['t']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
+        # do it by FOV. Not set up for multiprocessing
+        for fov, peaks in channel_masks.iteritems():
+            mm3.information("Loading images for FOV %03d." % fov)
 
-        # sort the filenames by jdn
-        send_to_write = sorted(send_to_write, key=lambda time: time[1])
+            # get filenames just for this fov along with the julian date of acquistion
+            send_to_write = [[k, v['t']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
 
-        if p['output'] == 'TIFF':
-            #This is for loading the whole raw tiff stack and then slicing through it
-            mm3.tiff_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
+            # sort the filenames by jdn
+            send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
-        elif p['output'] == 'HDF5':
-            # Or write it to hdf5
-            mm3.hdf5_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
+            if p['output'] == 'TIFF':
+                #This is for loading the whole raw tiff stack and then slicing through it
+                mm3.tiff_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
 
-    mm3.information("Channel slices saved.")
+            elif p['output'] == 'HDF5':
+                # Or write it to hdf5
+                mm3.hdf5_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
+
+        mm3.information("Channel slices saved.")
