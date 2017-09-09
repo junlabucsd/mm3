@@ -49,7 +49,7 @@ if __name__ == "__main__":
     do_metadata = True
     do_channel_masks = True
     do_slicing = True
-    t_end = None # only analyze images up until this t point
+    t_end = None # only analyze images up until this t point. Put in None otherwise
 
     # get switches and parameters
     try:
@@ -184,6 +184,11 @@ if __name__ == "__main__":
 
     else:
         mm3.information("Calculating channel masks.")
+
+        # only calculate channels masks from images before t_end in case it is specified
+        if t_end:
+            analyzed_imgs = {fn : i_metadata for fn, i_metadata in analyzed_imgs.items() if
+                             i_metadata['t'] <= t_end}
 
         # Uses channel mm3.information from the already processed image data
         channel_masks = mm3.make_masks(analyzed_imgs)
