@@ -45,6 +45,8 @@ mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 
+from mm3_foci import foci_lap
+
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
@@ -1224,6 +1226,9 @@ def subtract_fov_stack(fov_id, specs, color='c1'):
         pool.close() # tells the process nothing more will be added.
         pool.join() # blocks script until everything has been processed and workers exit
 
+        #for debug FS20170907
+#        subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
+
         # stack them up along a time axis
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
 
@@ -1508,10 +1513,10 @@ def make_lineages_fov(fov_id, specs):
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
 
-    # # looped version for debugging
-    # lineages = []
-    # for fov_and_peak_id in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_id))
+
+##    # This is the non-parallelized version (useful for debug)
+#    for fov_and_peak_ids in fov_and_peak_ids_list:
+#        lineages = make_lineage_chnl_stack(fov_and_peak_ids)
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1735,8 +1740,18 @@ class Cell():
         self.areas = [region.area]
         self.x_positions = [region.centroid[1]]
         self.y_positions = [region.centroid[0]]
-        self.lengths = [region.major_axis_length]
-        self.widths = [region.minor_axis_length]
+        
+#        #calculating cell length and width by fitting an ellipse (regionprops)
+#        self.lengths = [region.major_axis_length]
+#        self.widths = [region.minor_axis_length]
+
+        #calculating cell length and width by using Feret Diamter
+        length_tmp, width_tmp = feretdiameter(region)
+        self.lengths = [length_tmp]
+        self.widths = [width_tmp]
+
+        self.orientation = [region.orientation]
+        self.centroid = [region.centroid]
 
         # these two are special, as they include information from the daugthers for division
         # computed upon division
@@ -1764,8 +1779,19 @@ class Cell():
         self.areas.append(region.area)
         self.x_positions.append(region.centroid[1])
         self.y_positions.append(region.centroid[0])
-        self.lengths.append(region.major_axis_length)
-        self.widths.append(region.minor_axis_length)
+
+#        #calculating cell length and width by fitting an ellipse (regionprops)        
+#        self.lengths.append(region.major_axis_length)
+#        self.widths.append(region.minor_axis_length)
+        
+        #calculating cell length and width by using Feret Diamter
+        length_tmp, width_tmp = feretdiameter(region)
+        self.lengths.append(length_tmp)
+        self.widths.append(width_tmp)
+        
+        self.orientation.append(region.orientation)
+        self.centroid.append(region.centroid)
+        
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -1820,10 +1846,87 @@ class Cell():
         print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
         print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
 
+# obtains cell length and width by using the regionprops (orientation and centroid) and calculating Feret diameter 
+def feretdiameter(region): 
+    
+    # y: along vertical axis of the image; x: along horizontal axis of the image;
+    # calculate the relative centroid in the bounding box (non-rotated)
+    y0, x0 = region.centroid 
+    y0 = y0 - np.int16(region.bbox[0])
+    x0 = x0 - np.int16(region.bbox[1])
+    cosorient = np.cos(region.orientation)
+    sinorient = np.sin(region.orientation)    
+    amp_param = 1.2 #amplifying number to make sure the axis is longer than actuall cell length
+#    b_image = (region.image).astype('int8')   
+    b_cnt = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
+
+    #####################
+    #calculte cell length
+    L1_pt = np.zeros((2,1))
+    L2_pt = np.zeros((2,1))
+    
+    #define the two end points of the the long axis line
+    #one pole
+    L1_pt[1] = x0 + cosorient * 0.5 * region.major_axis_length*amp_param
+    L1_pt[0] = y0 - sinorient * 0.5 * region.major_axis_length*amp_param
+
+    
+    #the other pole
+    L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
+    L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
+
+    
+    #calculate the minimal distance between the points at both ends of 3 lines
+    pt_L1 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in b_cnt])]
+    pt_L2 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in b_cnt])]
+    length =  np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
+
+    
+    #####################
+    #calculte cell width
+    x1 = x0 + cosorient * 0.5 * length*0.4
+    y1 = y0 - sinorient * 0.5 * length*0.4
+    x2 = x0 - cosorient * 0.5 * length*0.4
+    y2 = y0 + sinorient * 0.5 * length*0.4
+    
+    W1_pts = np.zeros((2,2))
+    W2_pts = np.zeros((2,2))
+    
+    #draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length, to avoid constriction in midcell
+    #one side
+
+    W1_pts[0,1] = x1 - sinorient * 0.5 * region.minor_axis_length*amp_param
+    W1_pts[0,0] = y1 - cosorient * 0.5 * region.minor_axis_length*amp_param
+    W1_pts[1,1] = x2 - sinorient * 0.5 * region.minor_axis_length*amp_param
+    W1_pts[1,0] = y2 - cosorient * 0.5 * region.minor_axis_length*amp_param
+    
+    #the other side
+    W2_pts[0,1] = x1 + sinorient * 0.5 * region.minor_axis_length*amp_param
+    W2_pts[0,0] = y1 + cosorient * 0.5 * region.minor_axis_length*amp_param
+    W2_pts[1,1] = x2 + sinorient * 0.5 * region.minor_axis_length*amp_param
+    W2_pts[1,0] = y2 + cosorient * 0.5 * region.minor_axis_length*amp_param
+
+    #calculate the minimal distance between the points at both ends of 3 lines 
+    pt_W1 = np.zeros((2,2))
+    pt_W2 = np.zeros((2,2))   
+    d_W = np.zeros((2,1))   
+    i=0    
+    for W1_pt, W2_pt in zip(W1_pts ,W2_pts):
+        pt_W1[i,0], pt_W1[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in b_cnt])]
+        pt_W2[i,0], pt_W2[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in b_cnt])]
+        d_W[i] =  np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
+        i+=1
+        
+    #take the average of the two at quarter positions    
+    width = np.mean([d_W[0],d_W[1]])
+    
+    return length, width
+        
 # take info and make string for cell id
 def create_cell_id(region, t, peak, fov):
     '''Make a unique cell id string for a new cell'''
-    cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
+#    cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
+    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', str(region.label)] #FS 20170310
     cell_id = ''.join(cell_id)
     return cell_id
 
@@ -2060,3 +2163,70 @@ def find_cell_intensities(fov_id, peak_id, Cells):
 # def datetime_to_jd(date):
 #     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
 #     return date_to_jd(date.year, date.month, days)
+
+def foci_analysis(Complete_Cells, params):
+    '''Fluorescence intensity analysis.'''
+    
+    Complete_Cells_foci = {}
+
+    for cell_id in Complete_Cells:
+        
+        Complete_Cells_foci[cell_id] = Complete_Cells[cell_id] 
+        # Import segmented images
+        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
+        seg_filepath = seg_dir + seg_filename
+        with tiff.TiffFile(seg_filepath) as tif:
+            image_data_seg = tif.asarray()
+       
+        # Import fluorescence images
+        FL_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
+        FL_filename = params['experiment_name'] + '_xy%03d_p%04d_sub_c2.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
+        FL_filepath = FL_dir + FL_filename
+        with tiff.TiffFile(FL_filepath) as tif:
+            image_data_FL = tif.asarray()
+              
+        disp_l = []
+        disp_w = []
+        foci_h4 = []
+        foci_stack = np.zeros((np.size(Complete_Cells[cell_id].times),image_data_seg[0,:,:].shape[0],image_data_seg[0,:,:].shape[1]))
+    
+        
+        for i in range(np.size(Complete_Cells[cell_id].times)):
+                    
+            t = Complete_Cells[cell_id].times[i]
+            image_data_temp = image_data_FL[t,:,:]
+            image_data_temp_seg = image_data_seg[t,:,:]
+
+            if np.sum(image_data_temp) != 0:
+#            if t>=100:
+#            if Complete_Cells[cell_id]['birth_label']==4:
+                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, Complete_Cells[cell_id].bboxes[i], Complete_Cells[cell_id].orientation[i], Complete_Cells[cell_id].centroid[i], params)
+                #FS20170826
+                disp_l.append(disp_l_tmp)
+                disp_w.append(disp_w_tmp)
+                foci_h4.append(foci_h4_tmp)
+                
+            else:
+                disp_l.append([])
+                disp_w.append([])
+                foci_h4.append([])
+                foci_stack[i] = image_data_temp_seg
+
+        Complete_Cells[cell_id].disp_l = disp_l
+        Complete_Cells[cell_id].disp_w = disp_w
+        Complete_Cells[cell_id].foci_h4 = foci_h4
+        
+        foci_stack = np.uint16(foci_stack)
+        foci_stack = np.stack(foci_stack, axis=0)
+        # Export overlaid images
+        foci_dir = params['experiment_directory'] + params['analysis_directory'] + 'overlay/'
+        foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Complete_Cells[cell_id].birth_time, Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak, Complete_Cells[cell_id].birth_label)
+        foci_filepath = foci_dir + foci_filename
+        
+#        if Complete_Cells[cell_id]['birth_label'] == 1 and t>=0 and np.sum(image_data_temp) != 0:
+#            tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
+            
+        information('Extracting foci information for %s cells.' % (cell_id))
+        
+    return Complete_Cells_foci

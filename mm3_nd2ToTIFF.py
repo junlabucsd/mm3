@@ -52,7 +52,7 @@ if __name__ == "__main__":
     number_of_rows = 1
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
-    vertical_crop = [] # [y1, y2]
+    vertical_crop = [] # [[y1_min, y1_max], [y2_min, y2_max]]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 4

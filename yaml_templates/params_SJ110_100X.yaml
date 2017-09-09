@@ -23,7 +23,7 @@ output: 'TIFF' # 'HDF5'
 seconds_per_time_index: 120
 
 # indicate which color channel (plane) has the phase images. Used by channel picker
-phase_plane: 'c1'
+phase_plane: 'c2'
 
 # conversion factor from pixels to microns
 # use 0.065 for 100X, use 0.108 for 60X
@@ -110,3 +110,12 @@ image_start: 0
 # present in an experiment, it will be silently ignored
 # This is also used for nd2ToTIFF
 image_end: 10000
+
+### foci_lap detection parameters ##############################################
+debug_foci: False # toggle foci detection debug
+
+foci_log_minsig: 1 # minimum sigma of laplacian to convolve in pixels. Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+foci_log_maxsig: 4 # maximum sigma of laplacian to convolve in pixels. Scales with maximum foci width to convolve as above
+
+foci_log_thresh: 0.0007 # default: 0.002; absolute threshold in which laplacian well reaches to record potential foci
+foci_log_peak_med_ratio: 1.5 # default: 1.2; foci peaks must be this many times greater than median cell intensity. Think signal to noise ratio
