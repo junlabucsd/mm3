@@ -112,8 +112,8 @@ for k = 1:L_channles
             b4 = plot([0 240],[0 0]); 
             b4.Color = [0 0 0]; set(b3,'LineWidth',0.5,'Markersize',2,'Marker','None','MarkerFaceColor',[1 1 1],'LineStyle','--');
 
-            xlabel('frame index (2min/frame)','fontsize',10)
-            xlim([0 240])
+            xlabel('frame index (5min/frame)','fontsize',10)
+            xlim([0 220])
             set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240],'XTickLabel',{'0','30','60','90','120','150','180','210','240'})
 
             ylabel('foci position ({\mu}m)','fontsize',10) 

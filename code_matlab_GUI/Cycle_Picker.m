@@ -57,7 +57,7 @@ clc;
 % close all;
 
 %-------------start pre-prosessing-----------
-handles.dir_name = '/Users/Fangwei/Documents/Adder/Analysis/20170519_FS103_DnaN_yPet_glu_25p_200ms_SJW104_2min/analysis_test/';
+handles.dir_name = '/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/analysis/';
 handles.cell_data = load([handles.dir_name 'cell_data/all_cells_foci.mat']);
 
 if exist([handles.dir_name 'picked/']) == 0
@@ -69,8 +69,8 @@ if exist([handles.dir_name 'picked_png/']) == 0
 end
 
 handles.px_to_mu = 0.065;
-handles.IW_thr = 4796; % threshold of intensity weighting
-handles.n_oc = 2; %number of overlapping cell cycle
+handles.IW_thr = 9587; % threshold of intensity weighting
+handles.n_oc = 1; %number of overlapping cell cycle
 
 L = length(fieldnames(handles.cell_data));
 fnames = fieldnames(handles.cell_data);

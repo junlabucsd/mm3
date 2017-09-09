@@ -1926,7 +1926,7 @@ def feretdiameter(region):
 def create_cell_id(region, t, peak, fov):
     '''Make a unique cell id string for a new cell'''
 #    cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
-    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', str(region.label)] #FS 20170310
+    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', '%02d' % region.label] #FS 20170310
     cell_id = ''.join(cell_id)
     return cell_id
 
