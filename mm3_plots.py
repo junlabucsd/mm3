@@ -653,12 +653,6 @@ def average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
                     stats_by_time['diffs_by_time'][t] = [lengths_diff[i]]
 
     # calculate timepoint by timepoint stats
-    stats_by_time['all_diff_times'] = []
-    stats_by_time['diff_means'] = []
-    stats_by_time['diff_stds'] = []
-    stats_by_time['diff_SE'] = []
-    stats_by_time['diff_n'] = []
-
     # note, you want to go over the dictionary in time order
     for t in sorted(stats_by_time['diffs_by_time']):
         values = stats_by_time['diffs_by_time'][t]
