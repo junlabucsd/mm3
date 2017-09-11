@@ -262,7 +262,6 @@ def stats_table(Cells_df):
 
     return cell_stats
 
-
 ### Plotting functions #############################################################################
 def violin_fovs(Cells_df):
     '''
@@ -587,6 +586,113 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
 
     sns.despine()
     # plt.subplots_adjust(hspace=0.5)
+
+    return fig, ax
+
+def average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
+    '''
+    Plot the average numerical derivative (instantaneous elongation rate in 1/hours) against
+    time in minutes. If shift is set to True, then the x axis is renumbered to be relative to
+    the shift time. Differentiation is currently just the difference. They units for the y axis
+    are scaled to be lambda (1/hours) = ln(2) / tau
+
+    Parameters
+    ----------
+    Cells : dict
+        Dictionary of cell objects
+    n_diff : int
+        The number of time steps to differentiate over.
+    t_int : int
+        Time interval of the picturing taking.
+    shift : boolean
+        Flag for if the time scale should be shifted
+    t_shift : int
+        Time frame in which shift occured.
+
+    Returns
+    -------
+    fig, ax : Matplotlib figure and axis objects.
+    '''
+
+    ### Calculate the stats
+    # This dictionary carries all the lengths by time point, and rate of change by timepoint
+    stats_by_time = {'diffs_by_time' : {},
+                     'all_diff_times' : [],
+                     'diff_means' : [],
+                     'diff_stds' : [],
+                     'diff_SE' : [],
+                     'diff_n' : []}
+
+    # we loop through each cell to find the rate of length change
+    for cell_id, Cell in Cells.items():
+
+            # convert lengths to um from pixels and take log
+            log_lengths = np.log(np.array(Cell.lengths))
+
+            # take numerical n-step derivative
+            lengths_diff = np.diff(log_lengths[::n_diff])
+
+            # convert units to lambda [hours^-1] = ln(2) / tau [hours]
+            lengths_diff *= 60 / n_diff / t_int
+
+            # get corresponding times (will be length-1)
+            diff_times = Cell.times[n_diff::n_diff]
+
+            # convert from time frame to minutes
+            diff_times = np.array(diff_times) * t_int
+
+            # and change to relative shift if flagged
+            if shift:
+                diff_times -= t_shift * t_int
+
+            # add data to time point centric dictionary
+            for i, t in enumerate(diff_times):
+                if t in stats_by_time['diffs_by_time']:
+                    stats_by_time['diffs_by_time'][t].append(lengths_diff[i])
+                else:
+                    stats_by_time['diffs_by_time'][t] = [lengths_diff[i]]
+
+    # calculate timepoint by timepoint stats
+    stats_by_time['all_diff_times'] = []
+    stats_by_time['diff_means'] = []
+    stats_by_time['diff_stds'] = []
+    stats_by_time['diff_SE'] = []
+    stats_by_time['diff_n'] = []
+
+    # note, you want to go over the dictionary in time order
+    for t in sorted(stats_by_time['diffs_by_time']):
+        values = stats_by_time['diffs_by_time'][t]
+
+        stats_by_time['all_diff_times'].append(t)
+        stats_by_time['diff_means'].append(np.mean(values))
+        stats_by_time['diff_stds'].append(np.std(values))
+        stats_by_time['diff_SE'].append(np.std(values) / np.sqrt(len(values)))
+        stats_by_time['diff_n'].append(len(values))
+
+    ### Plot the graph
+
+    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
+
+    # plot average and standard deviation of the rate of change.
+    ax.plot(stats_by_time['all_diff_times'], stats_by_time['diff_means'], c='r', lw=2, alpha=1)
+    ax.fill_between(stats_by_time['all_diff_times'],
+                    np.array(stats_by_time['diff_means']) - np.array(stats_by_time['diff_SE']),
+                    np.array(stats_by_time['diff_means']) + np.array(stats_by_time['diff_SE']),
+                    facecolor='r', alpha=0.5)
+    # ax.errorbar(stats_by_time['all_diff_times'], stats_by_time['diff_means'], stats_by_time['diff_SE'],
+    #                c='r', lw=2, alpha=1, elinewidth=1, capsize=1, barsabove=True, ecolor='r', capthick=1,
+    #                label='Average inst. rate of change with SE')
+
+    # vertical lines for shift up time
+    if shift:
+        ax.axvline(x=t_shift*t_int - t_shift*t_int, linewidth=2, color='g', ls='--', alpha=0.5, label='Shift-up time')
+
+    # format plot
+    ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=22)
+    ax.set_ylabel('Growth rate [hours$^{-1}$]', size=20)
+    ax.set_xlabel('Time [min]', size=20)
+    ax.legend(loc='lower right', fontsize=16)
 
     return fig, ax
 
