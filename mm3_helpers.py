@@ -1757,6 +1757,7 @@ class Cell():
         # computed upon division
         self.times_w_div = None
         self.lengths_w_div = None
+        self.widths_w_div = None
 
         # this information is the "production" information that
         # we want to extract at the end. Some of this is for convenience.
@@ -1821,6 +1822,7 @@ class Cell():
         # include the data points from the daughters
         self.times_w_div = np.append(self.times, self.division_time)
         self.lengths_w_div = np.append(self.lengths, daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+        self.widths_w_div = np.append(self.widths, (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
         try:
             with warnings.catch_warnings(): # ignore the warnings if it can't converge
                 warnings.simplefilter("ignore")

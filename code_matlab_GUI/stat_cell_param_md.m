@@ -4,11 +4,11 @@ warning off;
 
 %% load data
 
-dir_name = '/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/analysis/picked/';
+dir_name = '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.065;
-t_int = 5.0;
+t_int = 2.0;
 
 %% extract and calculate all cell data
 
@@ -25,18 +25,18 @@ for i=1:numel(fnames)
 
         length_g2_temp = double(px_to_mu*cell_g2_temp.lengths_w_div);
 
-        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) && cell_g2_temp.peak > 512 && cell_g2_temp.peak < 2048 %filter out filamentous cells
+        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && cell_g2_temp.lengths_w_div(end) < 20 %&& ismember(cell_g2_temp.daughters(1,:),fnames_channel) && cell_g2_temp.peak > 512 && cell_g2_temp.peak < 2048 %filter out filamentous cells
 
             cell_g3_id = cell_g2_temp.daughters(1,:);
             cell_g3_temp = struct_tmp.cell_list.(cell_g3_id);
 
             length_g3_temp = double(px_to_mu*cell_g3_temp.lengths_w_div);
 
-            if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
+            if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1 && isfield(cell_g3_temp,'initiation_time_n') == 1 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
 
                 
                 %----------parameters for mother generation--------
-                generation_time_g2( mother_cell_counter ) = t_int*double( cell_g2_temp.tau ) ;
+                generation_time_g2( mother_cell_counter ) = double( cell_g2_temp.tau ) ;
 
                 newborn_length_g2( mother_cell_counter ) = cell_g2_temp.sb;
                 newborn_width_g2( mother_cell_counter ) = px_to_mu*cell_g2_temp.widths(1);
@@ -74,10 +74,12 @@ for i=1:numel(fnames)
                     elongation_rate_fit_g2( mother_cell_counter ) = 60*elongation_rate_g2( mother_cell_counter );
                 end
 
-                initiation_time_g2( mother_cell_counter ) = t_int*double(cell_g2_temp.initiation_time);
+                initiation_time_g2_m( mother_cell_counter ) = t_int*double(cell_g2_temp.initiation_time); %note the change in definitions
+                initiation_time_g2( mother_cell_counter ) = t_int*double(cell_g2_temp.initiation_time_n);
                 termination_time_g2( mother_cell_counter ) = t_int*double(cell_g2_temp.termination_time);
 
-                initiation_mass_g2( mother_cell_counter ) = cell_g2_temp.initiation_mass;
+                initiation_mass_g2_m( mother_cell_counter ) = cell_g2_temp.initiation_mass; %note the change in definitions
+                initiation_mass_g2( mother_cell_counter ) = cell_g2_temp.initiation_mass_n;
                 termination_mass_g2( mother_cell_counter ) = cell_g2_temp.termination_mass;
 
                 B_period_g2( mother_cell_counter ) = t_int*double(cell_g2_temp.initiation_time - cell_g2_temp.birth_time_m);
@@ -87,7 +89,7 @@ for i=1:numel(fnames)
 
 
                 %----------parameters for daughter generation--------
-                generation_time_g3( mother_cell_counter ) = t_int*double( cell_g3_temp.tau ) ;
+                generation_time_g3( mother_cell_counter ) = double( cell_g3_temp.tau ) ;
 
                 newborn_length_g3( mother_cell_counter ) = cell_g3_temp.sb;
                 newborn_width_g3( mother_cell_counter ) = px_to_mu*cell_g3_temp.widths(1);
@@ -125,10 +127,12 @@ for i=1:numel(fnames)
                     elongation_rate_fit_g3( mother_cell_counter ) = 60*elongation_rate_g3( mother_cell_counter );
                 end
 
-                initiation_time_g3( mother_cell_counter ) = t_int*double(cell_g3_temp.initiation_time);
+                initiation_time_g3_m( mother_cell_counter ) = t_int*double(cell_g3_temp.initiation_time); %note the change in definitions
+                initiation_time_g3( mother_cell_counter ) = t_int*double(cell_g3_temp.initiation_time_n);
                 termination_time_g3( mother_cell_counter ) = t_int*double(cell_g3_temp.termination_time);
 
-                initiation_mass_g3( mother_cell_counter ) = cell_g3_temp.initiation_mass;
+                initiation_mass_g3_m( mother_cell_counter ) = cell_g3_temp.initiation_mass; %note the change in definitions
+                initiation_mass_g3( mother_cell_counter ) = cell_g3_temp.initiation_mass_n;
                 termination_mass_g3( mother_cell_counter ) = cell_g3_temp.termination_mass;
 
                 B_period_g3( mother_cell_counter ) = t_int*double(cell_g3_temp.initiation_time - cell_g3_temp.birth_time_m);
@@ -149,4 +153,4 @@ for i=1:numel(fnames)
     end
 end
 
-save('/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/analysis/cell_cycle_stat_md_GUI.mat');
+save('/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/cell_cycle_stat_md_GUI.mat');

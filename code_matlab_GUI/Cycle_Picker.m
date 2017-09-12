@@ -119,11 +119,13 @@ set(handles.display, 'String' , handles.display_name );
 
 handles.clicks = 0;
 handles.initiation_time = [];
+handles.initiation_time_n = [];
 handles.termination_time = [];
 handles.division_time = [];
 
 handles.birth_time_m = [];
 handles.initiation_mass = [];
+handles.initiation_mass_n = [];
 handles.termination_mass = [];
 
 %-------------end pre-prosessing-----------
@@ -181,6 +183,9 @@ if color_idx == 1
     handles.initiation_pos = handles.foci_list(j_1, 2);
     handles.initiation_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.initiation_time)) / (2^(handles.n_oc-1)); %note that number of origins at initiation is fixed;
     
+    handles.initiation_time_n = handles.initiation_time;
+    handles.initiation_mass_n = handles.initiation_mass;
+    
 elseif color_idx == 2
     plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'o', 'LineWidth',2 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10);
     handles.termination_time = handles.foci_list(j_1, 1);
@@ -201,6 +206,9 @@ elseif color_idx == 3
 elseif color_idx == 0
     for i = 1:size(handles.division_list, 1)
         d_4(i) = abs(a(1, 1)-handles.division_list(i, 1));
+        if  handles.initiation_time_n > handles.birth_list(i, 1) && handles.initiation_time_n <= handles.division_list(i, 1)
+            cell_idx_n = i;
+        end
     end
     [R_4, j_4] = min(d_4);
     plot( handles.division_list(j_4, 1), handles.termination_pos, 's', 'LineWidth',2 , 'MarkerEdgeColor','b','MarkerFaceColor','b','MarkerSize',10);
@@ -210,13 +218,25 @@ elseif color_idx == 0
     cell_idx = find(handles.division_list == handles.division_time);
     
     cell_name_tmp = handles.cell_names{cell_idx,1};
+    cell_name_n_tmp = handles.cell_names{cell_idx_n,1};
 
     handles.cell_list.(cell_name_tmp).birth_time_m = handles.birth_time_m;
     
     handles.cell_list.(cell_name_tmp).initiation_time = handles.initiation_time;
     handles.cell_list.(cell_name_tmp).termination_time = handles.termination_time;
+    handles.cell_list.(cell_name_n_tmp).initiation_time_n = handles.initiation_time_n;
     
-    handles.cell_list.(cell_name_tmp).initiation_mass = handles.initiation_mass;
+    if isempty(find(handles.division_list==handles.initiation_time)) && isempty(find(handles.birth_list==handles.initiation_time)) %if the initiation falls at division, the number of origins should be half
+        handles.cell_list.(cell_name_tmp).initiation_mass = handles.initiation_mass;
+    else
+        handles.cell_list.(cell_name_tmp).initiation_mass = handles.initiation_mass*2;
+    end
+
+    if isempty(find(handles.division_list==handles.initiation_time_n)) && isempty(find(handles.birth_list==handles.initiation_time_n)) %if the initiation falls at division, the number of origins should be half   
+        handles.cell_list.(cell_name_n_tmp).initiation_mass_n = handles.initiation_mass_n;
+    else
+        handles.cell_list.(cell_name_n_tmp).initiation_mass_n = handles.initiation_mass_n*2;
+    end
     handles.cell_list.(cell_name_tmp).termination_mass = handles.termination_mass;
     
     guidata(hObject, handles);

@@ -4,9 +4,9 @@ warning off;
 
 %% test mm3 
 % % % % load data
-% file_dir = '/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/analysis/';
+% file_dir = '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/';
 % EXP0 = load([file_dir 'cell_cycle_stat_GUI.mat']);
-% file_name = [file_dir '20170623_cell_cycle_stat_GUI.mat'];
+% file_name = [file_dir '20170515_cell_cycle_stat_GUI.mat'];
 % %         
 % % Extract data
 % [EXP0_data, EXP0_data_norm, EXP0_CV, EXP0_corr, EXP0_L] = cal_corr(EXP0);
@@ -22,13 +22,13 @@ warning off;
 % plot_dist(EXP0_data, EXP0_data_norm, EXP0_CV);
 % % text(-4.5, 12, 'DnaN-yPet','FontSize',30);
 % 
-% % save([file_dir 'mm3_20170623_manual.txt'],'EXP0_data','-ascii');
+% % save([file_dir 'mm3_20170515_manual.txt'],'EXP0_data','-ascii');
 
 %% test mm3 - mother-daughter
 % % load data
-file_dir = '/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/analysis/';
-EXP0 = load([file_dir 'cell_cycle_stat_md_GUI_all.mat']);
-file_name = [file_dir '20170623_cell_cycle_stat_GUI_all.mat'];
+file_dir = '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/';
+EXP0 = load([file_dir 'cell_cycle_stat_md_GUI.mat']);
+file_name = [file_dir '20170515_cell_cycle_stat_GUI.mat'];
         
 % Extract data
 [EXP0_data_g2, EXP0_data_norm_g2, EXP0_CV_g2, EXP0_corr_g2, EXP0_L_g2] = cal_corr_g2(EXP0);
@@ -56,5 +56,5 @@ text(-6.5, 0.6, 'daughter cells','FontSize',30);
 plot_corr_md(EXP0_pool_corr_md, EXP0_data_norm_m, EXP0_data_norm_d)
 text(-6.5, 1.9, 'mother-daughter correlation','FontSize',30);
 
-save([file_dir 'mm3_20170623_g1_manual.txt'],'EXP0_data_g2','-ascii');
-save([file_dir 'mm3_20170623_g2_manual.txt'],'EXP0_data_g3','-ascii');
+save([file_dir 'mm3_20170515_g1_manual.txt'],'EXP0_data_g2','-ascii');
+save([file_dir 'mm3_20170515_g2_manual.txt'],'EXP0_data_g3','-ascii');
