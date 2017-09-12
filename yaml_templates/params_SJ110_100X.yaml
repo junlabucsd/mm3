@@ -1,9 +1,9 @@
 # Refer to the "Setting up .yaml file" in the git repository wiki
 # Name your experiment
-experiment_name: '20170623_FS103_DnaN_YPet_glc_arg_25p_200ms_SJW_001_001'
+experiment_name: '20170515_FS103_DnaN_yPet_12aa_30p_250msx002'
 
 # root directory for the experiment. Must end in "/"
-experiment_directory: '/Users/Fangwei/Documents/Adder/Analysis/20170623_FS103_DnaN_YPet_glu_arg_25p_200ms_SJW103/'
+experiment_directory: '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/'
 
 # subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'rawdata/TIFF/'
@@ -20,7 +20,7 @@ TIFF_source: 'elements'
 output: 'TIFF' # 'HDF5'
 
 # nominal time between indexes for a single FOV used during image acquisition
-seconds_per_time_index: 300
+seconds_per_time_index: 120
 
 # indicate which color channel (plane) has the phase images. Used by channel picker
 phase_plane: 'c1'
@@ -32,13 +32,13 @@ pxl2um: 0.065
 # image_orientation: set to "up" if growth pushes cells up
 # set to "down" if growth pushes cells down
 # set to 'auto' if there is a mix
-image_orientation: 'up'
+image_orientation: 'down'
 
 # constants for tuning the algorithm (units are pixels)
 # channel_width is simply the width of the channels in pixels
 # is used to set the middle of the size range for detecting
 # intensity peaks corresponding to individual channels.
-channel_width: 16
+channel_width: 24
 
 # channel_separation is used to judge the closeness of channels
 # to the edges of the image
@@ -117,5 +117,5 @@ debug_foci: False # toggle foci detection debug
 foci_log_minsig: 1 # minimum sigma of laplacian to convolve in pixels. Scales with minimum foci width to detect as 2*sqrt(2)*minsig
 foci_log_maxsig: 4 # maximum sigma of laplacian to convolve in pixels. Scales with maximum foci width to convolve as above
 
-foci_log_thresh: 0.0012 # default: 0.002; absolute threshold in which laplacian well reaches to record potential foci
-foci_log_peak_med_ratio: 2.0 # default: 1.2; foci peaks must be this many times greater than median cell intensity. Think signal to noise ratio
+foci_log_thresh: 0.0006 # default: 0.002; absolute threshold in which laplacian well reaches to record potential foci
+foci_log_peak_med_ratio: 1.5 # default: 1.2; foci peaks must be this many times greater than median cell intensity. Think signal to noise ratio
