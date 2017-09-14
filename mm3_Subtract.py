@@ -56,7 +56,7 @@ if __name__ == "__main__":
         specify_fovs = False
         user_spec_fovs = []
         start_with_fov = -1
-        param_file = ""
+        param_file = 'yaml_templates/params_SJ110_100X.yaml' 
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o).')
 
@@ -71,9 +71,7 @@ if __name__ == "__main__":
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-                
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'       
-                
+
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")

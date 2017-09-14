@@ -161,6 +161,7 @@ def load_stack(fov_id, peak_id, color='c1'):
     return img_stack
 
 ### Functions for dealing with raw TIFF images
+
 # get params is the major function which processes raw TIFF images
 def get_tif_params(image_filename, find_channels=True):
     '''This is a damn important function for getting the information
@@ -263,8 +264,8 @@ def get_tif_metadata_elements(tif):
               'planes': []}
 
     # get the fov and t simply from the file name
-    idata['fov'] = int(tif.fname.split('xy')[1].split('c2.tif')[0])
-    idata['t'] = int(tif.fname.split('xy')[0].split('SJW104003t')[-1])
+    idata['fov'] = int(tif.fname.split('xy')[1].split('.tif')[0])
+    idata['t'] = int(tif.fname.split('xy')[0].split('t')[-1])
 
     # a page is plane, or stack, in the tiff. The other metdata is hidden down in there.
     for page in tif:
@@ -429,71 +430,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         for color_index in range(channel_stack.shape[3]):
             # this is the filename for the channel
             # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, 1))
-            # save stack
-            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
-
-    return
-    
-# slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
-def tiff_stack_slice_and_write_FL(images_to_write, channel_masks, analyzed_imgs):
-    '''Writes out 4D stacks of TIFF images per channel.
-    Loads all tiffs from and FOV into memory and then slices all time points at once.
-
-    Called by
-    __main__
-    '''
-
-    # make an array of images and then concatenate them into one big stack
-    image_fov_stack = []
-
-    # go through list of images and get the file path
-    for n, image in enumerate(images_to_write):
-        # analyzed_imgs dictionary will be found in main scope. [0] is the key, [1] is jd
-        image_params = analyzed_imgs[image[0]]
-
-        image_params['filepath'] = image_params['filepath'].replace('c2', 'c1')
-
-        information("Loading %s." % image_params['filepath'].split('/')[-1])
-
-        if n == 1:
-            # declare identification variables for saving using first image
-            fov_id = image_params['fov']
-
-        # load the tif and store it in array
-        with tiff.TiffFile(image_params['filepath']) as tif:
-            image_data = tif.asarray()
-
-        # channel finding was also done on images after orientation was fixed
-        image_data = fix_orientation(image_data)
-
-        # add additional axis if the image is flat
-        if len(image_data.shape) == 2:
-            image_data = np.expand_dims(image_data, 0)
-
-        #change axis so it goes X, Y, Plane
-        image_data = np.rollaxis(image_data, 0, 3)
-
-        # add it to list. The images should be in time order
-        image_fov_stack.append(image_data)
-
-    # concatenate the list into one big ass stack
-    image_fov_stack = np.stack(image_fov_stack, axis=0)
-
-    # cut out the channels as per channel masks for this fov
-    for peak, channel_loc in channel_masks[fov_id].iteritems():
-        #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
-        information('Slicing and saving channel peak %d.' % peak)
-
-        # slice out channel.
-        # The function should recognize the shape length as 4 and cut all time points
-        channel_stack = cut_slice(image_fov_stack, channel_loc)
-
-        # save a different time stack for all colors
-        for color_index in range(channel_stack.shape[3]):
-            # this is the filename for the channel
-            # # chnl_dir and p will be looked for in the scope above (__main__)
-            channel_filename = os.path.join(params['chnl_dir'],params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, 2))
+            channel_filename = os.path.join(params['chnl_dir'], params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1))
             # save stack
             tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
 
@@ -840,6 +777,7 @@ def make_masks(analyzed_imgs):
     return cm_copy
 
 ### functions about trimming, padding, and manipulating images
+
 # define function for flipping the images on an FOV by FOV basis
 def fix_orientation(image_data):
     '''
@@ -946,7 +884,7 @@ def channel_xcorr(fov_id, peak_id):
     '''
 
     # Use this number of images to calculate cross correlations
-    number_of_images = 100
+    number_of_images = 20
 
     # load the phase contrast images
     image_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
@@ -975,6 +913,7 @@ def channel_xcorr(fov_id, peak_id):
     return xcorr_array
 
 ### functions about subtraction
+
 # average empty channels from stacks, making another TIFF stack
 def average_empties_stack(fov_id, specs, color='c1'):
     '''Takes the fov file name and the peak names of the designated empties,
@@ -1226,8 +1165,8 @@ def subtract_fov_stack(fov_id, specs, color='c1'):
         pool.close() # tells the process nothing more will be added.
         pool.join() # blocks script until everything has been processed and workers exit
 
-        #for debug FS20170907
-#        subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
+        # linear loop for debug
+        # subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
 
         # stack them up along a time axis
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
@@ -1306,8 +1245,8 @@ def subtract_phase(image_pair):
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract cropped cell image from empty channel.
-#    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
-    channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
+    channel_subtracted = aligned_empty.astype('int32') - cropped_channel.astype('int32')
+    # channel_subtracted = cropped_channel.astype('int32') - aligned_empty.astype('int32')
 
     # just zero out anything less than 0. This is what Sattar does
     channel_subtracted[channel_subtracted < 0] = 0
@@ -1316,6 +1255,7 @@ def subtract_phase(image_pair):
     return channel_subtracted
 
 ### functions that deal with segmentation and lineages
+
 # Do segmentation for an channel time stack
 def segment_chnl_stack(fov_id, peak_id):
     '''
@@ -1459,14 +1399,14 @@ def segment_image(image):
     # relabel now that small objects and labels on edges have been cleared
     markers = morphology.label(cleared)
 
-    #the binary image for the watershed #FS20170907
-    threshholded_01 = image > thresh
-    threshholded_01 = segmentation.clear_border(threshholded_01)
-    
+    # the binary image for the watershed, which uses the unmodified OTSU threshold
+    threshholded_watershed = image > thresh
+    threshholded_watershed = segmentation.clear_border(threshholded_watershed)
+
     # label using the random walker (diffusion watershed) algorithm
     try:
         # set anything outside of OTSU threshold to -1 so it will not be labeled
-        markers[threshholded_01 == 0] = -1
+        markers[threshholded_watershed == 0] = -1
         # here is the main algorithm
         labeled_image = segmentation.random_walker(-1*image, markers)
         # put negative values back to zero for proper image
@@ -1514,9 +1454,9 @@ def make_lineages_fov(fov_id, specs):
     pool.join() # blocks script until everything has been processed and workers exit
 
 
-##    # This is the non-parallelized version (useful for debug)
-#    for fov_and_peak_ids in fov_and_peak_ids_list:
-#        lineages = make_lineage_chnl_stack(fov_and_peak_ids)
+   # This is the non-parallelized version (useful for debug)
+   # for fov_and_peak_ids in fov_and_peak_ids_list:
+   #     lineages = make_lineage_chnl_stack(fov_and_peak_ids)
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1740,10 +1680,10 @@ class Cell():
         self.areas = [region.area]
         self.x_positions = [region.centroid[1]]
         self.y_positions = [region.centroid[0]]
-        
-#        #calculating cell length and width by fitting an ellipse (regionprops)
-#        self.lengths = [region.major_axis_length]
-#        self.widths = [region.minor_axis_length]
+
+        #calculating cell length and width by fitting an ellipse (regionprops)
+        #self.lengths = [region.major_axis_length]
+        #self.widths = [region.minor_axis_length]
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
@@ -1781,18 +1721,18 @@ class Cell():
         self.x_positions.append(region.centroid[1])
         self.y_positions.append(region.centroid[0])
 
-#        #calculating cell length and width by fitting an ellipse (regionprops)        
-#        self.lengths.append(region.major_axis_length)
-#        self.widths.append(region.minor_axis_length)
-        
+        #calculating cell length and width by fitting an ellipse (regionprops)
+        #self.lengths.append(region.major_axis_length)
+        #self.widths.append(region.minor_axis_length)
+
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
-        
+
         self.orientation.append(region.orientation)
         self.centroid.append(region.centroid)
-        
+
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -1848,52 +1788,52 @@ class Cell():
         print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
         print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
 
-# obtains cell length and width by using the regionprops (orientation and centroid) and calculating Feret diameter 
-def feretdiameter(region): 
-    
+# obtains cell length and width by using the regionprops (orientation and centroid) and calculating Feret diameter
+def feretdiameter(region):
+
     # y: along vertical axis of the image; x: along horizontal axis of the image;
     # calculate the relative centroid in the bounding box (non-rotated)
-    y0, x0 = region.centroid 
+    y0, x0 = region.centroid
     y0 = y0 - np.int16(region.bbox[0])
     x0 = x0 - np.int16(region.bbox[1])
     cosorient = np.cos(region.orientation)
-    sinorient = np.sin(region.orientation)    
+    sinorient = np.sin(region.orientation)
     amp_param = 1.2 #amplifying number to make sure the axis is longer than actuall cell length
-#    b_image = (region.image).astype('int8')   
+    # b_image = (region.image).astype('int8')
     b_cnt = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
 
     #####################
     #calculte cell length
     L1_pt = np.zeros((2,1))
     L2_pt = np.zeros((2,1))
-    
+
     #define the two end points of the the long axis line
     #one pole
     L1_pt[1] = x0 + cosorient * 0.5 * region.major_axis_length*amp_param
     L1_pt[0] = y0 - sinorient * 0.5 * region.major_axis_length*amp_param
 
-    
+
     #the other pole
     L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
     L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
 
-    
+
     #calculate the minimal distance between the points at both ends of 3 lines
     pt_L1 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in b_cnt])]
     pt_L2 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in b_cnt])]
     length =  np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
 
-    
+
     #####################
     #calculte cell width
     x1 = x0 + cosorient * 0.5 * length*0.4
     y1 = y0 - sinorient * 0.5 * length*0.4
     x2 = x0 - cosorient * 0.5 * length*0.4
     y2 = y0 + sinorient * 0.5 * length*0.4
-    
+
     W1_pts = np.zeros((2,2))
     W2_pts = np.zeros((2,2))
-    
+
     #draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length, to avoid constriction in midcell
     #one side
 
@@ -1901,34 +1841,34 @@ def feretdiameter(region):
     W1_pts[0,0] = y1 - cosorient * 0.5 * region.minor_axis_length*amp_param
     W1_pts[1,1] = x2 - sinorient * 0.5 * region.minor_axis_length*amp_param
     W1_pts[1,0] = y2 - cosorient * 0.5 * region.minor_axis_length*amp_param
-    
+
     #the other side
     W2_pts[0,1] = x1 + sinorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[0,0] = y1 + cosorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,1] = x2 + sinorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,0] = y2 + cosorient * 0.5 * region.minor_axis_length*amp_param
 
-    #calculate the minimal distance between the points at both ends of 3 lines 
+    #calculate the minimal distance between the points at both ends of 3 lines
     pt_W1 = np.zeros((2,2))
-    pt_W2 = np.zeros((2,2))   
-    d_W = np.zeros((2,1))   
-    i=0    
+    pt_W2 = np.zeros((2,2))
+    d_W = np.zeros((2,1))
+    i=0
     for W1_pt, W2_pt in zip(W1_pts ,W2_pts):
         pt_W1[i,0], pt_W1[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in b_cnt])]
         pt_W2[i,0], pt_W2[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in b_cnt])]
         d_W[i] =  np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
         i+=1
-        
-    #take the average of the two at quarter positions    
+
+    #take the average of the two at quarter positions
     width = np.mean([d_W[0],d_W[1]])
-    
+
     return length, width
-        
+
 # take info and make string for cell id
 def create_cell_id(region, t, peak, fov):
     '''Make a unique cell id string for a new cell'''
-#    cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
-    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', '%02d' % region.label] #FS 20170310
+   # cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
+    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', '%02d' % region.label]
     cell_id = ''.join(cell_id)
     return cell_id
 
@@ -2168,47 +2108,47 @@ def find_cell_intensities(fov_id, peak_id, Cells):
 
 def foci_analysis(Complete_Cells, params):
     '''Fluorescence intensity analysis.'''
-    
+
     Complete_Cells_foci = {}
 
     for cell_id in Complete_Cells:
-        
-        Complete_Cells_foci[cell_id] = Complete_Cells[cell_id] 
+
+        Complete_Cells_foci[cell_id] = Complete_Cells[cell_id]
         # Import segmented images
         seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
         seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
         seg_filepath = seg_dir + seg_filename
         with tiff.TiffFile(seg_filepath) as tif:
             image_data_seg = tif.asarray()
-       
+
         # Import fluorescence images
         FL_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
         FL_filename = params['experiment_name'] + '_xy%03d_p%04d_sub_c2.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
         FL_filepath = FL_dir + FL_filename
         with tiff.TiffFile(FL_filepath) as tif:
             image_data_FL = tif.asarray()
-              
+
         disp_l = []
         disp_w = []
         foci_h4 = []
         foci_stack = np.zeros((np.size(Complete_Cells[cell_id].times),image_data_seg[0,:,:].shape[0],image_data_seg[0,:,:].shape[1]))
-    
-        
+
+
         for i in range(np.size(Complete_Cells[cell_id].times)):
-                    
+
             t = Complete_Cells[cell_id].times[i]
             image_data_temp = image_data_FL[t,:,:]
             image_data_temp_seg = image_data_seg[t,:,:]
 
             if np.sum(image_data_temp) != 0:
-#            if t>=100:
-#            if Complete_Cells[cell_id]['birth_label']==4:
+        #    if t>=100:
+        #    if Complete_Cells[cell_id]['birth_label']==4:
                 disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, Complete_Cells[cell_id].bboxes[i], Complete_Cells[cell_id].orientation[i], Complete_Cells[cell_id].centroid[i], params)
                 #FS20170826
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
                 foci_h4.append(foci_h4_tmp)
-                
+
             else:
                 disp_l.append([])
                 disp_w.append([])
@@ -2218,17 +2158,17 @@ def foci_analysis(Complete_Cells, params):
         Complete_Cells[cell_id].disp_l = disp_l
         Complete_Cells[cell_id].disp_w = disp_w
         Complete_Cells[cell_id].foci_h4 = foci_h4
-        
+
         foci_stack = np.uint16(foci_stack)
         foci_stack = np.stack(foci_stack, axis=0)
         # Export overlaid images
         foci_dir = params['experiment_directory'] + params['analysis_directory'] + 'overlay/'
         foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Complete_Cells[cell_id].birth_time, Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak, Complete_Cells[cell_id].birth_label)
         foci_filepath = foci_dir + foci_filename
-        
-#        if Complete_Cells[cell_id]['birth_label'] == 1 and t>=0 and np.sum(image_data_temp) != 0:
-#            tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
-            
+
+    #    if Complete_Cells[cell_id]['birth_label'] == 1 and t>=0 and np.sum(image_data_temp) != 0:
+        #    tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
+
         information('Extracting foci information for %s cells.' % (cell_id))
-        
+
     return Complete_Cells_foci

@@ -47,6 +47,11 @@ with warnings.catch_warnings():
 
 ### Main script
 if __name__ == "__main__":
+    '''
+    This script converts a Nikon Elements .nd2 file to individual TIFF files per time point.
+    multiple color planes are stacked in each time point to make a multipage TIFF.
+    There are a number of hardcoded parameters that should be modified below.
+    '''
 
     # hard coded parameters
     number_of_rows = 1
@@ -58,7 +63,7 @@ if __name__ == "__main__":
     tif_compress = 4
 
     # parameters will be overwritten by switches
-    param_file = ""
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     specify_fovs = []
     start_fov = -1
     external_directory = ""
@@ -92,8 +97,6 @@ if __name__ == "__main__":
             if fov_naming_start < 0:
                 raise ValueError("FOV offset (%s) should probably be positive." % fov_num_offset)
 
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
-                
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
@@ -113,8 +116,8 @@ if __name__ == "__main__":
         nd2files = os.path.join(glob.glob(external_directory, "*.nd2"))
         information("Found %d files to analyze from external file." % len(nd2files))
     else:
-        print("external directory: {:s}".format(p['experiment_directory']))
-        nd2files = glob.glob(os.path.join(p['experiment_directory'],"*.nd2"))
+        information("Experiment directory: {:s}".format(p['experiment_directory']))
+        nd2files = glob.glob(os.path.join(p['experiment_directory'], "*.nd2"))
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:

@@ -35,7 +35,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    do_segmentation = False # make or load segmentation?
+    do_segmentation = True # make or load segmentation?
     do_lineages = True # should lineages be made after segmentation?
 
     # get switches and parameters
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
-        param_file_path = ''
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o).')
 
@@ -60,8 +60,6 @@ if __name__ == "__main__":
         if opt == '-f':
             param_file_path = arg # parameter file path
 
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
-            
     # Load the project parameters file & initialized the helper library
     p = mm3.init_mm3_helpers(param_file_path)
 

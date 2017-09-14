@@ -57,7 +57,7 @@ if __name__ == "__main__":
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
-        param_file_path = ''
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
         print('No arguments detected (-f -o).')
 
@@ -73,8 +73,6 @@ if __name__ == "__main__":
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
@@ -108,7 +106,7 @@ if __name__ == "__main__":
         mm3.information("Finding image parameters.")
 
         # get all the TIFFs in the folder
-        found_files = glob.glob(os.path.join(p['TIFF_dir'],'*c2.tif')) # get all tiffs
+        found_files = glob.glob(os.path.join(p['TIFF_dir'],'*.tif')) # get all tiffs
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
@@ -148,8 +146,8 @@ if __name__ == "__main__":
             # get_params gets the image metadata and puts it in analyzed_imgs dictionary
             # for each file name. True means look for channels
 
-##             This is the non-parallelized version (useful for debug)
-#             analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
+            # This is the non-parallelized version (useful for debug)
+            # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
 
             # Parallelized
             analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))

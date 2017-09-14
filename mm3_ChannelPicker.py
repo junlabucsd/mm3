@@ -229,7 +229,7 @@ if __name__ == "__main__":
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
-        param_file_path = ''
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o).')
 
@@ -244,8 +244,6 @@ if __name__ == "__main__":
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-                
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'  
 
     # Load the project parameters file
     if len(param_file_path) == 0:
