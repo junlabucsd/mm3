@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     # Load ND2 files into a list for processing
     if len(external_directory) > 0:
-        nd2files = os.path.join(glob.glob(external_directory, "*.nd2"))
+        nd2files = glob.glob(os.path.join(external_directory, "*.nd2"))
         information("Found %d files to analyze from external file." % len(nd2files))
     else:
         print("external directory: {:s}".format(p['experiment_directory']))
