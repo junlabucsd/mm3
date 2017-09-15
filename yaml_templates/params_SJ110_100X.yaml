@@ -1,12 +1,12 @@
 # Refer to the "Setting up .yaml file" in the git repository wiki
 # Name your experiment
-experiment_name: '20170515_FS103_DnaN_yPet_12aa_30p_250msx002'
+experiment_name: 'exp_name'
 
 # root directory for the experiment. Must end in "/"
-experiment_directory: '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/'
+experiment_directory: '/path/to/exp/folder/'
 
 # subdirectory for the original TIFs. This should be in your experiment_directory
-image_directory: 'rawdata/TIFF/'
+image_directory: 'TIFF/'
 
 # subdirectory for storing analysis data. This should be in your experiment_directory
 analysis_directory: 'analysis/'
@@ -20,7 +20,7 @@ TIFF_source: 'elements'
 output: 'TIFF' # 'HDF5'
 
 # nominal time between indexes for a single FOV used during image acquisition
-seconds_per_time_index: 120
+seconds_per_time_index: 60
 
 # indicate which color channel (plane) has the phase images. Used by channel picker
 phase_plane: 'c1'
@@ -29,10 +29,10 @@ phase_plane: 'c1'
 # use 0.065 for 100X, use 0.108 for 60X
 pxl2um: 0.065
 
-# image_orientation: set to "up" if growth pushes cells up
-# set to "down" if growth pushes cells down
+# image_orientation: set to 'up' if growth pushes cells up
+# set to 'down' if growth pushes cells down
 # set to 'auto' if there is a mix
-image_orientation: 'down'
+image_orientation: 'auto'
 
 # constants for tuning the algorithm (units are pixels)
 # channel_width is simply the width of the channels in pixels
@@ -58,7 +58,9 @@ channel_width_pad: 10
 channel_picking_threshold: 0.97
 
 ### segmentaion and lineage creation parameters
-# threshold used in readjusting the OTSU method (the final contour determination used DEFAULT OTSU method)
+# threshold used in readjusting the OTSU method in fold change.
+# Higher number will create smaller markers. 1.0 == default OTSU
+# Only for marker creation,final watershed uses default OTSU
 OTSU_threshold: 1.2
 
 # the radius of the disk that is used in the first morphological opening
@@ -66,7 +68,7 @@ OTSU_threshold: 1.2
 first_opening_size: 2
 
 # find indexes of rows where sum is less than 1/line_profile_threshold of this value.
-line_profile_threshold: 5
+line_profile_threshold: 4
 
 # pixels closer than this distance to the edge of a cell will be zeroed.
 # unit is pixels
@@ -78,7 +80,7 @@ second_opening_size: 1
 
 # markers for potential cells smaller than this area will be zeroed
 # unit is pixels^2
-min_object_size: 20
+min_object_size: 25
 
 # amount of frames after which a cell is dropped because no new regions linked to it
 lost_cell_time: 3

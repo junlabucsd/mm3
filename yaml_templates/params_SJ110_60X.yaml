@@ -58,9 +58,17 @@ channel_width_pad: 10
 channel_picking_threshold: 0.97
 
 ### segmentaion and lineage creation parameters
+# threshold used in readjusting the OTSU method in fold change.
+# Higher number will create smaller markers. 1.0 == default OTSU
+# Only for marker creation,final watershed uses default OTSU
+OTSU_threshold: 1.2
+
 # the radius of the disk that is used in the first morphological opening
 # unit is pixels
 first_opening_size: 2
+
+# find indexes of rows where sum is less than 1/line_profile_threshold of this value.
+line_profile_threshold: 4
 
 # pixels closer than this distance to the edge of a cell will be zeroed.
 # unit is pixels
@@ -88,7 +96,7 @@ min_growth_area: 0.8
 # regions only less than this value down the channel from the closed end will be considered
 # to start potential new cells. Does not apply to daughters
 # unit is pixels
-new_cell_y_cutoff: 200
+new_cell_y_cutoff: 150
 
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment
@@ -104,3 +112,12 @@ image_start: 0
 # present in an experiment, it will be silently ignored
 # This is also used for nd2ToTIFF
 image_end: 10000
+
+### foci_lap detection parameters ##############################################
+debug_foci: False # toggle foci detection debug
+
+foci_log_minsig: 1 # minimum sigma of laplacian to convolve in pixels. Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+foci_log_maxsig: 4 # maximum sigma of laplacian to convolve in pixels. Scales with maximum foci width to convolve as above
+
+foci_log_thresh: 0.0006 # default: 0.002; absolute threshold in which laplacian well reaches to record potential foci
+foci_log_peak_med_ratio: 1.5 # default: 1.2; foci peaks must be this many times greater than median cell intensity. Think signal to noise ratio
