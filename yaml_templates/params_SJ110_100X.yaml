@@ -57,6 +57,10 @@ channel_width_pad: 10
 # threshold for calling empty/full channels in ChannelPicker
 channel_picking_threshold: 0.97
 
+# when aligning channels, this is the pad size in pixels.
+# use large values if your channels move a lot during the experiment (will slow subtraction down)
+alignment_pad: 10
+
 ### segmentaion and lineage creation parameters
 # threshold used in readjusting the OTSU method in fold change.
 # Higher number will create smaller markers. 1.0 == default OTSU

@@ -81,7 +81,6 @@ if __name__ == "__main__":
     mm3.information('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
         os.makedirs(p['ana_dir'])
