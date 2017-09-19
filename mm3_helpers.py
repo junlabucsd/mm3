@@ -1355,7 +1355,6 @@ def segment_image(image):
     # load in segmentation parameters
     OTSU_threshold = params['OTSU_threshold']
     first_opening_size = params['first_opening_size']
-    line_profile_threshold = params['line_profile_threshold']
     distance_threshold = params['distance_threshold']
     second_opening_size = params['second_opening_size']
     min_object_size = params['min_object_size']
@@ -1798,8 +1797,13 @@ class Cell():
         print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
         print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
 
-# obtains cell length and width by using the regionprops (orientation and centroid) and calculating Feret diameter
+# obtains cell length and width of the cell using the feret diameter
 def feretdiameter(region):
+    '''
+    feretdiameter calculates the length and width of the binary region shape. The cell orientation
+    from the ellipsoid is used to find the major and minor axis of the cell.
+    See https://en.wikipedia.org/wiki/Feret_diameter.
+    '''
 
     # y: along vertical axis of the image; x: along horizontal axis of the image;
     # calculate the relative centroid in the bounding box (non-rotated)
@@ -1813,61 +1817,64 @@ def feretdiameter(region):
     b_cnt = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
 
     #####################
-    #calculte cell length
+    # calculte cell length
     L1_pt = np.zeros((2,1))
     L2_pt = np.zeros((2,1))
 
-    #define the two end points of the the long axis line
-    #one pole
+    # define the two end points of the the long axis line
+    # one pole
     L1_pt[1] = x0 + cosorient * 0.5 * region.major_axis_length*amp_param
     L1_pt[0] = y0 - sinorient * 0.5 * region.major_axis_length*amp_param
 
-
-    #the other pole
+    # the other pole
     L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
     L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
 
-
-    #calculate the minimal distance between the points at both ends of 3 lines
+    # calculate the minimal distance between the points at both ends of 3 lines
+    # aka calcule the closest coordiante in the region to each of the above points.
     pt_L1 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in b_cnt])]
     pt_L2 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in b_cnt])]
-    length =  np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
-
+    length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
 
     #####################
-    #calculte cell width
+    # calculate cell width
+    # draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length = 0.4, to avoid constriction in midcell
+
+    # starting points
     x1 = x0 + cosorient * 0.5 * length*0.4
     y1 = y0 - sinorient * 0.5 * length*0.4
     x2 = x0 - cosorient * 0.5 * length*0.4
     y2 = y0 + sinorient * 0.5 * length*0.4
-
     W1_pts = np.zeros((2,2))
     W2_pts = np.zeros((2,2))
 
-    #draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length, to avoid constriction in midcell
-    #one side
-
+    # now find the ends of the lines
+    # one side
     W1_pts[0,1] = x1 - sinorient * 0.5 * region.minor_axis_length*amp_param
     W1_pts[0,0] = y1 - cosorient * 0.5 * region.minor_axis_length*amp_param
     W1_pts[1,1] = x2 - sinorient * 0.5 * region.minor_axis_length*amp_param
     W1_pts[1,0] = y2 - cosorient * 0.5 * region.minor_axis_length*amp_param
 
-    #the other side
+    # the other side
     W2_pts[0,1] = x1 + sinorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[0,0] = y1 + cosorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,1] = x2 + sinorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,0] = y2 + cosorient * 0.5 * region.minor_axis_length*amp_param
 
-    #calculate the minimal distance between the points at both ends of 3 lines
+    # calculate the minimal distance between the points at both ends of 3 lines
     pt_W1 = np.zeros((2,2))
     pt_W2 = np.zeros((2,2))
     d_W = np.zeros((2,1))
-    i=0
+    i = 0
     for W1_pt, W2_pt in zip(W1_pts ,W2_pts):
+
+        # find the points closest to the guide points
         pt_W1[i,0], pt_W1[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in b_cnt])]
         pt_W2[i,0], pt_W2[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in b_cnt])]
-        d_W[i] =  np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
-        i+=1
+
+        # calculate the actual width
+        d_W[i] = np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
+        i += 1
 
     #take the average of the two at quarter positions
     width = np.mean([d_W[0],d_W[1]])
