@@ -85,8 +85,12 @@ if __name__ == "__main__":
             os.makedirs(p['sub_dir'])
 
     # load specs file
-    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-        specs = pickle.load(specs_file)
+    try:
+        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
+            specs = pickle.load(specs_file)
+    except:
+        mm3.warning('Could not load specs file.')
+        raise ValueError
 
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

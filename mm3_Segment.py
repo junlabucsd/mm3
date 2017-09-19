@@ -38,27 +38,26 @@ if __name__ == "__main__":
     do_segmentation = True # make or load segmentation?
     do_lineages = True # should lineages be made after segmentation?
 
+    # switches which may be overwritten
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    user_spec_fovs = []
+
     # get switches and parameters
     try:
         opts, args = getopt.getopt(sys.argv[1:],"f:o:")
-        # switches which may be overwritten
-        specify_fovs = False
-        user_spec_fovs = []
-        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -o).')
+        mm3.warning('No arguments detected (-f -o), using hardcoded parameters.')
 
     for opt, arg in opts:
+        if opt == '-f':
+            param_file_path = arg # parameter file path
         if opt == '-o':
             try:
-                specify_fovs = True
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
-        if opt == '-f':
-            param_file_path = arg # parameter file path
 
     # Load the project parameters file & initialized the helper library
     p = mm3.init_mm3_helpers(param_file_path)
@@ -81,7 +80,7 @@ if __name__ == "__main__":
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # remove fovs if the user specified so
-    if specify_fovs:
+    if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
     mm3.information("Processing %d FOVs." % len(fov_id_list))

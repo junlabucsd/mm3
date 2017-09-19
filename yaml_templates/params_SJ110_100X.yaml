@@ -71,9 +71,6 @@ OTSU_threshold: 1.2
 # unit is pixels
 first_opening_size: 2
 
-# find indexes of rows where sum is less than 1/line_profile_threshold of this value.
-line_profile_threshold: 4
-
 # pixels closer than this distance to the edge of a cell will be zeroed.
 # unit is pixels
 distance_threshold: 3

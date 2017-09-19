@@ -1379,19 +1379,7 @@ def segment_image(image):
     if np.amax(morph) == 0:
         return morph
 
-    # zero out rows that have very few pixels
-    # widens or creates gaps between cells
-    # sum of rows (how many pixels are occupied in each row)
-    line_profile = np.sum(morph, axis=1)
-    # find highest value, aka width of fattest cell
-    max_width = max(line_profile)
-    # find indexes of rows where sum is less than 1/5th of this value.
-    zero_these_indicies = np.all([line_profile < (max_width/3), line_profile > 0], axis=0)
-    zero_these_indicies = np.where(zero_these_indicies)
-    # zero out those rows
-    morph[zero_these_indicies] = 0
-
-    ### Calculate distnace matrix, use as markers for random walker (diffusion watershed)
+    ### Calculate distance matrix, use as markers for random walker (diffusion watershed)
     # Generate the markers based on distance to the background
     distance = ndi.distance_transform_edt(morph)
 
