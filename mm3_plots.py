@@ -857,7 +857,7 @@ def plot_correlations(Cells_df, rescale=False):
 
     return g
 
-### Plotting functions that are for the bilinear and cumulative stuff
+### Fitting functions
 def produce_fit(Cell):
     '''
     Given a cell object, produce a fit for its elongation.
@@ -874,12 +874,43 @@ def produce_fit(Cell):
     y_fit = x * slope + intercept
     y_fit = np.exp(y_fit)
 
-#     print(Cell.elong_rate, slope)
-#     print(y, y_fit, r_squared, intercept)
+    # print(Cell.elong_rate, slope)
+    # print(y, y_fit, r_squared, intercept)
 
     return y_fit, r_squared
 
-# Define functions and classes
+# bilinear fitting ---
+def produce_bilin_fit(Cell):
+    '''
+    Use Guillaume's code to produce a bilinear fit
+    '''
+
+    # Get X and Y. X is time, Y is length
+    X = np.array(Cell.times_w_div, dtype=np.float_)
+    Y = np.log(Cell.lengths_w_div)
+
+    ## change origin of times
+    X_t0 = X[0]
+    X = X-X_t0
+
+    # make bilinear fit
+    p_init = bilinear_init(X, Y)
+    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
+    Z = np.array([bilinear_f(par, xi) for xi in X])
+    chi_bilin = np.mean((Y - Z)**2)
+    r2 = coefficient_determination_r2(Y, Z)
+    r_bilin = np.sqrt(r2)
+
+    t_shift = par[3] + X_t0
+
+    # convert back for plotting
+    y_fit = np.exp(Z)
+
+    # determine the length at the shift up time for plotting
+    len_at_shift = np.exp(bilinear_f(par, par[3]))
+
+    return y_fit, r2, t_shift, len_at_shift
+
 class FitRes:
     """
     Object used to fit a data set to a particular function.
@@ -940,8 +971,8 @@ def fit_xy(x, y, p_init, funcfit_f, funcfit_df=None, least_squares_args={'loss':
 
     except ValueError as e:
         print(e)
-#         sys.exit(1)
-#    print res
+   #      sys.exit(1)
+   # print res
     return par
 
 def bilinear_f(par,xi):
@@ -1001,94 +1032,4 @@ def bilinear_init(x, y):
         return np.array([ymid,(ymid-y0)/(xmid-x0),0.0,xmid])
     else:
         return np.array([ymid,(ymid-y0)/(xmid-x0),(yN-ymid)/(xN-xmid),xmid])
-
-def produce_bilin_fit(Cell):
-    '''
-    Use Guillaume's code to produce a bilinear fit
-    '''
-
-    # Get X and Y. X is time, Y is length
-    X = np.array(Cell.times_w_div, dtype=np.float_)
-    Y = np.log(Cell.lengths_w_div)
-
-    ## change origin of times
-    X_t0 = X[0]
-    X = X-X_t0
-
-    # make bilinear fit
-    p_init = bilinear_init(X, Y)
-    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
-    Z = np.array([bilinear_f(par, xi) for xi in X])
-    chi_bilin = np.mean((Y - Z)**2)
-    r2 = coefficient_determination_r2(Y, Z)
-    r_bilin = np.sqrt(r2)
-
-    t_shift = par[3] + X_t0
-
-    # convert back for plotting
-    y_fit = np.exp(Z)
-
-    # determine the length at the shift up time for plotting
-    len_at_shift = np.exp(bilinear_f(par, par[3]))
-
-    return y_fit, r2, t_shift, len_at_shift
-
-def produce_bilin_fit2(Cell):
-    '''
-    Use Guillaume's code to produce a bilinear fit
-    '''
-
-    # Get X and Y. X is time, Y is length
-    X = np.array(cell.times_w_div, dtype=np.float_)
-    Y = np.log(cell.lengths_w_div)
-
-    ## change origin of times
-    X_t0 = X[0]
-    X = X-X_t0
-
-    # make bilinear fit
-    p_init = bilinear_init(X, Y)
-    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
-    Z = np.array([bilinear_f(par, xi) for xi in X])
-    chi_bilin = np.mean((Y - Z)**2)
-    r2 = coefficient_determination_r2(Y, Z)
-    r_bilin = np.sqrt(r2)
-
-    t_shift = par[3] + X_t0
-
-    # convert back fro plotting
-    y_fit = np.exp(Z)
-
-    # determine the length at the shift up time for plotting
-    len_at_shift = np.exp(bilinear_f(par, par[3]))
-
-    return par
-
-def produce_bilin_fit3(X, Y):
-    '''
-    Use Guillaume's code to produce a bilinear fit
-    '''
-
-    ## change origin of times
-    X_t0 = X[0]
-    X = X-X_t0
-
-    # make bilinear fit
-    p_init = bilinear_init(X, Y)
-    par = fit_xy(X, Y, p_init=p_init, funcfit_f=bilinear_f, funcfit_df=bilinear_df)
-    Z = np.array([bilinear_f(par, xi) for xi in X])
-    chi_bilin = np.mean((Y - Z)**2)
-    r2 = coefficient_determination_r2(Y, Z)
-    r_bilin = np.sqrt(r2)
-
-    t_shift = par[3] + X_t0
-
-    # # convert back for plotting
-    # y_fit = np.exp(Z)
-    y_fit = Z
-
-    # determine the length at the shift up time for plotting
-    # len_at_shift = np.exp(bilinear_f(par, par[3]))
-    len_at_shift = bilinear_f(par, par[3])
-
-    return y_fit, r2, t_shift, len_at_shift
+# ---
