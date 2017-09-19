@@ -35,23 +35,25 @@ import mm3_plots as mm3_plots
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
-    # hardcoded parameters
+    '''
+    This script is to act as a template for how to do post segmentation/lineage analysis.
+    The example uses calculating total fluorescence per cell.
+    '''
+
+    # switches which may be overwritten
+    param_file_path = ''
+    user_spec_fovs = []
+    start_with_fov = -1
 
     # get switches and parameters
     try:
         opts, args = getopt.getopt(sys.argv[1:],"f:o:s:")
-        # switches which may be overwritten
-        specify_fovs = False
-        user_spec_fovs = []
-        start_with_fov = -1
-        param_file_path = ''
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -s -o).')
 
     for opt, arg in opts:
         if opt == '-o':
             try:
-                specify_fovs = True
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
@@ -67,8 +69,6 @@ if __name__ == "__main__":
             param_file_path = arg # parameter file path
 
     # Load the project parameters file
-    if len(param_file_path) == 0:
-        raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information ('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # remove fovs if the user specified so
-    if specify_fovs:
+    if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
     if start_with_fov > 0:
         fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]

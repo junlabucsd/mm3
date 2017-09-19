@@ -115,10 +115,20 @@ image_start: 0
 image_end: 10000
 
 ### foci_lap detection parameters ##############################################
-debug_foci: False # toggle foci detection debug
+# indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
+foci_plane: 'c1'
 
-foci_log_minsig: 1 # minimum sigma of laplacian to convolve in pixels. Scales with minimum foci width to detect as 2*sqrt(2)*minsig
-foci_log_maxsig: 4 # maximum sigma of laplacian to convolve in pixels. Scales with maximum foci width to convolve as above
+# toggle foci detection debug
+debug_foci: False
 
-foci_log_thresh: 0.0006 # default: 0.002; absolute threshold in which laplacian well reaches to record potential foci
-foci_log_peak_med_ratio: 1.5 # default: 1.2; foci peaks must be this many times greater than median cell intensity. Think signal to noise ratio
+# minimum and maximum sigma of laplacian to convolve in pixels.
+# Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+foci_log_minsig: 1
+foci_log_maxsig: 4
+
+# absolute threshold in which laplacian well reaches to record potential foci
+foci_log_thresh: 0.0006 # default: 0.002;
+
+# foci peaks must be this many times greater than median cell intensity.
+# Think signal to noise ratio
+foci_log_peak_med_ratio: 1.5 # default: 1.2;

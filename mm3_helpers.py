@@ -5,7 +5,7 @@ from __future__ import print_function
 import sys # input, output, errors, and files
 import os # interacting with file systems
 import time # getting time
-import inspect # get     tting passed parameters
+import inspect # get passed parameters
 import yaml # parameter importing
 import json # for importing tiff metadata
 try:
@@ -13,8 +13,6 @@ try:
 except:
     import pickle
 import numpy as np # numbers package
-import scipy.signal as spsig # used in channel finding
-from scipy.optimize import curve_fit # fitting elongation rate
 import struct # for interpretting strings as binary data
 import re # regular expressions
 import traceback # for error messaging
@@ -22,13 +20,18 @@ import warnings # error messaging
 import copy # not sure this is needed
 import h5py # working with HDF5 files
 
-# Image analysis modules
+# scipy and image analysis
+from scipy.signal import find_peaks_cwt # used in channel finding
+from scipy.optimize import curve_fit # fitting elongation rate
+from scipy.optimize import leastsq # fitting 2d gaussian
 from scipy import ndimage as ndi # labeling and distance transform
 from skimage import segmentation # used in make_masks and segmentation
 from skimage.feature import match_template # used to align images
+from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
+import cv2 # openCV --> would really like to get rid of this
 
 # Parralelization modules
 import multiprocessing
@@ -43,9 +46,7 @@ font = {'family' : 'sans-serif',
 mpl.rc('font', **font)
 mpl.rcParams['pdf.fonttype'] = 42
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-
-from mm3_foci import foci_lap
+from matplotlib.patches import Ellipse
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -68,9 +69,12 @@ with warnings.catch_warnings():
 
 ### functions ###########################################################
 # alert the use what is up
+
+# print a warning
 def warning(*objs):
     print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
 
+# print information
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
@@ -87,13 +91,13 @@ def init_mm3_helpers(param_file_path):
 
     # useful folder shorthands for opening files
     params['TIFF_dir'] = os.path.join(params['experiment_directory'], params['image_directory'])
-    params['ana_dir'] = os.path.join(params['experiment_directory'],params['analysis_directory'])
+    params['ana_dir'] = os.path.join(params['experiment_directory'], params['analysis_directory'])
     params['hdf5_dir'] = os.path.join(params['ana_dir'], 'hdf5')
-    params['chnl_dir'] = os.path.join(params['ana_dir'],'channels')
-    params['empty_dir'] = os.path.join(params['ana_dir'],'empties')
-    params['sub_dir'] = os.path.join(params['ana_dir'],'subtracted')
-    params['seg_dir'] = os.path.join(params['ana_dir'],'segmented')
-    params['cell_dir'] = os.path.join(params['ana_dir'],'cell_data')
+    params['chnl_dir'] = os.path.join(params['ana_dir'], 'channels')
+    params['empty_dir'] = os.path.join(params['ana_dir'], 'empties')
+    params['sub_dir'] = os.path.join(params['ana_dir'], 'subtracted')
+    params['seg_dir'] = os.path.join(params['ana_dir'], 'segmented')
+    params['cell_dir'] = os.path.join(params['ana_dir'], 'cell_data')
 
     return params
 
@@ -574,7 +578,7 @@ def find_channel_locs(image_data):
     # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
     # convolving it with a wave. here the wave is the default wave used by the algorithm
     # but the minimum signal to noise ratio is specified
-    peaks = spsig.find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
+    peaks = find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
                                  min_snr=chan_snr)
 
     # If the left-most peak position is within half of a channel separation,
@@ -2044,72 +2048,299 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     return
 
 # find foci using a difference of gaussians method
-def foci_analysis(Complete_Cells, params):
+def foci_analysis(Cells):
     '''Find foci in cells using a fluorescent image channel.'''
 
-    Complete_Cells_foci = {}
+    # make directory for foci debug
+    foci_dir = os.path.join(params['ana_dir'], 'overlay/')
+    if not os.path.exists(foci_dir):
+        os.makedirs(foci_dir)
 
-    for cell_id in Complete_Cells:
+    # Dictionary holding foci information containing cells. This is not necessary.
+    Cells_foci = {}
 
-        Complete_Cells_foci[cell_id] = Complete_Cells[cell_id]
-        # Import segmented images
-        seg_dir = params['experiment_directory'] + params['analysis_directory'] + 'segmented/'
-        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
-        seg_filepath = seg_dir + seg_filename
-        with tiff.TiffFile(seg_filepath) as tif:
-            image_data_seg = tif.asarray()
+    for cell_id, cell in Cells.items():
 
-        # Import fluorescence images
-        FL_dir = params['experiment_directory'] + params['analysis_directory'] + 'subtracted/'
-        FL_filename = params['experiment_name'] + '_xy%03d_p%04d_sub_c2.tif' % (Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak)
-        FL_filepath = FL_dir + FL_filename
-        with tiff.TiffFile(FL_filepath) as tif:
-            image_data_FL = tif.asarray()
+        # transferring information to new dictionary. This is not necessary
+        Cells_foci[cell_id] = Cells[cell_id]
 
+        # Import segmented and fluorescenct images
+        image_data_seg = load_stack(cell.fov, cell.peak, color='seg')
+        image_data_FL = load_stack(cell.fov, cell.peak,
+                                   color='sub_{}'.format(params['foci_plane']))
+
+        # declare lists holding information about foci.
         disp_l = []
         disp_w = []
         foci_h4 = []
-        foci_stack = np.zeros((np.size(Complete_Cells[cell_id].times),image_data_seg[0,:,:].shape[0],image_data_seg[0,:,:].shape[1]))
+        foci_stack = np.zeros((np.size(Cells[cell_id].times),
+                               image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
 
+        # Go through each time point of this cell
+        for i in range(np.size(Cells[cell_id].times)):
 
-        for i in range(np.size(Complete_Cells[cell_id].times)):
-
-            t = Complete_Cells[cell_id].times[i]
+            # retrieve this timepoint and images.
+            t = Cells[cell_id].times[i]
             image_data_temp = image_data_FL[t,:,:]
             image_data_temp_seg = image_data_seg[t,:,:]
 
+            # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
-        #    if t>=100:
-        #    if Complete_Cells[cell_id]['birth_label']==4:
-                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, Complete_Cells[cell_id].bboxes[i], Complete_Cells[cell_id].orientation[i], Complete_Cells[cell_id].centroid[i], params)
-                #FS20170826
+                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, Cells[cell_id].bboxes[i], Cells[cell_id].orientation[i], Cells[cell_id].centroid[i], params)
+
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
                 foci_h4.append(foci_h4_tmp)
 
+            # if there is no information, append an empty list.
+            # Should this be NaN?
             else:
                 disp_l.append([])
                 disp_w.append([])
                 foci_h4.append([])
                 foci_stack[i] = image_data_temp_seg
 
-        Complete_Cells[cell_id].disp_l = disp_l
-        Complete_Cells[cell_id].disp_w = disp_w
-        Complete_Cells[cell_id].foci_h4 = foci_h4
+        # add information to the cell
+        Cells[cell_id].disp_l = disp_l
+        Cells[cell_id].disp_w = disp_w
+        Cells[cell_id].foci_h4 = foci_h4
 
+        # Create a stack of the segmented images with marked foci
+        # This should poentially be changed to the fluorescent images with marked foci
         foci_stack = np.uint16(foci_stack)
         foci_stack = np.stack(foci_stack, axis=0)
         # Export overlaid images
-        foci_dir = params['experiment_directory'] + params['analysis_directory'] + 'overlay/'
-        foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Complete_Cells[cell_id].birth_time, Complete_Cells[cell_id].fov, Complete_Cells[cell_id].peak, Complete_Cells[cell_id].birth_label)
+        foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Cells[cell_id].birth_time, Cells[cell_id].fov, Cells[cell_id].peak, Cells[cell_id].birth_label)
         foci_filepath = foci_dir + foci_filename
 
-    #    if Complete_Cells[cell_id]['birth_label'] == 1 and t>=0 and np.sum(image_data_temp) != 0:
-        #    tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
+        tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
 
         information('Extracting foci information for %s cells.' % (cell_id))
 
     return Complete_Cells_foci
+
+# actual worker function for foci detection
+def foci_lap(img, img_foci, bbox, orientation, centroid, params):
+    '''foci_dog finds foci using a laplacian convolution then fits a 2D
+    Gaussian.
+
+    The returned information are the parameters of this Gaussian.
+    All the information is returned in the form of np.arrays which are the
+    length of the number of found foci across all cells in the image.
+
+    Parameters
+    ----------
+    img : 2D np.array
+        phase contrast or bright field image
+    img_foci : 2D np.array
+        fluorescent image with foci hopefully
+    contours
+        list of contours
+    params : dict
+         dictionary with parameters from .yaml
+
+    Returns
+    -------
+    disp_l : 1D np.array
+        displacement on long axis, in um, of a foci from the center of the cell
+    disp_w : 1D np.array
+        displacement on short axis, in um, of a foci from the center of the cell
+    foci_wx : 1D np.array
+        width of foxi in long axis direction in pixels
+    foci_wy : 1D np.array
+        width of foci in sort axis direction in pixels
+    foci_h : 1D np.array
+        height of foci (intensity value of fluorecent image at Gaussian peak)
+    '''
+
+    # declare arrays which will hold foci data
+    disp_l = [] # displacement in length of foci from cell center
+    disp_w = [] # displacement in width of foci from cell center
+    foci_h4 = [] # foci total amount (from raw image)
+
+    # define parameters for foci finding
+    minsig = params['foci_log_minsig']
+    maxsig = params['foci_log_maxsig']
+    thresh = params['foci_log_thresh']
+    peak_med_ratio = params['foci_log_peak_med_ratio']
+
+    c = img_foci
+    c_pc = img
+
+    # calculate median cell intensity. Used to filter foci
+    int_mask = np.zeros(img_foci.shape, np.uint8)
+    avg_int = cv2.mean(img_foci, mask = int_mask)
+    avg_int = avg_int[0]
+
+    # transform image before foci detection?
+    cc = c
+    c_subtract_gaus = cc
+    c_subtract_gaus[c_subtract_gaus > 10000] = 0
+
+    # find blobs using difference of gaussian
+    over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
+    numsig = maxsig - minsig + 1 # number of division to consider (height of z cube) set this heigh so it considers all pixels
+    blobs = blob_log(c_subtract_gaus, min_sigma=minsig, max_sigma=maxsig, overlap=over_lap, num_sigma=numsig, threshold=thresh)
+
+    # these will hold information abou foci position temporarily
+    x, y, r = [], [], []
+    xx, yy, xxw, yyw = [], [], [], []
+
+    # loop through each potenial foci
+    for blob in blobs:
+        yloc, xloc, sig = blob # x location, y location, and sigma of gaus
+
+        if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
+            radius = np.ceil(np.sqrt(2)*sig)
+            x.append(xloc) # for plotting
+            y.append(yloc) # for plotting
+            r.append(radius)
+
+            xloc = int(xloc)
+            yloc = int(yloc)
+
+            sz_fit = int(radius) # increase the size around the foci for gaussian fitting
+
+        #        #remove blob if not in cell box
+        #        if (xloc < sz_imgC[1]/2-length/2 or xloc > sz_imgC[1]/2+length/2 or
+        #            yloc < sz_imgC[0]/2-width/2 or yloc > sz_imgC[0]/2+width/2):
+        #            if params['debug_foci']: print('blob not in cell area')
+        #            continue
+
+            # cut out a small image from origincal image to fit gaussian
+            gfit_area = cc[yloc-sz_fit:yloc+sz_fit, xloc-sz_fit:xloc+sz_fit]
+            gfit_rows, gfit_cols = gfit_area.shape
+
+            gfit_area_0 = c[max(0,yloc-1*sz_fit):min(c.shape[0],yloc+1*sz_fit), max(0,xloc-1*sz_fit):min(c.shape[1],xloc+1*sz_fit)]
+
+            # fit gaussian to proposed foci in small box
+            p = fitgaussian(gfit_area)
+            (peak, xc, yc, width_x, width_y) = p
+
+
+            if xc <= 0 or xc >= gfit_cols or yc <= 0 or yc >= gfit_rows:
+                if params['debug_foci']: print('throw out foci (gaus fit not in gfit_area)')
+                continue
+            elif peak/avg_int < peak_med_ratio:
+                if params['debug_foci']: print('peak does not pass height test')
+                continue
+            else:
+                # find x an y position
+                xxx = xloc - sz_fit + xc
+                yyy = yloc - sz_fit + yc
+                xx = np.append(xx, xxx) # for plotting
+                yy = np.append(yy, yyy) # for plotting
+                xxw = np.append(xxw, width_x) # for plotting
+                yyw = np.append(yyw, width_y) # for plotting
+
+                # calculate distance of foci from middle of cell (scikit image)
+                if orientation<0:
+                    orientation = np.pi+orientation
+                disp_y = (yyy-centroid[0])*np.sin(orientation) - (xxx-centroid[1])*np.cos(orientation)
+                disp_x = (yyy-centroid[0])*np.cos(orientation) + (xxx-centroid[1])*np.sin(orientation)
+
+                # append foci information to the list
+                disp_l = np.append(disp_l, disp_y*params['pxl2um'])
+                disp_w = np.append(disp_w, disp_x*params['pxl2um'])
+                foci_h4 = np.append(foci_h4, np.sum(gfit_area_0))
+
+                if params['debug_foci']:
+                    print(disp_x, width_x)
+                    print(disp_y, width_y)
+
+    # draw foci on image for quality control
+    if params['debug_foci']:
+    #    print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
+        # processing of image
+        fig = plt.figure(figsize=(12,12))
+        ax = fig.add_subplot(1,5,1)
+        plt.title('fluor image')
+        plt.imshow(c, interpolation='nearest', cmap='gray')
+        ax = fig.add_subplot(1,5,2)
+        plt.title('segmented image')
+        plt.imshow(c_pc, interpolation='nearest', cmap='gray')
+    #    ax = fig.add_subplot(1,5,3)
+    #    plt.title('gaussian blur')
+    #    plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
+    #    ax = fig.add_subplot(1,6,5)
+    #    plt.title('gaussian subtraction')
+    #    plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
+
+
+        ax = fig.add_subplot(1,5,3)
+        plt.title('DoG blobs')
+        plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
+        # add circles for where the blobs are
+        for i, max_spot in enumerate(x):
+            foci_center = Ellipse([x[i],y[i]],r[i],r[i],color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
+            ax.add_patch(foci_center)
+
+        # show the shape of the gaussian for recorded foci
+        ax = fig.add_subplot(1,5,4)
+        plt.title('final foci')
+        plt.imshow(c, interpolation='nearest', cmap='gray')
+        # print foci that pass and had gaussians fit
+        for i, spot in enumerate(xx):
+            foci_ellipse = Ellipse([xx[i],yy[i]], xxw[i], yyw[i],color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
+            ax.add_patch(foci_ellipse)
+
+        ax6 = fig.add_subplot(1,5,5)
+        plt.title('overlay')
+        plt.imshow(c_pc, interpolation='nearest', cmap='gray')
+        # print foci that pass and had gaussians fit
+        for i, spot in enumerate(xx):
+            foci_ellipse = Ellipse([xx[i],yy[i]], 3, 3,color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
+            ax6.add_patch(foci_ellipse)
+
+    img_overlay = c_pc
+    for i, spot in enumerate(xx):
+        img_overlay[yy[i]-1,xx[i]-1] = 12
+        img_overlay[yy[i]-1,xx[i]] = 12
+        img_overlay[yy[i]-1,xx[i]+1] = 12
+        img_overlay[yy[i],xx[i]-1] = 12
+        img_overlay[yy[i],xx[i]] = 12
+        img_overlay[yy[i],xx[i]+1] = 12
+        img_overlay[yy[i]+1,xx[i]-1] = 12
+        img_overlay[yy[i]+1,xx[i]] = 12
+        img_overlay[yy[i]+1,xx[i]+1] = 12
+
+    return disp_l, disp_w, foci_h4, img_overlay
+
+# finds best fit for 2d gaussian using functin above
+def fitgaussian(data):
+    """Returns (height, x, y, width_x, width_y)
+    the gaussian parameters of a 2D distribution found by a fit
+    if params are not provided, they are calculated from the moments
+    params should be (height, x, y, width_x, width_y)"""
+    gparams = moments(data) # create guess parameters.
+    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -data)
+    p, success = leastsq(errorfunction, gparams)
+    return p
+
+# returnes a 2D gaussian function
+def gaussian(height, center_x, center_y, width_x, width_y):
+    """Returns a gaussian function with the given parameters"""
+    width_x = float(width_x)
+    width_y = float(width_y)
+    return lambda x,y: height*np.exp(-(((center_x-x)/width_x)**2+((center_y-y)/width_y)**2)/2)
+
+# moments of a 2D gaussian
+def moments(data):
+    """Returns (height, x, y, width_x, width_y)
+    the gaussian parameters of a 2D distribution by calculating its
+    moments
+    width_x and width_y are 2*sigma x and sigma y of the guassian
+    """
+    total = data.sum()
+    X, Y = np.indices(data.shape)
+    x = (X*data).sum()/total
+    y = (Y*data).sum()/total
+    col = data[:, int(y)]
+    width_x = np.sqrt(abs((np.arange(col.size)-y)**2*col).sum()/col.sum())
+    row = data[int(x), :]
+    width_y = np.sqrt(abs((np.arange(row.size)-x)**2*row).sum()/row.sum())
+    height = data.max()
+    return height, x, y, width_x, width_y
 
 ### functions about converting dates and times
 # def days_to_hmsm(days):

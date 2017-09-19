@@ -7,7 +7,6 @@ import os
 import time
 import inspect
 import getopt
-import yaml
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle

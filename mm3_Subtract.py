@@ -7,9 +7,7 @@ import os
 import time
 import inspect
 import getopt
-import yaml
 import traceback
-import fnmatch
 import glob
 from pprint import pprint # for human readable file output
 try:
