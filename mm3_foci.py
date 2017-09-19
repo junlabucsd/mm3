@@ -17,9 +17,6 @@ from scipy.optimize import leastsq
 import scipy.ndimage.filters as filters
 from skimage.feature import blob_dog, blob_log
 
-# agarPad modlues
-from APLibrary import contour_stats2, crop_cell_box
-
 ################################################################################
 ### functions
 def gaussian(height, center_x, center_y, width_x, width_y):
@@ -101,56 +98,55 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
 
     c = img_foci
     c_pc = img
-    
-    
+
     # calculate median cell intensity. Used to filter foci
     int_mask = np.zeros(img_foci.shape, np.uint8)
     avg_int = cv2.mean(img_foci, mask = int_mask)
     avg_int = avg_int[0]
-   
+
     # transform image before foci detection?
     cc = c
     c_subtract_gaus = cc
     c_subtract_gaus[c_subtract_gaus > 10000] = 0
-    
+
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
     numsig = maxsig - minsig + 1 # number of division to consider (height of z cube) set this heigh so it considers all pixels
     blobs = blob_log(c_subtract_gaus, min_sigma=minsig, max_sigma=maxsig, overlap=over_lap, num_sigma=numsig, threshold=thresh)
-    
+
     # these will hold information abou foci position temporarily
     x, y, r = [], [], []
     xx, yy, xxw, yyw = [], [], [], []
-    
+
     # loop through each potenial foci
     for blob in blobs:
         yloc, xloc, sig = blob # x location, y location, and sigma of gaus
-        
+
         if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
             radius = np.ceil(np.sqrt(2)*sig)
             x.append(xloc) # for plotting
             y.append(yloc) # for plotting
             r.append(radius)
-        
+
             sz_fit = radius # increase the size around the foci for gaussian fitting
-        
+
         #        #remove blob if not in cell box
         #        if (xloc < sz_imgC[1]/2-length/2 or xloc > sz_imgC[1]/2+length/2 or
         #            yloc < sz_imgC[0]/2-width/2 or yloc > sz_imgC[0]/2+width/2):
         #            if params['debug_foci']: print('blob not in cell area')
         #            continue
-        
+
             # cut out a small image from origincal image to fit gaussian
             gfit_area = cc[yloc-sz_fit:yloc+sz_fit, xloc-sz_fit:xloc+sz_fit]
             gfit_rows, gfit_cols = gfit_area.shape
-            
+
             gfit_area_0 = c[max(0,yloc-1*sz_fit):min(c.shape[0],yloc+1*sz_fit), max(0,xloc-1*sz_fit):min(c.shape[1],xloc+1*sz_fit)]
-        
+
             # fit gaussian to proposed foci in small box
             p = fitgaussian(gfit_area)
             (peak, xc, yc, width_x, width_y) = p
-                
-        
+
+
             if xc <= 0 or xc >= gfit_cols or yc <= 0 or yc >= gfit_rows:
                 if params['debug_foci']: print('throw out foci (gaus fit not in gfit_area)')
                 continue
@@ -165,25 +161,25 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
                 yy = np.append(yy, yyy) # for plotting
                 xxw = np.append(xxw, width_x) # for plotting
                 yyw = np.append(yyw, width_y) # for plotting
-                
+
                 # calculate distance of foci from middle of cell (scikit image)
                 if orientation<0:
                     orientation = np.pi+orientation
                 disp_y = (yyy-centroid[0])*np.sin(orientation) - (xxx-centroid[1])*np.cos(orientation)
                 disp_x = (yyy-centroid[0])*np.cos(orientation) + (xxx-centroid[1])*np.sin(orientation)
-        
+
                 # append foci information to the list
                 disp_l = np.append(disp_l, disp_y*params['pxl2um'])
                 disp_w = np.append(disp_w, disp_x*params['pxl2um'])
                 foci_h4 = np.append(foci_h4, np.sum(gfit_area_0))
-        
+
                 if params['debug_foci']:
                     print(disp_x, width_x)
                     print(disp_y, width_y)
-    
+
     # draw foci on image for quality control
     if params['debug_foci']:
-#        print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
+    #    print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
         # processing of image
         fig = plt.figure(figsize=(12,12))
         ax = fig.add_subplot(1,5,1)
@@ -192,14 +188,14 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
         ax = fig.add_subplot(1,5,2)
         plt.title('segmented image')
         plt.imshow(c_pc, interpolation='nearest', cmap='gray')
-#        ax = fig.add_subplot(1,5,3)
-#        plt.title('gaussian blur')
-#        plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
-#        ax = fig.add_subplot(1,6,5)
-#        plt.title('gaussian subtraction')
-#        plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
-    
-    
+    #    ax = fig.add_subplot(1,5,3)
+    #    plt.title('gaussian blur')
+    #    plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
+    #    ax = fig.add_subplot(1,6,5)
+    #    plt.title('gaussian subtraction')
+    #    plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
+
+
         ax = fig.add_subplot(1,5,3)
         plt.title('DoG blobs')
         plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
@@ -207,7 +203,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
         for i, max_spot in enumerate(x):
             foci_center = Ellipse([x[i],y[i]],r[i],r[i],color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_center)
-    
+
         # show the shape of the gaussian for recorded foci
         ax = fig.add_subplot(1,5,4)
         plt.title('final foci')
@@ -216,7 +212,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
         for i, spot in enumerate(xx):
             foci_ellipse = Ellipse([xx[i],yy[i]], xxw[i], yyw[i],color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_ellipse)
-        
+
         ax6 = fig.add_subplot(1,5,5)
         plt.title('overlay')
         plt.imshow(c_pc, interpolation='nearest', cmap='gray')
@@ -224,17 +220,17 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
         for i, spot in enumerate(xx):
             foci_ellipse = Ellipse([xx[i],yy[i]], 3, 3,color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax6.add_patch(foci_ellipse)
-        
+
     img_overlay = c_pc
     for i, spot in enumerate(xx):
         img_overlay[yy[i]-1,xx[i]-1] = 12
-        img_overlay[yy[i]-1,xx[i]] = 12      
-        img_overlay[yy[i]-1,xx[i]+1] = 12 
-        img_overlay[yy[i],xx[i]-1] = 12 
-        img_overlay[yy[i],xx[i]] = 12 
-        img_overlay[yy[i],xx[i]+1] = 12 
-        img_overlay[yy[i]+1,xx[i]-1] = 12 
-        img_overlay[yy[i]+1,xx[i]] = 12 
-        img_overlay[yy[i]+1,xx[i]+1] = 12 
-            
+        img_overlay[yy[i]-1,xx[i]] = 12
+        img_overlay[yy[i]-1,xx[i]+1] = 12
+        img_overlay[yy[i],xx[i]-1] = 12
+        img_overlay[yy[i],xx[i]] = 12
+        img_overlay[yy[i],xx[i]+1] = 12
+        img_overlay[yy[i]+1,xx[i]-1] = 12
+        img_overlay[yy[i]+1,xx[i]] = 12
+        img_overlay[yy[i]+1,xx[i]+1] = 12
+
     return disp_l, disp_w, foci_h4, img_overlay
