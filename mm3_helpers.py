@@ -2048,45 +2048,40 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     return
 
 # find foci using a difference of gaussians method
-def foci_analysis(Cells):
-    '''Find foci in cells using a fluorescent image channel.'''
+def foci_analysis(fov_id, peak_id, Cells):
+    '''Find foci in cells using a fluorescent image channel.
+    This function works on a single peak and all the cells therein.'''
 
     # make directory for foci debug
-    foci_dir = os.path.join(params['ana_dir'], 'overlay/')
-    if not os.path.exists(foci_dir):
-        os.makedirs(foci_dir)
+    # foci_dir = os.path.join(params['ana_dir'], 'overlay/')
+    # if not os.path.exists(foci_dir):
+    #     os.makedirs(foci_dir)
 
-    # Dictionary holding foci information containing cells. This is not necessary.
-    Cells_foci = {}
+    # Import segmented and fluorescenct images
+    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_FL = load_stack(fov_id, peak_id,
+                               color='sub_{}'.format(params['foci_plane']))
 
     for cell_id, cell in Cells.items():
-
-        # transferring information to new dictionary. This is not necessary
-        Cells_foci[cell_id] = Cells[cell_id]
-
-        # Import segmented and fluorescenct images
-        image_data_seg = load_stack(cell.fov, cell.peak, color='seg')
-        image_data_FL = load_stack(cell.fov, cell.peak,
-                                   color='sub_{}'.format(params['foci_plane']))
 
         # declare lists holding information about foci.
         disp_l = []
         disp_w = []
         foci_h4 = []
-        foci_stack = np.zeros((np.size(Cells[cell_id].times),
+        foci_stack = np.zeros((np.size(cell.times),
                                image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
 
         # Go through each time point of this cell
-        for i in range(np.size(Cells[cell_id].times)):
+        for i in range(np.size(cell.times)):
 
             # retrieve this timepoint and images.
-            t = Cells[cell_id].times[i]
+            t = cell.times[i]
             image_data_temp = image_data_FL[t,:,:]
             image_data_temp_seg = image_data_seg[t,:,:]
 
             # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
-                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, Cells[cell_id].bboxes[i], Cells[cell_id].orientation[i], Cells[cell_id].centroid[i], params)
+                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, cell.bboxes[i], cell.orientation[i], cell.centroid[i])
 
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
@@ -2101,26 +2096,26 @@ def foci_analysis(Cells):
                 foci_stack[i] = image_data_temp_seg
 
         # add information to the cell
-        Cells[cell_id].disp_l = disp_l
-        Cells[cell_id].disp_w = disp_w
-        Cells[cell_id].foci_h4 = foci_h4
+        cell.disp_l = disp_l
+        cell.disp_w = disp_w
+        cell.foci_h4 = foci_h4
 
         # Create a stack of the segmented images with marked foci
         # This should poentially be changed to the fluorescent images with marked foci
-        foci_stack = np.uint16(foci_stack)
-        foci_stack = np.stack(foci_stack, axis=0)
-        # Export overlaid images
-        foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Cells[cell_id].birth_time, Cells[cell_id].fov, Cells[cell_id].peak, Cells[cell_id].birth_label)
-        foci_filepath = foci_dir + foci_filename
-
-        tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
+        # foci_stack = np.uint16(foci_stack)
+        # foci_stack = np.stack(foci_stack, axis=0)
+        # # Export overlaid images
+        # foci_filename = params['experiment_name'] + 't%04d_xy%03d_p%04d_r%02d_overlay.tif' % (Cells[cell_id].birth_time, Cells[cell_id].fov, Cells[cell_id].peak, Cells[cell_id].birth_label)
+        # foci_filepath = foci_dir + foci_filename
+        #
+        # tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
 
         information('Extracting foci information for %s cells.' % (cell_id))
 
-    return Complete_Cells_foci
+    return
 
 # actual worker function for foci detection
-def foci_lap(img, img_foci, bbox, orientation, centroid, params):
+def foci_lap(img, img_foci, bbox, orientation, centroid):
     '''foci_dog finds foci using a laplacian convolution then fits a 2D
     Gaussian.
 
@@ -2131,13 +2126,9 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
     Parameters
     ----------
     img : 2D np.array
-        phase contrast or bright field image
+        phase contrast or bright field image. Only used for debug
     img_foci : 2D np.array
-        fluorescent image with foci hopefully
-    contours
-        list of contours
-    params : dict
-         dictionary with parameters from .yaml
+        fluorescent image with foci.
 
     Returns
     -------
@@ -2164,8 +2155,8 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
     thresh = params['foci_log_thresh']
     peak_med_ratio = params['foci_log_peak_med_ratio']
 
-    c = img_foci
-    c_pc = img
+    # c = img_foci
+    # c_pc = img
 
     # calculate median cell intensity. Used to filter foci
     int_mask = np.zeros(img_foci.shape, np.uint8)
@@ -2173,23 +2164,26 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
     avg_int = avg_int[0]
 
     # transform image before foci detection?
-    cc = c
-    c_subtract_gaus = cc
-    c_subtract_gaus[c_subtract_gaus > 10000] = 0
+    # cc = c
+    # c_subtract_gaus = cc
+    # c_subtract_gaus[c_subtract_gaus > 10000] = 0
 
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
-    numsig = maxsig - minsig + 1 # number of division to consider (height of z cube) set this heigh so it considers all pixels
-    blobs = blob_log(c_subtract_gaus, min_sigma=minsig, max_sigma=maxsig, overlap=over_lap, num_sigma=numsig, threshold=thresh)
+    numsig = maxsig - minsig + 1 # number of division to consider between min ang max sig
+    blobs = blob_log(img_foci, min_sigma=minsig, max_sigma=maxsig,
+                     overlap=over_lap, num_sigma=numsig, threshold=thresh)
 
     # these will hold information abou foci position temporarily
     x, y, r = [], [], []
     xx, yy, xxw, yyw = [], [], [], []
 
-    # loop through each potenial foci
+    # loop through each potential foci
     for blob in blobs:
         yloc, xloc, sig = blob # x location, y location, and sigma of gaus
 
+        # ensure blob is inside the bounding box
+        # this might be better to check if (xloc, yloc) is in regions.coords
         if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
             radius = np.ceil(np.sqrt(2)*sig)
             x.append(xloc) # for plotting
@@ -2198,20 +2192,13 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
 
             xloc = int(xloc)
             yloc = int(yloc)
-
             sz_fit = int(radius) # increase the size around the foci for gaussian fitting
 
-        #        #remove blob if not in cell box
-        #        if (xloc < sz_imgC[1]/2-length/2 or xloc > sz_imgC[1]/2+length/2 or
-        #            yloc < sz_imgC[0]/2-width/2 or yloc > sz_imgC[0]/2+width/2):
-        #            if params['debug_foci']: print('blob not in cell area')
-        #            continue
-
-            # cut out a small image from origincal image to fit gaussian
-            gfit_area = cc[yloc-sz_fit:yloc+sz_fit, xloc-sz_fit:xloc+sz_fit]
+            # cut out a small image from original image to fit gaussian
+            gfit_area = img_foci[yloc-sz_fit:yloc+sz_fit, xloc-sz_fit:xloc+sz_fit]
             gfit_rows, gfit_cols = gfit_area.shape
 
-            gfit_area_0 = c[max(0,yloc-1*sz_fit):min(c.shape[0],yloc+1*sz_fit), max(0,xloc-1*sz_fit):min(c.shape[1],xloc+1*sz_fit)]
+            gfit_area_0 = img_foci[max(0,yloc-1*sz_fit):min(img_foci.shape[0],yloc+1*sz_fit), max(0,xloc-1*sz_fit):min(img_foci.shape[1],xloc+1*sz_fit)]
 
             # fit gaussian to proposed foci in small box
             p = fitgaussian(gfit_area)
@@ -2226,8 +2213,8 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
                 continue
             else:
                 # find x an y position
-                xxx = xloc - sz_fit + xc
-                yyy = yloc - sz_fit + yc
+                xxx = int(xloc - sz_fit + xc)
+                yyy = int(yloc - sz_fit + yc)
                 xx = np.append(xx, xxx) # for plotting
                 yy = np.append(yy, yyy) # for plotting
                 xxw = np.append(xxw, width_x) # for plotting
@@ -2250,21 +2237,21 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
 
     # draw foci on image for quality control
     if params['debug_foci']:
-    #    print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
+        # print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
         # processing of image
         fig = plt.figure(figsize=(12,12))
         ax = fig.add_subplot(1,5,1)
         plt.title('fluor image')
-        plt.imshow(c, interpolation='nearest', cmap='gray')
+        plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         ax = fig.add_subplot(1,5,2)
         plt.title('segmented image')
-        plt.imshow(c_pc, interpolation='nearest', cmap='gray')
-    #    ax = fig.add_subplot(1,5,3)
-    #    plt.title('gaussian blur')
-    #    plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
-    #    ax = fig.add_subplot(1,6,5)
-    #    plt.title('gaussian subtraction')
-    #    plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
+        plt.imshow(img, interpolation='nearest', cmap='gray')
+        # ax = fig.add_subplot(1,5,3)
+        # plt.title('gaussian blur')
+        # plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
+        # ax = fig.add_subplot(1,6,5)
+        # plt.title('gaussian subtraction')
+        # plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
 
 
         ax = fig.add_subplot(1,5,3)
@@ -2278,7 +2265,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
         # show the shape of the gaussian for recorded foci
         ax = fig.add_subplot(1,5,4)
         plt.title('final foci')
-        plt.imshow(c, interpolation='nearest', cmap='gray')
+        plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(xx):
             foci_ellipse = Ellipse([xx[i],yy[i]], xxw[i], yyw[i],color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
@@ -2286,23 +2273,28 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, params):
 
         ax6 = fig.add_subplot(1,5,5)
         plt.title('overlay')
-        plt.imshow(c_pc, interpolation='nearest', cmap='gray')
+        plt.imshow(img, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(xx):
             foci_ellipse = Ellipse([xx[i],yy[i]], 3, 3,color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax6.add_patch(foci_ellipse)
 
-    img_overlay = c_pc
+        plt.show()
+
+    img_overlay = img
     for i, spot in enumerate(xx):
-        img_overlay[yy[i]-1,xx[i]-1] = 12
-        img_overlay[yy[i]-1,xx[i]] = 12
-        img_overlay[yy[i]-1,xx[i]+1] = 12
-        img_overlay[yy[i],xx[i]-1] = 12
-        img_overlay[yy[i],xx[i]] = 12
-        img_overlay[yy[i],xx[i]+1] = 12
-        img_overlay[yy[i]+1,xx[i]-1] = 12
-        img_overlay[yy[i]+1,xx[i]] = 12
-        img_overlay[yy[i]+1,xx[i]+1] = 12
+        y_temp = int(yy[i])
+        x_temp = int(xx[i])
+
+        img_overlay[y_temp-1,x_temp-1] = 12
+        img_overlay[y_temp-1,x_temp] = 12
+        img_overlay[y_temp-1,x_temp+1] = 12
+        img_overlay[y_temp,x_temp-1] = 12
+        img_overlay[y_temp,x_temp] = 12
+        img_overlay[y_temp,x_temp+1] = 12
+        img_overlay[y_temp+1,x_temp-1] = 12
+        img_overlay[y_temp+1,x_temp] = 12
+        img_overlay[y_temp+1,x_temp+1] = 12
 
     return disp_l, disp_w, foci_h4, img_overlay
 

@@ -27,6 +27,7 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import mm3_helpers as mm3
+import mm3_plots as mm3_plots
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -35,6 +36,7 @@ if __name__ == "__main__":
     '''
     # switches which may be overwritten
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    cell_filename = 'complete_cells_filtered.pkl'
 
     # get switches and parameters
     try:
@@ -49,22 +51,34 @@ if __name__ == "__main__":
     # Load the project parameters file & initialized the helper library
     p = mm3.init_mm3_helpers(param_file_path)
 
+    # load specs file
+    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
+        specs = pickle.load(specs_file)
+
+    # make list of FOVs to process (keys of channel_mask file)
+    fov_id_list = sorted([fov_id for fov_id in specs.keys()])
+
     mm3.information("Loading cell dictionary.")
-    with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'r') as cell_file:
+    with open(os.path.join(p['cell_dir'], cell_filename), 'r') as cell_file:
         Cells = pickle.load(cell_file)
     mm3.information("Finished loading cell dictionary.")
 
     ### foci analysis
     mm3.information("Starting foci analysis.")
 
-    # Do it
-    Complete_Cells_foci = mm3.foci_analysis(Cells)
+    # create dictionary which organizes cells by fov and peak_id
+    Cells_by_peak = mm3_plots.organize_cells_by_channel(Cells, specs)
+
+    # for each set of cells in one fov/peak, find the foci
+    for fov_id in fov_id_list:
+        for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
+            mm3.foci_analysis(fov_id, peak_id, Cells_of_peak)
 
     # Output data to both dictionary and the .mat format used by the GUI
-    with open(os.path.join(p['cell_dir'], '/complete_cells_foci.pkl'), 'wb') as cell_file:
-        pickle.dump(Complete_Cells_foci, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:
+        pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    with open(os.path.join(p['cell_dir'], '/complete_cells_foci.mat'), 'wb') as cell_file:
-        sio.savemat(cell_file, Complete_Cells_foci)
+    with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
+        sio.savemat(cell_file, Cells)
 
     mm3.information("Finished foci analysis.")
