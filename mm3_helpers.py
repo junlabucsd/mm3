@@ -1690,10 +1690,6 @@ class Cell():
         self.x_positions = [region.centroid[1]]
         self.y_positions = [region.centroid[0]]
 
-        #calculating cell length and width by fitting an ellipse (regionprops)
-        #self.lengths = [region.major_axis_length]
-        #self.widths = [region.minor_axis_length]
-
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
@@ -1730,10 +1726,6 @@ class Cell():
         self.x_positions.append(region.centroid[1])
         self.y_positions.append(region.centroid[0])
 
-        #calculating cell length and width by fitting an ellipse (regionprops)
-        #self.lengths.append(region.major_axis_length)
-        #self.widths.append(region.minor_axis_length)
-
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths.append(length_tmp)
@@ -1741,7 +1733,6 @@ class Cell():
 
         self.orientation.append(region.orientation)
         self.centroid.append(region.centroid)
-
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -1781,7 +1772,7 @@ class Cell():
                 elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
         except:
             elong_rate = float('NaN')
-            pcov = float('Nan')
+            pcov = float('NaN')
 
         self.elong_rate = elong_rate
         self.sum_cov = np.sum(pcov)
@@ -2015,30 +2006,6 @@ def find_mother_cells(Cells):
             Mother_Cells[cell_id] = Cells[cell_id]
 
     return Mother_Cells
-
-# return a dictionary of cells organized by fov and peak_id
-def organize_cells_by_channel(Cells, specs):
-    '''
-    Returns a nested dictionary where the keys are first
-    the fov_id and then the peak_id (similar to specs),
-    and the final value is a dictiary of cell objects that go in that
-    specific channel, in the same format as normal {cell_id : Cell, ...}
-    '''
-
-    # make a nested dictionary that holds lists of cells for one fov/peak
-    Cells_by_peak = {}
-    for fov_id in specs.keys():
-        Cells_by_peak[fov_id] = {}
-        for peak_id, spec in specs[fov_id].items():
-            # only make a space for channels that are analyized
-            if spec == 1:
-                Cells_by_peak[fov_id][peak_id] = {}
-
-    # organize the cells
-    for cell_id, Cell in Cells.items():
-        Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
-
-    return Cells_by_peak
 
 ### functions for additional cell centric analysis
 # finds total and average intenstiy timepoint in cells

@@ -59,7 +59,7 @@ if __name__ == "__main__":
     with open(cell_dir + '/complete_cells.pkl', 'r') as cell_file:
         Complete_Cells = pickle.load(cell_file)
     information("Finished loading cell lineage data.")
-        
+
     ### foci analysis
     information("Foci analysis.")
 

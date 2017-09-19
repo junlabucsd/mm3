@@ -1,9 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-def warning(*objs):
-    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -35,6 +31,7 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import mm3_helpers as mm3
+import mm3_plots as mm3_plots
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -49,7 +46,7 @@ if __name__ == "__main__":
         start_with_fov = -1
         param_file_path = ''
     except getopt.GetoptError:
-        warning('No arguments detected (-f -s -o).')
+        mm3.warning('No arguments detected (-f -s -o).')
 
     for opt, arg in opts:
         if opt == '-o':
@@ -58,13 +55,13 @@ if __name__ == "__main__":
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
-                warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
         if opt == '-s':
             try:
                 start_with_fov = int(arg)
             except:
-                warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
         if opt == '-f':
             param_file_path = arg # parameter file path
@@ -72,7 +69,7 @@ if __name__ == "__main__":
     # Load the project parameters file
     if len(param_file_path) == 0:
         raise ValueError("A parameter file must be specified (-f <filename>).")
-    information ('Loading experiment parameters.')
+    mm3.information ('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
@@ -80,7 +77,7 @@ if __name__ == "__main__":
         with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
             specs = pickle.load(specs_file)
     except:
-        warning('Could not load specs file.')
+        mm3.warning('Could not load specs file.')
         raise ValueError
 
     # make list of FOVs to process (keys of channel_mask file)
@@ -92,14 +89,14 @@ if __name__ == "__main__":
     if start_with_fov > 0:
         fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
-    information("Processing %d FOVs." % len(fov_id_list))
+    mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     # load cell data dict
     with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'r') as cell_file:
         Complete_Cells = pickle.load(cell_file)
 
     # create dictionary which organizes cells by fov and peak_id
-    Cells_by_peak = mm3.organize_cells_by_channel(Complete_Cells, specs)
+    Cells_by_peak = mm3_plots.organize_cells_by_channel(Complete_Cells, specs)
 
     # for each set of cells in one fov/peak, compute the fluorescence
     for fov_id in fov_id_list:
