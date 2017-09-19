@@ -2072,20 +2072,19 @@ def foci_analysis(fov_id, peak_id, Cells):
                                image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
 
         # Go through each time point of this cell
-        for i in range(np.size(cell.times)):
+        for i, t in enumerate(cell.times):
 
             # retrieve this timepoint and images.
-            t = cell.times[i]
             image_data_temp = image_data_FL[t,:,:]
             image_data_temp_seg = image_data_seg[t,:,:]
 
             # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
-                disp_l_tmp, disp_w_tmp, foci_h4_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, cell.bboxes[i], cell.orientation[i], cell.centroid[i])
+                disp_l_tmp, disp_w_tmp, foci_h_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, cell.bboxes[i], cell.orientation[i], cell.centroid[i], cell)
 
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
-                foci_h.append(foci_h4_tmp)
+                foci_h.append(foci_h_tmp)
 
             # if there is no information, append an empty list.
             # Should this be NaN?
@@ -2115,7 +2114,7 @@ def foci_analysis(fov_id, peak_id, Cells):
     return
 
 # actual worker function for foci detection
-def foci_lap(img, img_foci, bbox, orientation, centroid):
+def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
     '''foci_dog finds foci using a laplacian convolution then fits a 2D
     Gaussian.
 
@@ -2178,7 +2177,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid):
 
         # ensure blob is inside the bounding box
         # this might be better to check if (xloc, yloc) is in regions.coords
-        if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
+        if (yloc, xloc) in cell.coords
 
             x.append(xloc) # for plotting
             y.append(yloc) # for plotting
