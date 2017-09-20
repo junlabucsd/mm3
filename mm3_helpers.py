@@ -31,7 +31,6 @@ from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
-import cv2 # openCV --> would really like to get rid of this
 
 # Parralelization modules
 import multiprocessing
@@ -2081,7 +2080,7 @@ def foci_analysis(fov_id, peak_id, Cells):
             # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
                 disp_l_tmp, disp_w_tmp, foci_h_tmp = foci_lap(image_data_temp_seg,
-                                                               image_data_temp, cell, t)
+                                                              image_data_temp, cell, t)
 
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
@@ -2170,7 +2169,7 @@ def foci_lap(img, img_foci, cell, t):
     # avg_int = cv2.mean(img_foci, mask=int_mask)
     # avg_int = avg_int[0]
 
-    print('median', cell_fl_median)
+    # print('median', cell_fl_median)
 
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
@@ -2206,28 +2205,26 @@ def foci_lap(img, img_foci, cell, t):
             p = fitgaussian(gfit_area)
             (peak_fit, x_fit, y_fit, w_fit) = p
 
-            print('peak', peak)
-            if xc <= 0 or xc >= radius*2 or yc <= 0 or yc >= radius*2:
+            # print('peak', peak_fit)
+            if x_fit <= 0 or x_fit >= radius*2 or y_fit <= 0 or y_fit >= radius*2:
                 if params['debug_foci']: print('Throw out foci (gaus fit not in gfit_area)')
                 continue
             elif peak_fit/cell_fl_median < peak_med_ratio:
                 if params['debug_foci']: print('Peak does not pass height test.')
                 continue
             else:
-                # find x and y position
+                # find x and y position relative to the whole image (convert from small box)
                 x_rel = int(xloc - radius + x_fit)
                 y_rel = int(yloc - radius + y_fit)
                 x_gaus = np.append(x_gaus, x_rel) # for plotting
                 y_gaus = np.append(y_gaus, y_rel) # for plotting
-                w_gaus = np.append(w_gaus, w_ft) # for plotting
+                w_gaus = np.append(w_gaus, w_fit) # for plotting
 
                 # calculate distance of foci from middle of cell (scikit image)
                 if orientation < 0:
                     orientation = np.pi+orientation
-                disp_y = (y_rel-centroid[0])*np.sin(orientation) -
-                         (x_rel-centroid[1])*np.cos(orientation)
-                disp_x = (y_rel-centroid[0])*np.cos(orientation) +
-                         (x_rel-centroid[1])*np.sin(orientation)
+                disp_y = (y_rel-centroid[0])*np.sin(orientation) - (x_rel-centroid[1])*np.cos(orientation)
+                disp_x = (y_rel-centroid[0])*np.cos(orientation) + (x_rel-centroid[1])*np.sin(orientation)
 
                 # append foci information to the list
                 disp_l = np.append(disp_l, disp_y)
@@ -2245,19 +2242,12 @@ def foci_lap(img, img_foci, cell, t):
         ax = fig.add_subplot(1,5,2)
         plt.title('segmented image')
         plt.imshow(img, interpolation='nearest', cmap='gray')
-        # ax = fig.add_subplot(1,5,3)
-        # plt.title('gaussian blur')
-        # plt.imshow(c_blur_gaus, interpolation='nearest', cmap='gray')
-        # ax = fig.add_subplot(1,6,5)
-        # plt.title('gaussian subtraction')
-        # plt.imshow(c_subtract_gaus, interpolation='nearest', cmap='gray')
-
 
         ax = fig.add_subplot(1,5,3)
         plt.title('DoG blobs')
         plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         # add circles for where the blobs are
-        for i, max_spot in enumerate(x_blob):
+        for i, spot in enumerate(x_blob):
             foci_center = Ellipse([x_blob[i], y_blob[i]], r_blob[i], r_blob[i],
                                   color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_center)
@@ -2267,7 +2257,7 @@ def foci_lap(img, img_foci, cell, t):
         plt.title('final foci')
         plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
-        for i, spot in enumerate(xx):
+        for i, spot in enumerate(x_gaus):
             foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], w_gaus[i], w_gaus[i],
                                     color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_ellipse)
@@ -2276,27 +2266,27 @@ def foci_lap(img, img_foci, cell, t):
         plt.title('overlay')
         plt.imshow(img, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
-        for i, spot in enumerate(xx):
+        for i, spot in enumerate(x_gaus):
             foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], 3, 3,
                                     color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax6.add_patch(foci_ellipse)
 
         plt.show()
 
-    img_overlay = img
-    for i, spot in enumerate(xx):
-        y_temp = int(yy[i])
-        x_temp = int(xx[i])
-
-        img_overlay[y_temp-1,x_temp-1] = 12
-        img_overlay[y_temp-1,x_temp] = 12
-        img_overlay[y_temp-1,x_temp+1] = 12
-        img_overlay[y_temp,x_temp-1] = 12
-        img_overlay[y_temp,x_temp] = 12
-        img_overlay[y_temp,x_temp+1] = 12
-        img_overlay[y_temp+1,x_temp-1] = 12
-        img_overlay[y_temp+1,x_temp] = 12
-        img_overlay[y_temp+1,x_temp+1] = 12
+    # img_overlay = img
+    # for i, spot in enumerate(xx):
+    #     y_temp = int(yy[i])
+    #     x_temp = int(xx[i])
+    #
+    #     img_overlay[y_temp-1,x_temp-1] = 12
+    #     img_overlay[y_temp-1,x_temp] = 12
+    #     img_overlay[y_temp-1,x_temp+1] = 12
+    #     img_overlay[y_temp,x_temp-1] = 12
+    #     img_overlay[y_temp,x_temp] = 12
+    #     img_overlay[y_temp,x_temp+1] = 12
+    #     img_overlay[y_temp+1,x_temp-1] = 12
+    #     img_overlay[y_temp+1,x_temp] = 12
+    #     img_overlay[y_temp+1,x_temp+1] = 12
 
     return disp_l, disp_w, foci_h
 
