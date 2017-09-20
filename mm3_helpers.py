@@ -2179,8 +2179,8 @@ def foci_lap(img, img_foci, cell, t):
                      overlap=over_lap, num_sigma=numsig, threshold=thresh)
 
     # these will hold information abou foci position temporarily
-    x, y, r = [], [], []
-    xx, yy, xxw, yyw = [], [], [], []
+    x_blob, y_blob, r_blob = [], [], []
+    x_gaus, y_gaus, w_gaus = [], [], []
 
     # loop through each potential foci
     for blob in blobs:
@@ -2193,9 +2193,9 @@ def foci_lap(img, img_foci, cell, t):
         # this might be better to check if (xloc, yloc) is in regions.coords
         if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
 
-            x.append(xloc) # for plotting
-            y.append(yloc) # for plotting
-            r.append(radius)
+            x_blob.append(xloc) # for plotting
+            y_blob.append(yloc) # for plotting
+            r_blob.append(radius)
 
             # cut out a small image from original image to fit gaussian
             gfit_area = img_foci[yloc-radius:yloc+radius, xloc-radius:xloc+radius]
@@ -2204,29 +2204,30 @@ def foci_lap(img, img_foci, cell, t):
 
             # fit gaussian to proposed foci in small box
             p = fitgaussian(gfit_area)
-            (peak, xc, yc, width) = p
+            (peak_fit, x_fit, y_fit, w_fit) = p
 
             print('peak', peak)
             if xc <= 0 or xc >= radius*2 or yc <= 0 or yc >= radius*2:
                 if params['debug_foci']: print('Throw out foci (gaus fit not in gfit_area)')
                 continue
-            elif peak/cell_fl_median < peak_med_ratio:
+            elif peak_fit/cell_fl_median < peak_med_ratio:
                 if params['debug_foci']: print('Peak does not pass height test.')
                 continue
             else:
                 # find x and y position
-                xxx = int(xloc - radius + xc)
-                yyy = int(yloc - radius + yc)
-                xx = np.append(xx, xxx) # for plotting
-                yy = np.append(yy, yyy) # for plotting
-                xxw = np.append(xxw, width) # for plotting
-                yyw = np.append(yyw, width) # for plotting
+                x_rel = int(xloc - radius + x_fit)
+                y_rel = int(yloc - radius + y_fit)
+                x_gaus = np.append(x_gaus, x_rel) # for plotting
+                y_gaus = np.append(y_gaus, y_rel) # for plotting
+                w_gaus = np.append(w_gaus, w_ft) # for plotting
 
                 # calculate distance of foci from middle of cell (scikit image)
                 if orientation < 0:
                     orientation = np.pi+orientation
-                disp_y = (yyy-centroid[0])*np.sin(orientation) - (xxx-centroid[1])*np.cos(orientation)
-                disp_x = (yyy-centroid[0])*np.cos(orientation) + (xxx-centroid[1])*np.sin(orientation)
+                disp_y = (y_rel-centroid[0])*np.sin(orientation) -
+                         (x_rel-centroid[1])*np.cos(orientation)
+                disp_x = (y_rel-centroid[0])*np.cos(orientation) +
+                         (x_rel-centroid[1])*np.sin(orientation)
 
                 # append foci information to the list
                 disp_l = np.append(disp_l, disp_y)
@@ -2256,8 +2257,9 @@ def foci_lap(img, img_foci, cell, t):
         plt.title('DoG blobs')
         plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         # add circles for where the blobs are
-        for i, max_spot in enumerate(x):
-            foci_center = Ellipse([x[i],y[i]],r[i],r[i],color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
+        for i, max_spot in enumerate(x_blob):
+            foci_center = Ellipse([x_blob[i], y_blob[i]], r_blob[i], r_blob[i],
+                                  color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_center)
 
         # show the shape of the gaussian for recorded foci
@@ -2266,7 +2268,8 @@ def foci_lap(img, img_foci, cell, t):
         plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(xx):
-            foci_ellipse = Ellipse([xx[i],yy[i]], xxw[i], yyw[i],color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
+            foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], w_gaus[i], w_gaus[i],
+                                    color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_ellipse)
 
         ax6 = fig.add_subplot(1,5,5)
@@ -2274,7 +2277,8 @@ def foci_lap(img, img_foci, cell, t):
         plt.imshow(img, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(xx):
-            foci_ellipse = Ellipse([xx[i],yy[i]], 3, 3,color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
+            foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], 3, 3,
+                                    color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
             ax6.add_patch(foci_ellipse)
 
         plt.show()
