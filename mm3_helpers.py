@@ -2068,11 +2068,11 @@ def foci_analysis(fov_id, peak_id, Cells):
         disp_l = []
         disp_w = []
         foci_h = []
-        foci_stack = np.zeros((np.size(cell.times),
-                               image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
+        # foci_stack = np.zeros((np.size(cell.times),
+        #                        image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
 
         # Go through each time point of this cell
-        for i, t in enumerate(cell.times):
+        for t in cell.times:
 
             # retrieve this timepoint and images.
             image_data_temp = image_data_FL[t,:,:]
@@ -2080,7 +2080,8 @@ def foci_analysis(fov_id, peak_id, Cells):
 
             # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
-                disp_l_tmp, disp_w_tmp, foci_h_tmp, foci_stack[i] = foci_lap(image_data_temp_seg, image_data_temp, cell.bboxes[i], cell.orientation[i], cell.centroid[i], cell)
+                disp_l_tmp, disp_w_tmp, foci_h_tmp = foci_lap(image_data_temp_seg,
+                                                               image_data_temp, cell, t)
 
                 disp_l.append(disp_l_tmp)
                 disp_w.append(disp_w_tmp)
@@ -2092,7 +2093,7 @@ def foci_analysis(fov_id, peak_id, Cells):
                 disp_l.append([])
                 disp_w.append([])
                 foci_h.append([])
-                foci_stack[i] = image_data_temp_seg
+                # foci_stack[i] = image_data_temp_seg
 
         # add information to the cell
         cell.disp_l = disp_l
@@ -2114,7 +2115,7 @@ def foci_analysis(fov_id, peak_id, Cells):
     return
 
 # actual worker function for foci detection
-def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
+def foci_lap(img, img_foci, cell, t):
     '''foci_dog finds foci using a laplacian convolution then fits a 2D
     Gaussian.
 
@@ -2128,6 +2129,9 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
         phase contrast or bright field image. Only used for debug
     img_foci : 2D np.array
         fluorescent image with foci.
+    cell : cell object
+    t : int
+        time point to which the images correspond
 
     Returns
     -------
@@ -2138,6 +2142,13 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
     foci_h : 1D np.array
         Foci "height." Sum of the intensity of the gaussian fitting area.
     '''
+
+    # pull out useful information for just this time point
+    i = cell.times.index(t) # find position of the time point in lists (time points may be missing)
+    bbox = cell.bboxes[i]
+    orientation = cell.orientation[i]
+    centroid = cell.centroid[i]
+    region = cell.labels[i]
 
     # declare arrays which will hold foci data
     disp_l = [] # displacement in length of foci from cell center
@@ -2150,13 +2161,16 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
     thresh = params['foci_log_thresh']
     peak_med_ratio = params['foci_log_peak_med_ratio']
 
-    # c = img_foci
-    # c_pc = img
-
     # calculate median cell intensity. Used to filter foci
-    int_mask = np.zeros(img_foci.shape, np.uint8)
-    avg_int = cv2.mean(img_foci, mask = int_mask)
-    avg_int = avg_int[0]
+    img_foci_masked = np.copy(img_foci).astype(np.float)
+    img_foci_masked[img != region] = np.nan
+    cell_fl_median = np.nanmedian(img_foci_masked)
+
+    # int_mask = np.zeros(img_foci.shape, np.uint8)
+    # avg_int = cv2.mean(img_foci, mask=int_mask)
+    # avg_int = avg_int[0]
+
+    print('median', cell_fl_median)
 
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
@@ -2171,13 +2185,13 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
     # loop through each potential foci
     for blob in blobs:
         yloc, xloc, sig = blob # x location, y location, and sigma of gaus
-        xloc = int(xloc) # switch to in for slicing images
+        xloc = int(xloc) # switch to int for slicing images
         yloc = int(yloc)
         radius = int(np.ceil(np.sqrt(2)*sig)) # will be used to slice out area around foci
 
         # ensure blob is inside the bounding box
         # this might be better to check if (xloc, yloc) is in regions.coords
-        if (yloc, xloc) in cell.coords
+        if yloc > np.int16(bbox[0]) and yloc < np.int16(bbox[2]) and xloc > np.int16(bbox[1]) and xloc < np.int16(bbox[3]):
 
             x.append(xloc) # for plotting
             y.append(yloc) # for plotting
@@ -2192,15 +2206,15 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
             p = fitgaussian(gfit_area)
             (peak, xc, yc, width) = p
 
-
+            print('peak', peak)
             if xc <= 0 or xc >= radius*2 or yc <= 0 or yc >= radius*2:
-                if params['debug_foci']: print('throw out foci (gaus fit not in gfit_area)')
+                if params['debug_foci']: print('Throw out foci (gaus fit not in gfit_area)')
                 continue
-            elif peak/avg_int < peak_med_ratio:
-                if params['debug_foci']: print('peak does not pass height test')
+            elif peak/cell_fl_median < peak_med_ratio:
+                if params['debug_foci']: print('Peak does not pass height test.')
                 continue
             else:
-                # find x an y position
+                # find x and y position
                 xxx = int(xloc - radius + xc)
                 yyy = int(yloc - radius + yc)
                 xx = np.append(xx, xxx) # for plotting
@@ -2209,7 +2223,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
                 yyw = np.append(yyw, width) # for plotting
 
                 # calculate distance of foci from middle of cell (scikit image)
-                if orientation<0:
+                if orientation < 0:
                     orientation = np.pi+orientation
                 disp_y = (yyy-centroid[0])*np.sin(orientation) - (xxx-centroid[1])*np.cos(orientation)
                 disp_x = (yyy-centroid[0])*np.cos(orientation) + (xxx-centroid[1])*np.sin(orientation)
@@ -2280,7 +2294,7 @@ def foci_lap(img, img_foci, bbox, orientation, centroid, cell):
         img_overlay[y_temp+1,x_temp] = 12
         img_overlay[y_temp+1,x_temp+1] = 12
 
-    return disp_l, disp_w, foci_h, img_overlay
+    return disp_l, disp_w, foci_h
 
 # finds best fit for 2d gaussian using functin above
 def fitgaussian(data):
