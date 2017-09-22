@@ -25,7 +25,7 @@ for i=1:numel(fnames)
 
         length_g2_temp = double(px_to_mu*cell_g2_temp.lengths_w_div);
 
-        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && cell_g2_temp.lengths_w_div(end) < 20 %&& ismember(cell_g2_temp.daughters(1,:),fnames_channel) && cell_g2_temp.peak > 512 && cell_g2_temp.peak < 2048 %filter out filamentous cells
+        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) %&& cell_g2_temp.peak > 512 && cell_g2_temp.peak < 2048 %filter out filamentous cells
 
             cell_g3_id = cell_g2_temp.daughters(1,:);
             cell_g3_temp = struct_tmp.cell_list.(cell_g3_id);
@@ -153,4 +153,4 @@ for i=1:numel(fnames)
     end
 end
 
-save('/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/cell_cycle_stat_md_GUI.mat');
+% save('/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/cell_cycle_stat_md_GUI.mat');
