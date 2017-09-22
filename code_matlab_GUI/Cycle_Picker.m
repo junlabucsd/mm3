@@ -60,12 +60,13 @@ clc;
 handles.dir_name = '../../analysis/';
 handles.cell_data = load([handles.dir_name 'cell_data/all_cells_foci.mat']);
 handles.px_to_mu = 0.065;
-handles.IW_thr = 6587; % threshold of intensity weighting
+handles.IW_thr = 10000; % threshold of intensity weighting
 handles.n_oc = 3; %number of overlapping cell cycle
 
-handles.xlim_max = 200;
+handles.xlim_max = 400;
 handles.ylim_max = 6;
 handles.time_int = 2;
+%%%
 
 if exist([handles.dir_name 'picked/']) == 0
     mkdir([handles.dir_name 'picked/']);
@@ -74,7 +75,6 @@ end
 if exist([handles.dir_name 'picked_png/']) == 0
     mkdir([handles.dir_name 'picked_png/']);
 end
-
 
 
 L = length(fieldnames(handles.cell_data));

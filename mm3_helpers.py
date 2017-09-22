@@ -2094,7 +2094,7 @@ def foci_analysis(fov_id, peak_id, Cells):
                 foci_h.append([])
                 # foci_stack[i] = image_data_temp_seg
 
-        # add information to the cell
+        # add information to the cell (will replace old data)
         cell.disp_l = disp_l
         cell.disp_w = disp_w
         cell.foci_h = foci_h
@@ -2164,6 +2164,13 @@ def foci_lap(img, img_foci, cell, t):
     img_foci_masked = np.copy(img_foci).astype(np.float)
     img_foci_masked[img != region] = np.nan
     cell_fl_median = np.nanmedian(img_foci_masked)
+    cell_fl_mean = np.nanmean(img_foci_masked)
+
+    # subtract this value from the cell
+    if False:
+        img_foci = img_foci.astype('int32') - cell_fl_median.astype('int32')
+        img_foci[img_foci < 0] = 0
+        img_foci = img_foci.astype('uint16')
 
     # int_mask = np.zeros(img_foci.shape, np.uint8)
     # avg_int = cv2.mean(img_foci, mask=int_mask)

@@ -24,8 +24,8 @@ c_1 = 1;
 for k = 1:L_channles
     fname_rec = ['f' num2str(fnames_channel(k,1),'%.2d') 'p' num2str(fnames_channel(k,2),'%.4d') 't' num2str(fnames_channel(k,3),'%.4d') 'r' num2str(fnames_channel(k,4),'%.2d')];
     cell_temp = cell_data.(fname_rec);
-
-        if fnames_channel(k,4) ==1 && length(cell_temp.times)>=2 && isempty(cell_temp.disp_l)==0 %only look at mother cells and only those have two daughter cells and are with fluorescence
+    
+        if fnames_channel(k,4) == 1 && length(cell_temp.times)>=2 && isempty(cell_temp.disp_l)==0 %only look at mother cells and only those have two daughter cells and are with fluorescence
 
             time_temp = double(cell_temp.times); %frame number
             birth_time_temp = double(cell_temp.birth_time); %frame number
@@ -41,6 +41,19 @@ for k = 1:L_channles
             cell_list.(fname_rec) = cell_temp; %save all cells into handles' list.
             cell_names{c_1,1} = fname_rec;  %save all cells names into handles' list.
             c_1 = c_1+1;
+            
+            % deal with situation where the foci disp_l is interpreted as a
+            % numeric array/matrix as opposed to a 1d cell array of arrays
+            if ~double(iscell(cell_temp.disp_l))
+                cell_temp.disp_l = num2cell(cell_temp.disp_l, 2)' ;
+                cell_temp.disp_w = num2cell(cell_temp.disp_w, 2)' ;
+                cell_temp.foci_h = num2cell(cell_temp.foci_h, 2)' ;
+            end
+            
+            % convert disp_l into microns
+            for n = 1:length(cell_temp.disp_l)
+                cell_temp.disp_l{1,n} = cell_temp.disp_l{1,n} * px_to_mu ;        
+            end
 
             %-----------------plots-------------------
             % foci position vs time
@@ -51,58 +64,32 @@ for k = 1:L_channles
 
             %obtain foci positions
             for p=1:length(cell_temp.times)
-                iscell_foci = double(iscell(cell_temp.disp_l));
-                if iscell_foci == 1
-                    if isempty(cell_temp.disp_l{1,p})==0
-                        for q=1:length(cell_temp.disp_l{1,p})
-                            if cell_temp.foci_h4{1,p}(1,q)>=IW_thr
-                                h3 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2);
-                                h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(cell_temp.foci_h4{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                if isempty(cell_temp.disp_l{1,p})==0
+                    for q=1:length(cell_temp.disp_l{1,p})
+                        if cell_temp.foci_h{1,p}(1,q)>=IW_thr
+                            h3 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2);
+                            h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
 
-                                foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2]; 
-                                i_1 = i_1+1;
-
-                                h4 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2);
-                                h4.Color = [1 0 1]; set(h4,'LineWidth',1,'Markersize',2*(cell_temp.foci_h4{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
-
-                                foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2]; 
-                                i_1 = i_1+1;
-                            else
-                                h3 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2);
-                                h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(2*cell_temp.foci_h4{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
-
-                                foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2]; 
-                                i_1 = i_1+1;
-                            end
-                        end
-                    end
-                end
-
-                if iscell_foci == 0
-                    for q=1:length(cell_temp.disp_l(p,1))
-                        if cell_temp.foci_h4(p,q)>=IW_thr
-                            h3 = plot(cell_temp.times(1,p),cell_temp.disp_l(p,q)-0.05+length_temp(1,p)/2);
-                            h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(cell_temp.foci_h4(p,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
-
-                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l(p,q)-0.05+length_temp(1,p)/2]; 
+                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2]; 
                             i_1 = i_1+1;
 
-                            h4 = plot(cell_temp.times(1,p),cell_temp.disp_l(p,q)+0.05+length_temp(1,p)/2);
-                            h4.Color = [1 0 1]; set(h4,'LineWidth',1,'Markersize',2*(cell_temp.foci_h4(p,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                            h4 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2);
+                            h4.Color = [1 0 1]; set(h4,'LineWidth',1,'Markersize',2*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
 
-                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l(p,q)+0.05+length_temp(1,p)/2]; 
+                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2]; 
                             i_1 = i_1+1;
                         else
-                            h3 = plot(cell_temp.times(1,p),cell_temp.disp_l(p,q)+length_temp(1,p)/2);
-                            h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(2*cell_temp.foci_h4(p,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                            h3 = plot(cell_temp.times(1,p), cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2);
+                            h3.Color = [1 0 1]; set(h3,'LineWidth',1,'Markersize',2*(2*cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
 
-                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l(p,q)+length_temp(1,p)/2]; 
+                            foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2]; 
                             i_1 = i_1+1;
                         end
                     end
                 end
             end
 
+            % Plot a line at the division times
             b3 = plot(divition_time_temp*ones(1,2),[-10 10]);
             b3.Color = [0 0 0]; set(b3,'LineWidth',1,'Markersize',2,'Marker','None','MarkerFaceColor',[1 1 1],'LineStyle','--');
 

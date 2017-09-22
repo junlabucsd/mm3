@@ -24,7 +24,7 @@ clear all; clc;
 %           
 %     channel = cell_data.(fnames{i}); 
 %     
-%     if isempty(channel.foci_h4) == 0 && channel.division_time < end_cut
+%     if isempty(channel.foci_h) == 0 && channel.division_time < end_cut
 %     
 %         for j = 1:N
 %             
@@ -35,11 +35,11 @@ clear all; clc;
 %                 iscell_foci = double(iscell(channel.foci_h1));
 % 
 %                 if iscell_foci == 1
-%                     Foci_all = [Foci_all; [channel.foci_h1{1,j}' channel.foci_h2{1,j}' channel.foci_h3{1,j}' channel.foci_h4{1,j}']];
+%                     Foci_all = [Foci_all; [channel.foci_h1{1,j}' channel.foci_h2{1,j}' channel.foci_h3{1,j}' channel.foci_h{1,j}']];
 %                 end
 % 
 %                 if iscell_foci == 0
-%                     Foci_all = [Foci_all; [channel.foci_h1(j,1)' channel.foci_h2(j,1)' channel.foci_h3(j,1)' channel.foci_h4(j,1)']];
+%                     Foci_all = [Foci_all; [channel.foci_h1(j,1)' channel.foci_h2(j,1)' channel.foci_h3(j,1)' channel.foci_h(j,1)']];
 %                 end 
 %                 
 %             end
