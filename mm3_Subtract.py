@@ -7,9 +7,7 @@ import os
 import time
 import inspect
 import getopt
-import yaml
 import traceback
-import fnmatch
 import glob
 from pprint import pprint # for human readable file output
 try:
@@ -49,32 +47,31 @@ if __name__ == "__main__":
     do_empties = True # calculate empties. Otherwise expect them to be there.
     do_subtraction = True
 
+    # switches which may be overwritten
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    user_spec_fovs = []
+    sub_plane = 'c1'
+
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
-        # switches which may be overwritten
-        specify_fovs = False
-        user_spec_fovs = []
-        start_with_fov = -1
-        param_file = ""
+        opts, args = getopt.getopt(sys.argv[1:],"f:o:c:")
     except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -o).')
+        mm3.warning('No arguments detected (-f -o -c), using hardcoded parameters.')
 
     for opt, arg in opts:
         if opt == '-f':
             param_file_path = arg # parameter file path
         if opt == '-o':
             try:
-                specify_fovs = True
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert -o argument to an integer:",arg)
                 raise ValueError
+        if opt == '-c':
+            sub_plane = arg # this should be a postfix c1, c2, c3, etc.
 
     # Load the project parameters file
-    if len(param_file_path) == 0:
-        raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information ('Loading experiment parameters.')
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
@@ -86,17 +83,29 @@ if __name__ == "__main__":
             os.makedirs(p['sub_dir'])
 
     # load specs file
-    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-        specs = pickle.load(specs_file)
+    try:
+        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
+            specs = pickle.load(specs_file)
+    except:
+        mm3.warning('Could not load specs file.')
+        raise ValueError
 
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # remove fovs if the user specified so
-    if specify_fovs:
+    if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
+
+    # determine if we are doing fluorecece or phase subtraction, and set flags
+    if sub_plane == p['phase_plane']:
+        align = True # used when averaging empties
+        sub_method = 'phase' # used in subtract_fov_stack
+    else:
+        align = False
+        sub_method = 'fluor'
 
     ### Make average empty channels ###############################################################
     if not do_empties:
@@ -104,12 +113,13 @@ if __name__ == "__main__":
         pass # just skip this part and go to subtraction
 
     else:
-        mm3.information("Calculating phase averaged empties.")
+        mm3.information("Calculating averaged empties for channel {}.".format(sub_plane))
+
         need_empty = [] # list holds fov_ids of fov's that did not have empties
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            averaging_result = mm3.average_empties_stack(fov_id, specs, color=p['phase_plane'])
-
+            averaging_result = mm3.average_empties_stack(fov_id, specs,
+                                                         color=sub_plane, align=align)
             # add to list for FOVs that need to be given empties from other FOvs
             if not averaging_result:
                 need_empty.append(fov_id)
@@ -118,14 +128,15 @@ if __name__ == "__main__":
         have_empty = list(set(fov_id_list).difference(set(need_empty))) # fovs with empties
         for fov_id in need_empty:
             from_fov = min(have_empty, key=lambda x: abs(x-5)) # find closest FOV with an empty
-            copy_result = mm3.copy_empty_stack(from_fov, fov_id, color=p['phase_plane'])
+            copy_result = mm3.copy_empty_stack(from_fov, fov_id, color=sub_plane)
 
     ### Subtract ##################################################################################
     if do_subtraction:
-        mm3.information("Subtracting channels.")
+        mm3.information("Subtracting channels for channel {}.".format(sub_plane))
         for fov_id in fov_id_list:
             # send to function which will create empty stack for each fov.
-            subtraction_result = mm3.subtract_fov_stack(fov_id, specs, color=p['phase_plane'])
+            subtraction_result = mm3.subtract_fov_stack(fov_id, specs,
+                                                        color=sub_plane, method=sub_method)
         mm3.information("Finished subtraction.")
 
     # Else just end, they only wanted to do empty averaging.

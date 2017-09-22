@@ -67,16 +67,20 @@ if __name__ == "__main__":
     ### Filters you may want to apply
     if True:
         # Filter based on birth_label. mother cells : label_num=1
-        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1,2])
+        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1])
+
+        # Filter based on FOV
+        Cells = mm3_plots.find_cells_of_fov(Cells, FOVs=[1])
 
         # Filter based on birth time point
-        Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
+        # Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
+        # Cells = mm3_plots.find_cells_born_before(Cells, born_before=1000)
 
         # Filter based on statistics
         Cells = mm3_plots.filter_by_stat(Cells, center_stat='mean', std_distance=3)
 
         # save cell pickle of filtered cells.
-        if False:
+        if True:
             with open(os.path.join(p['cell_dir'],'complete_cells_filtered.pkl'), 'wb') as cell_file:
                 pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -246,7 +250,7 @@ if __name__ == "__main__":
                             header=True, index=False)
 
     # Some plotting things
-    if True:
+    if False:
         # This shall use the cells as filtered above.
 
         # make a directory to hold these csvs
@@ -270,7 +274,7 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(plot_dir,'cell_parameters_over_time.png'), dpi=100)
 
         mm3.information('Plotting traces over time.')
-        fig, ax = mm3_plots.plot_traces(Cells)
+        fig, ax = mm3_plots.plot_traces(Cells, trace_limit=500)
         fig.savefig(os.path.join(plot_dir,'traces.png'), dpi=100)
 
         mm3.information('Plotting parameter distributions.')

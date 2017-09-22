@@ -47,18 +47,23 @@ with warnings.catch_warnings():
 
 ### Main script
 if __name__ == "__main__":
+    '''
+    This script converts a Nikon Elements .nd2 file to individual TIFF files per time point.
+    multiple color planes are stacked in each time point to make a multipage TIFF.
+    There are a number of hardcoded parameters that should be modified below.
+    '''
 
     # hard coded parameters
     number_of_rows = 1
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
-    vertical_crop = [] # [y1, y2]
+    vertical_crop = [] # [[y1_min, y1_max], [y2_min, y2_max]]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 4
 
     # parameters will be overwritten by switches
-    param_file = ""
+    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     specify_fovs = []
     start_fov = -1
     external_directory = ""
@@ -111,8 +116,8 @@ if __name__ == "__main__":
         nd2files = glob.glob(os.path.join(external_directory, "*.nd2"))
         information("Found %d files to analyze from external file." % len(nd2files))
     else:
-        print("external directory: {:s}".format(p['experiment_directory']))
-        nd2files = glob.glob(os.path.join(p['experiment_directory'],"*.nd2"))
+        information("Experiment directory: {:s}".format(p['experiment_directory']))
+        nd2files = glob.glob(os.path.join(p['experiment_directory'], "*.nd2"))
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
@@ -195,7 +200,7 @@ if __name__ == "__main__":
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
-                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
 
@@ -204,7 +209,7 @@ if __name__ == "__main__":
                             metadata_t['fov'] = fov # update metdata
                             metadata_json = json.dumps(metadata_t)
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
-                            tif_filename = os.path.join(file_prefix, "_t%04dxy%02d.tif" % (t, fov))
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
 

@@ -13,7 +13,7 @@ analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to
 # retrieve metadata. Choices are 'elements' or 'nd2ToTIFF'
-TIFF_source: 'nd2ToTIFF'
+TIFF_source: 'elements'
 
 # indicate if you want to save out to TIFFs, or use HDF5 to save image data.
 # HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
@@ -29,8 +29,8 @@ phase_plane: 'c1'
 # use 0.065 for 100X, use 0.108 for 60X
 pxl2um: 0.065
 
-# image_orientation: set to "up" if growth pushes cells up
-# set to "down" if growth pushes cells down
+# image_orientation: set to 'up' if growth pushes cells up
+# set to 'down' if growth pushes cells down
 # set to 'auto' if there is a mix
 image_orientation: 'auto'
 
@@ -57,10 +57,19 @@ channel_width_pad: 10
 # threshold for calling empty/full channels in ChannelPicker
 channel_picking_threshold: 0.97
 
+# when aligning channels, this is the pad size in pixels.
+# use large values if your channels move a lot during the experiment (will slow subtraction down)
+alignment_pad: 10
+
 ### segmentaion and lineage creation parameters
+# threshold used in readjusting the OTSU method in fold change.
+# Higher number will create smaller markers. 1.0 == default OTSU
+# Only for marker creation,final watershed uses default OTSU
+OTSU_threshold: 1.2
+
 # the radius of the disk that is used in the first morphological opening
 # unit is pixels
-first_opening_size: 3
+first_opening_size: 2
 
 # pixels closer than this distance to the edge of a cell will be zeroed.
 # unit is pixels
@@ -68,11 +77,11 @@ distance_threshold: 3
 
 # the radius, in pixels, of the size of the disk that is used in the second morphological
 # unit is pixels
-second_opening_size: 2
+second_opening_size: 1
 
 # markers for potential cells smaller than this area will be zeroed
 # unit is pixels^2
-min_object_size: 20
+min_object_size: 25
 
 # amount of frames after which a cell is dropped because no new regions linked to it
 lost_cell_time: 3
@@ -104,3 +113,22 @@ image_start: 0
 # present in an experiment, it will be silently ignored
 # This is also used for nd2ToTIFF
 image_end: 10000
+
+### foci_lap detection parameters ##############################################
+# indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
+foci_plane: 'c1'
+
+# toggle foci detection debug
+debug_foci: False
+
+# minimum and maximum sigma of laplacian to convolve in pixels.
+# Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+foci_log_minsig: 1
+foci_log_maxsig: 4
+
+# absolute threshold in which laplacian well reaches to record potential foci
+foci_log_thresh: 0.0006 # default: 0.002;
+
+# foci peaks must be this many times greater than median cell intensity.
+# Think signal to noise ratio
+foci_log_peak_med_ratio: 1.5 # default: 1.2;

@@ -71,7 +71,10 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     # define functions here so they have access to variables
     # for UI. change specification of channel
     def onclick_cells(event):
-        peak_id = int(event.inaxes.get_title())
+        try:
+            peak_id = int(event.inaxes.get_title())
+        except AttributeError:
+            return
 
         # reset image to be updated based on user clicks
         ax_id = sorted_peaks.index(peak_id) * 3 + 1
@@ -106,12 +109,13 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     ax = [] # for axis handles
 
     # plot the peaks peak by peak using sorted list
-    sorted_peaks = sorted([peak_id for peak_id in crosscorrs[fov_id].keys()])
+    sorted_peaks = sorted([peak_id for peak_id in specs[fov_id].keys()])
     npeaks = len(sorted_peaks)
     last_imgs = [] # list that holds last images for updating figure
 
     for n, peak_id in enumerate(sorted_peaks, start=1):
-        peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
+        if crosscorrs:
+            peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
         # load data for figure
         # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
@@ -151,16 +155,19 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
 
         # finally plot the cross correlations a cross time
         ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
-        ccs = peak_xc['ccs'] # list of cc values
+        if crosscorrs: # don't try to plot if it's not there.
+            ccs = peak_xc['ccs'] # list of cc values
+            ax[-1].plot(ccs, range(len(ccs)))
+            ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+        else:
+            ax[-1].plot(np.zeros(10), range(10))
 
-        ax[-1].plot(ccs, range(len(ccs)))
         ax[-1].set_xlim((0.8,1))
         ax[-1].get_xaxis().set_ticks([])
         if not n == 1:
             ax[-1].get_yaxis().set_ticks([])
         else:
             ax[-1].set_ylabel("time index, CC on X")
-        ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
 
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
@@ -222,7 +229,7 @@ if __name__ == "__main__":
         # switches which may be overwritten
         specify_fovs = False
         user_spec_fovs = []
-        param_file_path = ''
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o).')
 
@@ -264,8 +271,8 @@ if __name__ == "__main__":
         mm3.warning('Could not load channel mask file.')
         raise ValueError
 
-    # make list of FOVs to process (keys of channel_mask file)
-    fov_id_list = sorted([fov_id for fov_id in channel_masks.keys()])
+    # make list of FOVs to process (keys of channel_mask file), but only if there are channels
+    fov_id_list = sorted([fov_id for fov_id, peaks in channel_masks.items() if peaks])
 
     # remove fovs if the user specified so
     if specify_fovs:
@@ -277,8 +284,12 @@ if __name__ == "__main__":
     if not do_crosscorrs: # load precalculate ones if indicated
         mm3.information('Loading precalculated cross-correlations.')
 
-        with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
-            crosscorrs = pickle.load(xcorrs_file)
+        try:
+            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
+                crosscorrs = pickle.load(xcorrs_file)
+        except:
+            crosscorrs = None
+            mm3.information('Precalculated cross-correlations not found.')
 
     else:
         # a nested dict to hold cross corrs per channel per fov.
@@ -338,17 +349,23 @@ if __name__ == "__main__":
         # nested dictionary of {fov : {peak : spec ...}) for if channel should
         # be analyzed, used for empty, or ignored.
         specs = {}
-        # update dictionary on initial guess from cross correlations
-        for fov_id, peaks in crosscorrs.items():
-            specs[fov_id] = {}
-            for peak_id, xcorrs in peaks.items():
-                # update the guess incase the parameters file was changed
-                xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
 
-                if xcorrs['full'] == True:
-                    specs[fov_id][peak_id] = 1
-                else: # default to don't analyze
-                    specs[fov_id][peak_id] = -1
+        # if there is cross corrs, use it. Otherwise, just make everything -1
+        if crosscorrs:
+            # update dictionary on initial guess from cross correlations
+            for fov_id, peaks in crosscorrs.items():
+                specs[fov_id] = {}
+                for peak_id, xcorrs in peaks.items():
+                    # update the guess incase the parameters file was changed
+                    xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
+
+                    if xcorrs['full'] == True:
+                        specs[fov_id][peak_id] = 1
+                    else: # default to don't analyze
+                        specs[fov_id][peak_id] = -1
+        else: # just set everything to 1 and go forward.
+            for fov_id, peaks in channel_masks.items():
+                specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
 
         # preload the images
         mm3.information('Preloading images.')
