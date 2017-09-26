@@ -377,6 +377,44 @@ def get_tif_metadata_nd2ToTIFF(tif):
 
     return idata
 
+# make a lookup time table for converting nominal time to elapsed time in seconds
+def make_time_table(analyzed_imgs):
+    '''
+    Loops through the analyzed images and uses the jd time in the metadata to find the elapsed
+    time in seconds that each picture was taken. This is later used for more accurate elongation
+    rate calculation.
+
+    Parametrs
+    ---------
+    analyzed_imgs : dict
+        The output of get_tif_params.
+
+    Returns
+    -------
+    time_table : dict
+        Look up dictionary with keys for the FOV and then the time point.
+    '''
+
+    # initialize
+    time_table = {}
+    first_jd = float('inf')
+
+    # need to go through the data once to find the first time
+    for iname, idata in analyzed_imgs.items():
+        if idata['jd'] < first_jd:
+            first_jd = idata['jd']
+
+        # init dictionary for specific times per FOV
+        if idata['fov'] not in time_table:
+            time_table[idata['fov']] = {}
+
+    for iname, idata in analyzed_imgs.items():
+        # convert jd time to elapsed time in seconds
+        t_in_seconds = np.around((idata['jd'] - first_jd) * 24*60*60, decimals=0).astype('uint32')
+        time_table[idata['fov']][idata['t']] = t_in_seconds
+
+    return time_table
+
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
     '''Writes out 4D stacks of TIFF images per channel.
