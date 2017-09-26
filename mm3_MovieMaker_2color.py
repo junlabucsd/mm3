@@ -170,10 +170,10 @@ if __name__ == "__main__":
     start_fov = -1
 
     # hard parameters
-    shift_time = 1081 # put in a timepoint to indicate the timing of a shift (colors the text)
+    shift_time = None # put in a timepoint to indicate the timing of a shift (colors the text)
     phase_plane_index = 0 # index of the phase plane
     fl_plane_index = 1 # index of the fluorescent plane
-    fl_interval = 4 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # switches
     try:
