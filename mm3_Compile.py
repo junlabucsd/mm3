@@ -46,7 +46,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    do_metadata = False
+    do_metadata = True
     do_time_table = True
     do_channel_masks = False
     do_slicing = False
@@ -192,7 +192,7 @@ if __name__ == "__main__":
         mm3.information('Saved time table.')
 
     ### Make consensus channel masks and get other shared metadata #################################
-    if not do_channel_masks:
+    if not do_channel_masks and do_slicing:
         mm3.information("Loading channel masks dictionary.")
 
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
