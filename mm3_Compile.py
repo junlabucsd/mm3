@@ -198,7 +198,7 @@ if __name__ == "__main__":
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
 
-    else:
+    elif do_channel_masks:
         mm3.information("Calculating channel masks.")
 
         # only calculate channels masks from images before t_end in case it is specified
