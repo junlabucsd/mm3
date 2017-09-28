@@ -377,6 +377,55 @@ def get_tif_metadata_nd2ToTIFF(tif):
 
     return idata
 
+# make a lookup time table for converting nominal time to elapsed time in seconds
+def make_time_table(analyzed_imgs):
+    '''
+    Loops through the analyzed images and uses the jd time in the metadata to find the elapsed
+    time in seconds that each picture was taken. This is later used for more accurate elongation
+    rate calculation.
+
+    Parametrs
+    ---------
+    analyzed_imgs : dict
+        The output of get_tif_params.
+
+    Returns
+    -------
+    time_table : dict
+        Look up dictionary with keys for the FOV and then the time point.
+    '''
+
+    # initialize
+    time_table = {}
+    first_jd = float('inf')
+
+    # need to go through the data once to find the first time
+    for iname, idata in analyzed_imgs.items():
+        if idata['jd'] < first_jd:
+            first_jd = idata['jd']
+
+        # init dictionary for specific times per FOV
+        if idata['fov'] not in time_table:
+            time_table[idata['fov']] = {}
+
+    for iname, idata in analyzed_imgs.items():
+        # convert jd time to elapsed time in seconds
+        t_in_seconds = np.around((idata['jd'] - first_jd) * 24*60*60, decimals=0).astype('uint32')
+        time_table[idata['fov']][idata['t']] = t_in_seconds
+
+    return time_table
+
+# load the time table and add it to the global params
+def load_time_table():
+    '''Add the time table dictionary to the params global dictionary.
+    This is so it can be used during Cell creation.
+    '''
+
+    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'r') as time_table_file:
+        params['time_table'] = pickle.load(time_table_file)
+
+    return
+
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
     '''Writes out 4D stacks of TIFF images per channel.
@@ -1463,10 +1512,9 @@ def make_lineages_fov(fov_id, specs):
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
 
-
-   # This is the non-parallelized version (useful for debug)
-   # for fov_and_peak_ids in fov_and_peak_ids_list:
-   #     lineages = make_lineage_chnl_stack(fov_and_peak_ids)
+    # # This is the non-parallelized version (useful for debug)
+    # for fov_and_peak_ids in fov_and_peak_ids_list:
+    #     lineages = make_lineage_chnl_stack(fov_and_peak_ids)
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1516,7 +1564,8 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     cell_leaves = [] # cell ids of the current leaves of the growing lineage tree
 
     # go through regions by timepoint and build lineages
-    for t, regions in enumerate(regions_by_time):
+    # timepoints start at 1, like the original images
+    for t, regions in enumerate(regions_by_time, start=1):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
         for leaf_id in cell_leaves:
@@ -1687,6 +1736,7 @@ class Cell():
 
         # the following information is on a per timepoint basis
         self.times = [t]
+        self.abs_times = [params['time_table'][self.fov][t]] # elapsed time in seconds
         self.labels = [region.label]
         self.bboxes = [region.bbox]
         self.areas = [region.area]
@@ -1701,7 +1751,7 @@ class Cell():
         self.orientation = [region.orientation]
         self.centroid = [region.centroid]
 
-        # these two are special, as they include information from the daugthers for division
+        # these are special datatype, as they include information from the daugthers for division
         # computed upon division
         self.times_w_div = None
         self.lengths_w_div = None
@@ -1723,6 +1773,7 @@ class Cell():
         use cell.times[-1] to get most current value'''
 
         self.times.append(t)
+        self.abs_times.append(params['time_table'][self.fov][t])
         self.labels.append(region.label)
         self.bboxes.append(region.bbox)
         self.areas.append(region.area)
@@ -1748,6 +1799,10 @@ class Cell():
         # give this guy a division time
         self.division_time = daughter1.birth_time
 
+        # update times
+        self.times_w_div = np.append(self.times, self.division_time)
+        self.abs_times.append(params['time_table'][self.fov][self.division_time])
+
         # flesh out the stats for this cell
         # size at birth
         self.sb = self.lengths[0] * params['pxl2um']
@@ -1758,21 +1813,27 @@ class Cell():
         # delta is here for convinience
         self.delta = self.sd - self.sb
 
-        # generation time
-        self.tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60
+        # generation time. Use more accurate times but round them to integer minutes
+        self.tau = np.around((self.abs_times[-1] - self.abs_times[0]) / 60.0)
+        old_tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60.0
+
+        # include the data points from the daughters
+        self.lengths_w_div = np.append(self.lengths,
+                                    daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
+        self.widths_w_div = np.append(self.widths,
+                                  (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
 
         # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
-        # include the data points from the daughters
-        self.times_w_div = np.append(self.times, self.division_time)
-        self.lengths_w_div = np.append(self.lengths, daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
-        self.widths_w_div = np.append(self.widths, (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
         try:
             with warnings.catch_warnings(): # ignore the warnings if it can't converge
                 warnings.simplefilter("ignore")
-                popt, pcov = curve_fit(cell_growth_func, self.times_w_div - self.birth_time,
-                                       np.log(self.lengths_w_div),
+                # convert units to minutes (agrees with tau for guess)
+                times = (self.abs_times - self.abs_times[0]) / 60.0
+                log_lengths = np.log(self.lengths_w_div)
+                popt, pcov = curve_fit(cell_growth_func, times, log_lengths,
                                        p0=(np.log(self.sb), np.log(2)/self.tau))
                 elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
+                elong_rate *= 60.0 # convert to hours
         except:
             elong_rate = float('NaN')
             pcov = float('NaN')

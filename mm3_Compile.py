@@ -47,8 +47,9 @@ import mm3_helpers as mm3
 if __name__ == "__main__":
     # hardcoded parameters
     do_metadata = True
-    do_channel_masks = True
-    do_slicing = True
+    do_time_table = True
+    do_channel_masks = False
+    do_slicing = False
     t_end = None # only analyze images up until this t point. Put in None otherwise
 
     # get switches and parameters
@@ -169,14 +170,29 @@ if __name__ == "__main__":
 
         # save metadata to a .pkl and a human readable txt file
         mm3.information('Saving metadata from analyzed images...')
-        with open(os.path.join(p['ana_dir'],'TIFF_metadata.pkl'), 'wb') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(os.path.join(p['ana_dir'],'TIFF_metadata.txt'), 'w') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.txt'), 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
         mm3.information('Saved metadata from analyzed images.')
 
+    ### Make table for jd time to FOV and time point
+    if not do_time_table:
+        mm3.information('Skipping time table creation.')
+    else:
+        # do it
+        time_table = mm3.make_time_table(analyzed_imgs)
+
+        # save to .pkl. This pkl will be loaded into the params
+        mm3.information('Saving time table...')
+        with open(os.path.join(p['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
+            pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(p['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
+            pprint(time_table, stream=time_table_file)
+        mm3.information('Saved time table.')
+
     ### Make consensus channel masks and get other shared metadata #################################
-    if not do_channel_masks:
+    if not do_channel_masks and do_slicing:
         mm3.information("Loading channel masks dictionary.")
 
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:

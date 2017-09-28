@@ -170,9 +170,10 @@ if __name__ == "__main__":
     start_fov = -1
 
     # hard parameters
-    shift_time = 215 # put in a timepoint to indicate the timing of a shift (colors the text)
+    shift_time = None # put in a timepoint to indicate the timing of a shift (colors the text)
     phase_plane_index = 0 # index of the phase plane
     fl_plane_index = 1 # index of the fluorescent plane
+    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # switches
     try:
@@ -238,8 +239,8 @@ if __name__ == "__main__":
         imin = {}
         imax = {}
         # imin['phase'], imax['phase'] = find_img_min_max(images[::100])
-        imin['phase'], imax['phase'] = 200, 1750
-        imin['488'], imax['488'] = 150, 500
+        imin['phase'], imax['phase'] = 500, 5000
+        imin['488'], imax['488'] = 130, 250
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
@@ -299,15 +300,16 @@ if __name__ == "__main__":
             # print('phase shape', np.shape(phase))
             phase = np.dstack((phase, phase, phase))
 
-            fl488 = image[fl_plane_index].astype('float64') # pick red image
-            # normalize
-            fl488 -= imin['488']
-            fl488[fl488 < 0] = 0
-            fl488 /= (imax['488'] - imin['488'])
-            fl488[fl488 > 1] = 1
-            # print('fl shape', np.shape(fl488))
-            # three color stack
-            fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
+            if (t - 1) % fl_interval == 0:
+                fl488 = image[fl_plane_index].astype('float64') # pick red image
+                # normalize
+                fl488 -= imin['488']
+                fl488[fl488 < 0] = 0
+                fl488 /= (imax['488'] - imin['488'])
+                fl488[fl488 > 1] = 1
+                # print('fl shape', np.shape(fl488))
+                # three color stack
+                fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
 
             image = 1 - ((1 - fl488) * (1 - phase))
 
