@@ -1590,7 +1590,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             leaf_region_map = {leaf_id : [] for leaf_id in cell_leaves}
 
             # get the last y position of current leaves and create tuple with the id
-            current_leaf_positions = [(leaf_id, Cells[leaf_id].y_positions[-1]) for leaf_id in cell_leaves]
+            current_leaf_positions = [(leaf_id, Cells[leaf_id].centroids[-1][0]) for leaf_id in cell_leaves]
 
             # go through regions, they will come off in Y position order
             for r, region in enumerate(regions):
@@ -1740,16 +1740,14 @@ class Cell():
         self.labels = [region.label]
         self.bboxes = [region.bbox]
         self.areas = [region.area]
-        # self.x_positions = [region.centroid[1]]
-        self.y_positions = [region.centroid[0]]
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
-        self.orientation = [region.orientation]
-        self.centroid = [region.centroid]
+        self.orientations = [region.orientation]
+        self.centroids = [region.centroid]
 
         # these are special datatype, as they include information from the daugthers for division
         # computed upon division
@@ -1777,8 +1775,6 @@ class Cell():
         self.labels.append(region.label)
         self.bboxes.append(region.bbox)
         self.areas.append(region.area)
-        # self.x_positions.append(region.centroid[1])
-        self.y_positions.append(region.centroid[0])
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
@@ -2029,10 +2025,10 @@ def check_division(cell, region1, region2):
     # centroids of regions should be in the upper and lower half of the
     # of the mother's bounding box, respectively
     # top region within top half of mother bounding box
-    if cell.bboxes[-1][0] > region1.centroid[0] or cell.y_positions[-1] < region1.centroid[0]:
+    if cell.bboxes[-1][0] > region1.centroid[0] or cell.centroids[-1][0] < region1.centroid[0]:
         return 0
     # bottom region with bottom half of mother bounding box
-    if cell.y_positions[-1] > region2.centroid[0] or cell.bboxes[-1][2] < region2.centroid[0]:
+    if cell.centroids[-1][0] > region2.centroid[0] or cell.bboxes[-1][2] < region2.centroid[0]:
         return 0
 
     # if you got this far then divide the mother
@@ -2199,8 +2195,8 @@ def foci_lap(img, img_foci, cell, t):
     # pull out useful information for just this time point
     i = cell.times.index(t) # find position of the time point in lists (time points may be missing)
     bbox = cell.bboxes[i]
-    orientation = cell.orientation[i]
-    centroid = cell.centroid[i]
+    orientation = cell.orientations[i]
+    centroid = cell.centroids[i]
     region = cell.labels[i]
 
     # declare arrays which will hold foci data
