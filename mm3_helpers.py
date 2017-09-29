@@ -1740,7 +1740,7 @@ class Cell():
         self.labels = [region.label]
         self.bboxes = [region.bbox]
         self.areas = [region.area]
-        self.x_positions = [region.centroid[1]]
+        # self.x_positions = [region.centroid[1]]
         self.y_positions = [region.centroid[0]]
 
         #calculating cell length and width by using Feret Diamter
@@ -1777,7 +1777,7 @@ class Cell():
         self.labels.append(region.label)
         self.bboxes.append(region.bbox)
         self.areas.append(region.area)
-        self.x_positions.append(region.centroid[1])
+        # self.x_positions.append(region.centroid[1])
         self.y_positions.append(region.centroid[0])
 
         #calculating cell length and width by using Feret Diamter
@@ -1823,28 +1823,21 @@ class Cell():
         self.widths_w_div = np.append(self.widths,
                                   (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
 
-        # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
+        # calculate elongation rate
         try:
-            with warnings.catch_warnings(): # ignore the warnings if it can't converge
-                warnings.simplefilter("ignore")
-                # convert units to minutes (agrees with tau for guess)
-                times = (self.abs_times - self.abs_times[0]) / 60.0
-                log_lengths = np.log(self.lengths_w_div)
-                popt, pcov = curve_fit(cell_growth_func, times, log_lengths,
-                                       p0=(np.log(self.sb), np.log(2)/self.tau))
-                elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
-                elong_rate *= 60.0 # convert to hours
+            times = (self.abs_times - self.abs_times[0]) / 60.0
+            log_lengths = np.log(self.lengths_w_div)
+            p = np.polyfit(times, log_lengths, 1)
+            self.elong_rate = p[0] * 60.0 # convert to hours
         except:
-            elong_rate = float('NaN')
-            pcov = float('NaN')
-
-        self.elong_rate = elong_rate
-        self.sum_cov = np.sum(pcov)
+            self.elong_rate = float('NaN')
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
         # compared to the total size
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
+
+        # convert data to smaller floats. No need for float64
 
     def print_info(self):
         '''prints information about the cell'''

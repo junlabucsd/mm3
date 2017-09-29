@@ -48,8 +48,8 @@ if __name__ == "__main__":
     # hardcoded parameters
     do_metadata = True
     do_time_table = True
-    do_channel_masks = False
-    do_slicing = False
+    do_channel_masks = True
+    do_slicing = True
     t_end = None # only analyze images up until this t point. Put in None otherwise
 
     # get switches and parameters
