@@ -1764,7 +1764,6 @@ class Cell():
         self.delta = None
         self.tau = None
         self.elong_rate = None
-        self.sum_cov = None
         self.septum_position = None
 
     def grow(self, region, t):
@@ -1847,7 +1846,8 @@ class Cell():
         self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
         self.widths = [width.astype(convert_to) for width in self.widths]
         self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
-        self.orientations = [width.astype(convert_to) for orientation in self.orientations]
+        # note the float16 is hardcoded here
+        self.orientations = [np.float16(orientation) for orientation in self.orientations]
         self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
 
     def print_info(self):
