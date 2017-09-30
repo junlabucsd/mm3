@@ -1797,7 +1797,7 @@ class Cell():
         self.division_time = daughter1.birth_time
 
         # update times
-        self.times_w_div = np.append(self.times, self.division_time)
+        self.times_w_div = self.times + [self.division_time]
         self.abs_times.append(params['time_table'][self.fov][self.division_time])
 
         # flesh out the stats for this cell
@@ -1815,10 +1815,8 @@ class Cell():
         old_tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60.0
 
         # include the data points from the daughters
-        self.lengths_w_div = np.append(self.lengths,
-                                    daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
-        self.widths_w_div = np.append(self.widths,
-                                  (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
+        self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
+        self.widths_w_div = [w * params['pxl2um'] for w in self.widths] + [((daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']]
 
         # calculate elongation rate
         try:
@@ -1835,14 +1833,22 @@ class Cell():
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
 
         # convert data to smaller floats. No need for float64
+        # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
         convert_to = 'float16' # numpy datatype to convert to
 
-        for centroid in self.centroids:
-            centroid[0] = centroid[0].astype(convert_to) # y
-            centroid[1] = centroid[1].astype(convert_to) # y
-
+        self.sb = self.sb.astype(convert_to)
+        self.sd = self.sd.astype(convert_to)
         self.delta = self.delta.astype(convert_to)
         self.elong_rate = self.elong_rate.astype(convert_to)
+        self.tau = self.tau.astype(convert_to)
+        self.septum_position = self.septum_position.astype(convert_to)
+
+        self.lengths = [length.astype(convert_to) for length in self.lengths]
+        self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
+        self.widths = [width.astype(convert_to) for width in self.widths]
+        self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
+        self.orientations = [width.astype(convert_to) for orientation in self.orientations]
+        self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
 
     def print_info(self):
         '''prints information about the cell'''
