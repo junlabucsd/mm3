@@ -1746,6 +1746,7 @@ class Cell():
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
+        # angle of the fit elipsoid and centroid location
         self.orientations = [region.orientation]
         self.centroids = [region.centroid]
 
@@ -1781,8 +1782,8 @@ class Cell():
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
 
-        self.orientation.append(region.orientation)
-        self.centroid.append(region.centroid)
+        self.orientations.append(region.orientation)
+        self.centroids.append(region.centroid)
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -1834,6 +1835,14 @@ class Cell():
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
 
         # convert data to smaller floats. No need for float64
+        convert_to = 'float16' # numpy datatype to convert to
+
+        for centroid in self.centroids:
+            centroid[0] = centroid[0].astype(convert_to) # y
+            centroid[1] = centroid[1].astype(convert_to) # y
+
+        self.delta = self.delta.astype(convert_to)
+        self.elong_rate = self.elong_rate.astype(convert_to)
 
     def print_info(self):
         '''prints information about the cell'''
