@@ -1590,7 +1590,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             leaf_region_map = {leaf_id : [] for leaf_id in cell_leaves}
 
             # get the last y position of current leaves and create tuple with the id
-            current_leaf_positions = [(leaf_id, Cells[leaf_id].y_positions[-1]) for leaf_id in cell_leaves]
+            current_leaf_positions = [(leaf_id, Cells[leaf_id].centroids[-1][0]) for leaf_id in cell_leaves]
 
             # go through regions, they will come off in Y position order
             for r, region in enumerate(regions):
@@ -1740,16 +1740,15 @@ class Cell():
         self.labels = [region.label]
         self.bboxes = [region.bbox]
         self.areas = [region.area]
-        self.x_positions = [region.centroid[1]]
-        self.y_positions = [region.centroid[0]]
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
-        self.orientation = [region.orientation]
-        self.centroid = [region.centroid]
+        # angle of the fit elipsoid and centroid location
+        self.orientations = [region.orientation]
+        self.centroids = [region.centroid]
 
         # these are special datatype, as they include information from the daugthers for division
         # computed upon division
@@ -1765,7 +1764,6 @@ class Cell():
         self.delta = None
         self.tau = None
         self.elong_rate = None
-        self.sum_cov = None
         self.septum_position = None
 
     def grow(self, region, t):
@@ -1777,16 +1775,14 @@ class Cell():
         self.labels.append(region.label)
         self.bboxes.append(region.bbox)
         self.areas.append(region.area)
-        self.x_positions.append(region.centroid[1])
-        self.y_positions.append(region.centroid[0])
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
 
-        self.orientation.append(region.orientation)
-        self.centroid.append(region.centroid)
+        self.orientations.append(region.orientation)
+        self.centroids.append(region.centroid)
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -1800,7 +1796,7 @@ class Cell():
         self.division_time = daughter1.birth_time
 
         # update times
-        self.times_w_div = np.append(self.times, self.division_time)
+        self.times_w_div = self.times + [self.division_time]
         self.abs_times.append(params['time_table'][self.fov][self.division_time])
 
         # flesh out the stats for this cell
@@ -1818,33 +1814,41 @@ class Cell():
         old_tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60.0
 
         # include the data points from the daughters
-        self.lengths_w_div = np.append(self.lengths,
-                                    daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
-        self.widths_w_div = np.append(self.widths,
-                                  (daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']
+        self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
+        self.widths_w_div = [w * params['pxl2um'] for w in self.widths] + [((daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']]
 
-        # growth rate (inst. elong rate alpha) sd = sb * 2 ^ (gr * tau)
+        # calculate elongation rate
         try:
-            with warnings.catch_warnings(): # ignore the warnings if it can't converge
-                warnings.simplefilter("ignore")
-                # convert units to minutes (agrees with tau for guess)
-                times = (self.abs_times - self.abs_times[0]) / 60.0
-                log_lengths = np.log(self.lengths_w_div)
-                popt, pcov = curve_fit(cell_growth_func, times, log_lengths,
-                                       p0=(np.log(self.sb), np.log(2)/self.tau))
-                elong_rate = popt[1] # 0 is the guessed sb, 1 is the guessed elong_rate
-                elong_rate *= 60.0 # convert to hours
+            times = (self.abs_times - self.abs_times[0]) / 60.0
+            log_lengths = np.log(self.lengths_w_div)
+            p = np.polyfit(times, log_lengths, 1)
+            self.elong_rate = p[0] * 60.0 # convert to hours
         except:
-            elong_rate = float('NaN')
-            pcov = float('NaN')
-
-        self.elong_rate = elong_rate
-        self.sum_cov = np.sum(pcov)
+            self.elong_rate = float('NaN')
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
         # compared to the total size
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
+
+        # convert data to smaller floats. No need for float64
+        # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
+        convert_to = 'float16' # numpy datatype to convert to
+
+        self.sb = self.sb.astype(convert_to)
+        self.sd = self.sd.astype(convert_to)
+        self.delta = self.delta.astype(convert_to)
+        self.elong_rate = self.elong_rate.astype(convert_to)
+        self.tau = self.tau.astype(convert_to)
+        self.septum_position = self.septum_position.astype(convert_to)
+
+        self.lengths = [length.astype(convert_to) for length in self.lengths]
+        self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
+        self.widths = [width.astype(convert_to) for width in self.widths]
+        self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
+        # note the float16 is hardcoded here
+        self.orientations = [np.float16(orientation) for orientation in self.orientations]
+        self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
 
     def print_info(self):
         '''prints information about the cell'''
@@ -2036,10 +2040,10 @@ def check_division(cell, region1, region2):
     # centroids of regions should be in the upper and lower half of the
     # of the mother's bounding box, respectively
     # top region within top half of mother bounding box
-    if cell.bboxes[-1][0] > region1.centroid[0] or cell.y_positions[-1] < region1.centroid[0]:
+    if cell.bboxes[-1][0] > region1.centroid[0] or cell.centroids[-1][0] < region1.centroid[0]:
         return 0
     # bottom region with bottom half of mother bounding box
-    if cell.y_positions[-1] > region2.centroid[0] or cell.bboxes[-1][2] < region2.centroid[0]:
+    if cell.centroids[-1][0] > region2.centroid[0] or cell.bboxes[-1][2] < region2.centroid[0]:
         return 0
 
     # if you got this far then divide the mother
@@ -2206,8 +2210,8 @@ def foci_lap(img, img_foci, cell, t):
     # pull out useful information for just this time point
     i = cell.times.index(t) # find position of the time point in lists (time points may be missing)
     bbox = cell.bboxes[i]
-    orientation = cell.orientation[i]
-    centroid = cell.centroid[i]
+    orientation = cell.orientations[i]
+    centroid = cell.centroids[i]
     region = cell.labels[i]
 
     # declare arrays which will hold foci data
