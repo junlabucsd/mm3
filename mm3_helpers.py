@@ -1547,6 +1547,9 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     # cells, unless they are daughters of current cells
     new_cell_y_cutoff = params['new_cell_y_cutoff']
 
+    # only regions with labels less than or equal to this value will be considered to start cells
+    new_cell_region_cutoff = params['new_cell_region_cutoff']
+
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
 
@@ -1575,7 +1578,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
         # make all the regions leaves if there are no current leaves
         if not cell_leaves:
             for region in regions:
-                if region.centroid[0] < new_cell_y_cutoff:
+                if region.centroid[0] < new_cell_y_cutoff and region.label <= new_cell_region_cutoff:
                     # Create cell and put in cell dictionary
                     cell_id = create_cell_id(region, t, peak_id, fov_id)
                     Cells[cell_id] = Cell(cell_id, region, t, parent_id=None)
@@ -1625,10 +1628,13 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     discarded_regions = sorted(region_links, key=lambda x: x[1])[2:]
                     for discarded_region in discarded_regions:
                         region = regions[discarded_region[0]]
-                        if region.centroid[0] < new_cell_y_cutoff:
+                        if region.centroid[0] < new_cell_y_cutoff and region.label <= new_cell_region_cutoff:
                             cell_id = create_cell_id(region, t, peak_id, fov_id)
                             Cells[cell_id] = Cell(cell_id, region, t, parent_id=None)
                             cell_leaves.append(cell_id) # add to leaves
+                        else:
+                            # since the regions are ordered, none of the remaining will pass
+                            break
 
             ### iterate over the leaves, looking to see what regions connect to them.
             for leaf_id, region_links in leaf_region_map.iteritems():
@@ -1665,12 +1671,18 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                                                    parent_id=leaf_id)
                         Cells[leaf_id].divide(Cells[daughter1_id], Cells[daughter2_id], t)
 
-                        # add the daughter ids to list of current leaves, remove mother
-                        cell_leaves.append(daughter1_id)
-                        cell_leaves.append(daughter2_id)
+                        # remove mother from current leaves
                         cell_leaves.remove(leaf_id)
 
+                        # add the daughter ids to list of current leaves if they pass cutoffs
+                        if region1.centroid[0] < new_cell_y_cutoff and region1.label <= new_cell_region_cutoff:
+                            cell_leaves.append(daughter1_id)
+
+                        if region2.centroid[0] < new_cell_y_cutoff and region2.label <= new_cell_region_cutoff:
+                            cell_leaves.append(daughter2_id)
+
                     # 1 means that daughter 1 is just a continuation of the mother
+                    # the other region will simply be discarded.
                     elif check_division_result == 1:
                         Cells[leaf_id].grow(region1, t)
 
@@ -1935,7 +1947,7 @@ def feretdiameter(region):
         d_W[i] = np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
         i += 1
 
-    #take the average of the two at quarter positions
+    # take the average of the two at quarter positions
     width = np.mean([d_W[0],d_W[1]])
 
     return length, width
