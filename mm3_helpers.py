@@ -1553,6 +1553,9 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
 
+    # start time is the first time point for this series of TIFFs.
+    start_time_index = min(params['time_table'][fov_id].keys())
+    
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data
@@ -1568,7 +1571,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # go through regions by timepoint and build lineages
     # timepoints start at 1, like the original images
-    for t, regions in enumerate(regions_by_time, start=1):
+    for t, regions in enumerate(regions_by_time, start=start_time_index):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
         for leaf_id in cell_leaves:
