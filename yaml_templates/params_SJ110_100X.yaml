@@ -99,6 +99,10 @@ min_growth_area: 0.8
 # unit is pixels
 new_cell_y_cutoff: 150
 
+# only regions with labels less than or equal to this value will be considered to start potential
+# new cells.
+new_cell_region_cutoff: 2
+
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment
 movie_directory: 'movies/'
