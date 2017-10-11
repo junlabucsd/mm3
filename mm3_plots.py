@@ -370,17 +370,17 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     Plots cell parameters over time using a hex scatter plot and a moving average
     '''
 
-    sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
+    sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.00)
 
     # lists for plotting and formatting
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
-    ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$','daughter/mother']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[15,5*len(columns)/2], squeeze=False)
+                            figsize=[10,5*len(columns)/3], squeeze=False)
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
@@ -395,10 +395,10 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 6),
+                      (x_extents[0], x_extents[1], 0, 2),
                       (x_extents[0], x_extents[1], 0, 12),
+                      (x_extents[0], x_extents[1], 0, 100),
                       (x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 120),
-                      (x_extents[0], x_extents[1], 0, 0.04),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
