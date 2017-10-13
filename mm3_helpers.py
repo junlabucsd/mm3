@@ -935,17 +935,15 @@ def channel_xcorr(fov_id, peak_id):
     The very first value should be 1.
     '''
 
+    pad_size = params['alignment_pad']
+
     # Use this number of images to calculate cross correlations
     number_of_images = 20
 
     # load the phase contrast images
     image_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-    # just use the first plane just in case there are many colors (shouldn't be)
-    if len(image_data.shape) > 3: # if there happen to be multiple planes
-        image_data = image_data[:,:,:,0]
-
-    # if there are more than images than number_of_images, use number_of_images images evenly
+    # if there are more images than number_of_images, use number_of_images images evenly
     # spaced across the range
     if image_data.shape[0] > number_of_images:
         spacing = int(image_data.shape[0] / number_of_images)
@@ -954,7 +952,7 @@ def channel_xcorr(fov_id, peak_id):
             image_data = image_data[:number_of_images,:,:]
 
     # we will compare all images to this one, needs to be padded to account for image drift
-    first_img = np.pad(image_data[0,:,:], 10, mode='reflect')
+    first_img = np.pad(image_data[0,:,:], pad_size, mode='reflect')
 
     xcorr_array = [] # array holds cross correlation vaues
     for img in image_data:
@@ -1555,7 +1553,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # start time is the first time point for this series of TIFFs.
     start_time_index = min(params['time_table'][fov_id].keys())
-    
+
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data

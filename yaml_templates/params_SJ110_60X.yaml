@@ -65,7 +65,7 @@ alignment_pad: 10
 # threshold used in readjusting the OTSU method in fold change.
 # Higher number will create smaller markers. 1.0 == default OTSU
 # Only for marker creation,final watershed uses default OTSU
-OTSU_threshold: 1.2
+OTSU_threshold: 1.0
 
 # the radius of the disk that is used in the first morphological opening
 # unit is pixels
@@ -120,7 +120,7 @@ image_end: 10000
 
 ### foci_lap detection parameters ##############################################
 # indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
-foci_plane: 'c1'
+foci_plane: 'c2'
 
 # toggle foci detection debug
 debug_foci: False

@@ -1,10 +1,5 @@
 #!/usr/bin/python
 from __future__ import print_function
-from subprocess import check_output
-def warning(*objs):
-    print(time.strftime("%H:%M:%S Error:", time.localtime()), *objs, file=sys.stderr)
-def information(*objs):
-    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # import modules
 import sys
@@ -40,15 +35,13 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import tifffile as tiff
 
-# debug
-# import matplotlib as mpl
-# mpl.rcParams['figure.figsize'] = 15, 15
-# mpl.rcParams['pdf.fonttype'] = 42
-# mpl.rcParams['xtick.direction'] = 'out'
-# mpl.rcParams['ytick.direction'] = 'out'
-# import matplotlib.pyplot as plt
-
 ### functions ##################################################################
+def warning(*objs):
+    print(time.strftime("%H:%M:%S Error:", time.localtime()), *objs, file=sys.stderr)
+
+def information(*objs):
+    print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
+
 def make_label(text, face, size=12, angle=0):
     '''Uses freetype to make a time label.
 
@@ -152,15 +145,14 @@ def find_img_min_max(image_filepaths):
 if __name__ == "__main__":
     '''You must have ffmpeg installed, which you can get using homebrew:
     https://trac.ffmpeg.org/wiki/CompilationGuide/MacOSX
-
-    By Steven
-    Edited 20151128 jt
-    Edited 20160830 jt
     '''
 
     # hard parameters
-    FFMPEG_BIN = check_output("which ffmpeg", shell=True).replace('\n','')
+    # path to FFMPEG
+    FFMPEG_BIN = sp.check_output("which ffmpeg", shell=True).replace('\n','')
     #FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+
+    # path to font for label
     fontfile = "/Library/Fonts/Andale Mono.ttf"    # Mac OS location
     if not os.path.isfile(fontfile):
         # fontfile = "/usr/share/fonts/truetype/freefont/FreeMono.ttf"  # Linux Ubuntu 16.04 location
@@ -168,6 +160,15 @@ if __name__ == "__main__":
         if not os.path.isfile(fontfile):
             sys.exit("You need to install some fonts and specify the correct path to the .ttf file!")
     fontface = Face(fontfile)
+
+    # put in a timepoint to indicate the timing of a shift (colors the text)
+    shift_time = None
+
+    # Fluorescent image parameters (two color movies)
+    two_colors = False # set to true if you want to do two color movies.
+    phase_plane_index = 0 # index of the phase plane
+    fl_plane_index = 1 # index of the fluorescent plane
+    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -200,8 +201,8 @@ if __name__ == "__main__":
         p = yaml.load(pfile)
 
     # assign shorthand directory names
-    TIFF_dir = os.path.join(p['experiment_directory'],p['image_directory']) # source of images
-    movie_dir = os.path.join(p['experiment_directory'],p['movie_directory'])
+    TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
+    movie_dir = os.path.join(p['experiment_directory'], p['movie_directory'])
 
     # set up movie folder if it does not already exist
     if not os.path.exists(movie_dir):
@@ -227,9 +228,9 @@ if __name__ == "__main__":
             continue
 
         # grab the images for this fov
-        images = glob.glob(os.path.join(TIFF_dir,'*xy%03d*.tif' % (fov)))
+        images = glob.glob(os.path.join(TIFF_dir, '*xy%03d*.tif' % (fov)))
         if len(images) == 0:
-            images = glob.glob(os.path.join(TIFF_dir,'*xy%02d*.tif' % (fov))) # for filenames with 2 digit FOV
+            images = glob.glob(os.path.join(TIFF_dir, '*xy%02d*.tif' % (fov))) # for filenames with 2 digit FOV
         if len(images) == 0:
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
@@ -237,13 +238,20 @@ if __name__ == "__main__":
         # get min max pixel intensity for scaling the data
         imin = {}
         imax = {}
-        imin['phase'], imax['phase'] = find_img_min_max(images[::100])
+
+        if not two_colors:
+            # automatically scale images
+            imin['phase'], imax['phase'] = find_img_min_max(images[::100])
+        else:
+            # it is hardcoded.
+            imin['phase'], imax['phase'] = 200, 2000
+            imin['488'], imax['488'] = 130, 250
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
-        if image.shape[0] < 10:
-            image = image[0] # get phase plane
-        size_x, size_y = image.shape[1], image.shape[0] # does not worked for stacked tiff
+        if two_colors or image.shape[0] < 10:
+            image = image[phase_plane_index] # get phase plane
+        size_x, size_y = image.shape[1], image.shape[0] # does not work for stacked tiff
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -279,20 +287,45 @@ if __name__ == "__main__":
             if t < p['image_start'] or t > p['image_end']:
                 continue
 
-            image = tiff.imread(img) # get the image
+            image_data = tiff.imread(img) # get the image
 
-            if image.shape[0] < 10:
-                image = image[0] # get phase plane
+            if two_colors or image_data.shape[0] < 10:
+                phase = image_data[phase_plane_index] # get phase plane
+            else:
+                phase = image_data
 
             # process phase image
-            phase = image.astype('float64')
+            phase = phase.astype('float64')
             # normalize
             phase -= imin['phase']
             phase[phase < 0] = 0
             phase /= (imax['phase'] - imin['phase'])
             phase[phase > 1] = 1
+
+            if two_colors:
+                # dim phase
+                phase = phase * 0.75
+
             # three color stack
-            image = np.dstack((phase, phase, phase))
+            phase = np.dstack((phase, phase, phase))
+
+            if two_colors:
+                # combine with fluorescent image
+                if (t - 1) % fl_interval == 0:
+                    fl488 = image_data[fl_plane_index].astype('float64') # pick red image
+                    # normalize
+                    fl488 -= imin['488']
+                    fl488[fl488 < 0] = 0
+                    fl488 /= (imax['488'] - imin['488'])
+                    fl488[fl488 > 1] = 1
+                    # print('fl shape', np.shape(fl488))
+                    # three color stack
+                    fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
+
+                image = 1 - ((1 - fl488) * (1 - phase))
+            else:
+                # just send the phase image forward
+                image = phase
 
             # put in time stamp
             seconds = float(t * p['seconds_per_time_index'])
@@ -305,15 +338,14 @@ if __name__ == "__main__":
                                                (size_x - 10 - r_timestamp.shape[1], 10)),
                                                mode = 'constant')
             r_timestamp /= 255.0
-            r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
+
+            # create label
+            if shift_time and t >= shift_time:
+                r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
+            else:
+                r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
             image = 1 - ((1 - image) * (1 - r_timestamp))
-
-            # Plot image for debug
-            # fig = plt.figure(figsize = (10,5))
-            # ax = fig.add_subplot(1,1,1)
-            # ax.imshow((image * 65535).astype('uint16'))
-            # plt.show()
 
             # shoot the image to the ffmpeg subprocess
             pipe.stdin.write((image * 65535).astype('uint16').tostring())

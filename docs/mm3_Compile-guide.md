@@ -1,14 +1,15 @@
 # mm3_Compile.py
 
-This script takes raw TIFF files, finds growth channels, cuts them out, and saves image stacks across time for each growth channel. It does this by first locating the growth channels, then creating a cutting mask for each FOV that is applied to all time points. In addition, it extracts and saves image metadata.
+This script takes raw TIFF files, finds growth channels, cuts them out, and saves image stacks across time for each growth channel. It does this by first locating the growth channels, then creating a cutting mask for each FOV that is applied to all time points. In addition, it extracts and saves image metadata as well as a time table which maps picture time point to wall time.
 
 **Input**
-* Individual TIFF files. TIFFs should be separated by time point and FOV, but multiple colors should be in one image.
+* Individual TIFF files. TIFFs should be separated by time point and FOV, but multiple colors should be stacked in one image.
 
 **Output**
 * Stacked TIFFs through time for each channel (colors saved in separate stacks). These are saved to the `channels/` subfolder in the analysis directory.
-* Metadata for each TIFF. These are saved as `TIFF_metadata.pkl` and `.txt`. A Python dictionary of metadata associated with each TIFF file.
+* Metadata for each TIFF in a Python dictionary. These are saved as `TIFF_metadata.pkl` and `.txt`. The pickle file is read by subsequent scripts, the text file is simply for the user (true of all metadata files).
 * Channel masks for each FOV. These are saved as `channel_masks.pkl` and `.txt`. A Python dictionary that records the location of the channels in each FOV. Is a nested dictionaries of FOVs and then channel peaks. The final values are 4 pixel coordinates, ((y1, y2), (x1, x2)).
+* Time table for all time points and FOVs. These are saved as `time_table.pkl` and `.txt`. A Python dictionary by FOV which maps the actual time (elapsed seconds since the start of the experiment) each nominal time point was taken.
 
 ## Usage
 Run in terminal or iPython session. The -f option is required followed by the path to your parameter .yaml file.
@@ -31,8 +32,10 @@ Fill out the parameters file normally. Pay special attention to the following:
 
 There are few hardcoded parameters at the start of the executable Python script (right after __main__).
 
-* `do_metadata` : Determine metadata. If this is False, it will attempt to load the metadata from a previous run of mm3_Compile.py
-* `do_channel_masks` : Calculate consensus channel masks. Again, if False it will look to load this information.
+* `do_metadata` : Determine metadata or not. If this is False, it will attempt to load the metadata from a previous run of mm3_Compile.py
+* `do_time_table` : Calculate the time table or not.
+* `do_channel_masks` : Calculate consensus channel masks or not. Again, if False it will look to load this information.
+* `do_slicing`: Slice the TIFFs or not.
 * `t_end` : Will only analyze images up to this time point. Useful for debugging.
 
 ## Notes on use

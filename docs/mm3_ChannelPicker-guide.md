@@ -22,6 +22,7 @@ Run in terminal or iPython session. The -f option is required followed by the pa
 
 Fill out the parameters file normally. Pay special attention to the following:
 
+* `phase_plane` is the postfix of the channel which contains the phase images
 * `channel_picking_threshold` is a measure of correlation between a series of images, so a value of 1 would mean the same image over and over. Channels with values above this value (like empty channels) will be designated as empty before the user selection GUI.
 
 **Hardcoded parameters**
