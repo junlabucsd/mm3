@@ -67,10 +67,10 @@ if __name__ == "__main__":
     ### Filters you may want to apply
     if True:
         # Filter based on birth_label. mother cells : label_num=1
-        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1])
+        Cells = mm3_plots.find_cells_of_birth_label(Cells, label_num=[1, 2])
 
         # Filter based on FOV
-        Cells = mm3_plots.find_cells_of_fov(Cells, FOVs=[1])
+        # Cells = mm3_plots.find_cells_of_fov(Cells, FOVs=[1])
 
         # Filter based on birth time point
         # Cells = mm3_plots.find_cells_born_after(Cells, born_after=100)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
         Cells = mm3_plots.filter_by_stat(Cells, center_stat='mean', std_distance=3)
 
         # save cell pickle of filtered cells.
-        if True:
+        if False:
             with open(os.path.join(p['cell_dir'],'complete_cells_filtered.pkl'), 'wb') as cell_file:
                 pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -250,7 +250,7 @@ if __name__ == "__main__":
                             header=True, index=False)
 
     # Some plotting things
-    if False:
+    if True:
         # This shall use the cells as filtered above.
 
         # make a directory to hold these csvs

@@ -1410,7 +1410,11 @@ def segment_image(image):
     min_object_size = params['min_object_size']
 
     # threshold image
-    thresh = threshold_otsu(image) # finds optimal OTSU thershhold value
+    try:
+        thresh = threshold_otsu(image) # finds optimal OTSU threshhold value
+    except:
+        return np.zeros_like(image)
+
     threshholded = image > OTSU_threshold*thresh # will create binary image
 
     # if there are no cells, good to clear the border
@@ -1424,9 +1428,9 @@ def segment_image(image):
     morph = morphology.binary_opening(threshholded, morphology.disk(first_opening_size))
 
     # if this image is empty at this point (likely if there were no cells), just return
-    # the morphed image which is a zero array
+    # zero array
     if np.amax(morph) == 0:
-        return morph
+        return np.zeros_like(image)
 
     ### Calculate distance matrix, use as markers for random walker (diffusion watershed)
     # Generate the markers based on distance to the background
@@ -1451,10 +1455,14 @@ def segment_image(image):
         cleared = morphology.remove_small_objects(cleared, min_size=min_object_size)
     else:
         # if there are no labels, then just return the cleared image as it is zero
-        return cleared # should be zero image if there was only 1 label
+        return np.zeros_like(image)
 
     # relabel now that small objects and labels on edges have been cleared
     markers = morphology.label(cleared)
+
+    # just break if there is no label
+    if np.amax(markers) == 0:
+        return np.zeros_like(image)
 
     # the binary image for the watershed, which uses the unmodified OTSU threshold
     threshholded_watershed = image > thresh
@@ -1469,7 +1477,7 @@ def segment_image(image):
         # put negative values back to zero for proper image
         labeled_image[labeled_image == -1] = 0
     except:
-        return cleared # this should just be a zero array
+        return np.zeros_like(image)
 
     return labeled_image
 
@@ -1884,9 +1892,24 @@ def feretdiameter(region):
     x0 = x0 - np.int16(region.bbox[1])
     cosorient = np.cos(region.orientation)
     sinorient = np.sin(region.orientation)
-    amp_param = 1.2 #amplifying number to make sure the axis is longer than actuall cell length
-    # b_image = (region.image).astype('int8')
-    b_cnt = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
+    amp_param = 1.2 #amplifying number to make sure the axis is longer than actual cell length
+
+    # coordinates relative to bounding box
+    # r_coords = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
+
+    # limit to perimeter coords. pixels are relative to bounding box
+    distance_image = ndi.distance_transform_edt(region.image)
+    r_coords = np.where(distance_image == 1)
+    r_coords = zip(r_coords[0], r_coords[1])
+
+    # coordinates are already sorted by y. partion into top and bottom to search faster later
+    # if orientation > 0, L1 is closer to top of image (lower Y coord)
+    if region.orientation > 0:
+        L1_coords = r_coords[:len(r_coords)/4]
+        L2_coords = r_coords[len(r_coords)/4:]
+    else:
+        L1_coords = r_coords[len(r_coords)/4:]
+        L2_coords = r_coords[:len(r_coords)/4]
 
     #####################
     # calculte cell length
@@ -1894,23 +1917,35 @@ def feretdiameter(region):
     L2_pt = np.zeros((2,1))
 
     # define the two end points of the the long axis line
-    # one pole
+    # one pole.
     L1_pt[1] = x0 + cosorient * 0.5 * region.major_axis_length*amp_param
     L1_pt[0] = y0 - sinorient * 0.5 * region.major_axis_length*amp_param
 
-    # the other pole
+    # the other pole.
     L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
     L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
 
     # calculate the minimal distance between the points at both ends of 3 lines
     # aka calcule the closest coordiante in the region to each of the above points.
-    pt_L1 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in b_cnt])]
-    pt_L2 = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in b_cnt])]
+    # pt_L1 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in r_coords])]
+    # pt_L2 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in r_coords])]
+
+    pt_L1 = L1_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in L1_coords])]
+    pt_L2 = L2_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords])]
     length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
 
     #####################
     # calculate cell width
     # draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length = 0.4, to avoid constriction in midcell
+
+    # limit to points in each half
+    W_coords = []
+    if region.orientation > 0:
+        W_coords.append(r_coords[:len(r_coords)/2]) # note the /2 here instead of /4
+        W_coords.append(r_coords[len(r_coords)/2:])
+    else:
+        W_coords.append(r_coords[len(r_coords)/2:])
+        W_coords.append(r_coords[:len(r_coords)/2])
 
     # starting points
     x1 = x0 + cosorient * 0.5 * length*0.4
@@ -1938,11 +1973,15 @@ def feretdiameter(region):
     pt_W2 = np.zeros((2,2))
     d_W = np.zeros((2,1))
     i = 0
-    for W1_pt, W2_pt in zip(W1_pts ,W2_pts):
+    for W1_pt, W2_pt in zip(W1_pts, W2_pts):
+
+        # # find the points closest to the guide points
+        # pt_W1[i,0], pt_W1[i,1] = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in r_coords])]
+        # pt_W2[i,0], pt_W2[i,1] = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in r_coords])]
 
         # find the points closest to the guide points
-        pt_W1[i,0], pt_W1[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in b_cnt])]
-        pt_W2[i,0], pt_W2[i,1] = b_cnt[np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in b_cnt])]
+        pt_W1[i,0], pt_W1[i,1] = W_coords[i][np.argmin([np.sqrt(np.power(Pt[0]-W1_pt[0],2) + np.power(Pt[1]-W1_pt[1],2)) for Pt in W_coords[i]])]
+        pt_W2[i,0], pt_W2[i,1] = W_coords[i][np.argmin([np.sqrt(np.power(Pt[0]-W2_pt[0],2) + np.power(Pt[1]-W2_pt[1],2)) for Pt in W_coords[i]])]
 
         # calculate the actual width
         d_W[i] = np.sqrt(np.power(pt_W1[i,0]-pt_W2[i,0],2) + np.power(pt_W1[i,1]-pt_W2[i,1],2))
