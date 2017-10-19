@@ -1,9 +1,11 @@
 # mm3
-### Version 3.11
+### Version 3.12
 
 Please refer to the docs subfolder for information and usage.
 
 ## Version History
+
+3.12 Increased speed for Feret diameter (length and width) calculation.
 
 3.11 2017.10.10 Option to do lineage mapping only for cells close to closed end of channel.
 
