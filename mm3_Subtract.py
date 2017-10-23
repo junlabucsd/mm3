@@ -45,7 +45,7 @@ import mm3_helpers as mm3
 if __name__ == "__main__":
     # hardcoded parameters
     do_empties = True # calculate empties. Otherwise expect them to be there.
-    do_subtraction = True
+    do_subtraction = False
 
     # switches which may be overwritten
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         # deal with those problem FOVs without empties
         have_empty = list(set(fov_id_list).difference(set(need_empty))) # fovs with empties
         for fov_id in need_empty:
-            from_fov = min(have_empty, key=lambda x: abs(x-5)) # find closest FOV with an empty
+            from_fov = min(have_empty, key=lambda x: abs(x-fov_id)) # find closest FOV with an empty
             copy_result = mm3.copy_empty_stack(from_fov, fov_id, color=sub_plane)
 
     ### Subtract ##################################################################################
