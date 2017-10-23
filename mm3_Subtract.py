@@ -45,7 +45,7 @@ import mm3_helpers as mm3
 if __name__ == "__main__":
     # hardcoded parameters
     do_empties = True # calculate empties. Otherwise expect them to be there.
-    do_subtraction = False
+    do_subtraction = True
 
     # switches which may be overwritten
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
