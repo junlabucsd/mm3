@@ -162,13 +162,13 @@ if __name__ == "__main__":
     fontface = Face(fontfile)
 
     # put in a timepoint to indicate the timing of a shift (colors the text)
-    shift_time = 364
+    shift_time = None
 
     # Fluorescent image parameters (two color movies)
-    two_colors = True # set to true if you want to do two color movies.
+    two_colors = False # set to true if you want to do two color movies.
     phase_plane_index = 0 # index of the phase plane
     fl_plane_index = 1 # index of the fluorescent plane
-    fl_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
