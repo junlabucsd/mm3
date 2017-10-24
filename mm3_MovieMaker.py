@@ -162,13 +162,13 @@ if __name__ == "__main__":
     fontface = Face(fontfile)
 
     # put in a timepoint to indicate the timing of a shift (colors the text)
-    shift_time = None
+    shift_time = 364
 
     # Fluorescent image parameters (two color movies)
-    two_colors = False # set to true if you want to do two color movies.
+    two_colors = True # set to true if you want to do two color movies.
     phase_plane_index = 0 # index of the phase plane
     fl_plane_index = 1 # index of the fluorescent plane
-    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -244,8 +244,8 @@ if __name__ == "__main__":
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
         else:
             # it is hardcoded.
-            imin['phase'], imax['phase'] = 200, 2000
-            imin['488'], imax['488'] = 130, 250
+            imin['phase'], imax['phase'] = 200, 3000
+            imin['488'], imax['488'] = 200, 300
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
