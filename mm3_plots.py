@@ -476,14 +476,14 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
     sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
 
     # lists for plotting and formatting
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
-    ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$','daughter/mother']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[15,5*len(columns)/2], squeeze=False)
+                            figsize=[10,5*len(columns)/2], squeeze=False)
     ax = np.ravel(axes)
 
     # over what times should we calculate stats?
@@ -516,7 +516,7 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
     ax[5].set_xlabel('%s [min]' % time_mark, size=16)
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.925, hspace=0.25)
+    plt.subplots_adjust(top=0.9, hspace=0.25)
     fig.suptitle('Cell Parameters Over Time', size=24)
 
     sns.despine()
