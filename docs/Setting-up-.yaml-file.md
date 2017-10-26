@@ -48,6 +48,12 @@ mm3 supports saving processed images (sliced, empty, subtracted, and segmented c
 
 This number is needed for creating the time stamps during movie making.
 
+### Indicate which color channel (plane) has the phase images.
+
+`phase_plane: 'c1'`
+
+Put in the file postfix of the plane which contains the phase contrast images. Used by the mm3_ChannelPicker.py and mm3_Subtract.py.
+
 ### Indicate conversion factor from pixels to micron.
 
 `pxl2um: 0.108`
@@ -74,6 +80,12 @@ The width of the channel in pixels. Used to help find the channels.
 
 Distance between channels (midpoint to midpoint) in pixels.
 
+### Signal to noise ratio threshold for channel findings.
+
+`channel_detection_snr: 1`
+
+This is used in channel finding. Lower numbers will find more (and possible false) channels. Higher numbers will find less (and possibly miss) channels. This is used by mm3_Compile.py
+
 ### Set pad size around channels for slicing.
 
 `channel_length_pad: 15`
@@ -84,21 +96,25 @@ Padding along y in pixels (applied to both ends).
 
 Padding along x in pixels (applied to both sides).
 
-### Signal to noise ratio threshold for channel findings.
-
-`channel_detection_snr: 1`
-
-This is used in channel finding. Lower numbers will find more (and possible false) channels. Higher numbers will find less (and possibly miss) channels. This is used by mm3_Compile.py
-
 ### Determining empty and full channels based on cross correlation.
 
 `channel_picking_threshold: 0.97`
 
 This is used by mm3_ChannelPicker.py to help determine if a channel is full or not. It is a measure of correlation between a series of images, so a value of 1 would mean the same image over and over. Channels with values above this value (like empty channels) will be designated as empty before the user selection GUI.
 
+### Set the pad used when aligning channels.
+
+`alignment_pad: 10`
+
+This is the value in pixels that images will be scanned over to match them during cross-correlation determination and subtraction. Use large values if your channels move a lot during the experiment (will slow subtraction down).
+
 ### Set parameters for segmentation.
 
 The following parameters are used in the segmentation of a single subtracted image. Check out the IPython notebook mm3_Segment.ipynb in the notebooks folder for a walkthrough on segmentation. You should edit these based on your experiment, with magnification and cell size determining what values work best.
+
+`OTSU_threshold: 1.0`
+
+Float greater than 0. The OTSU threshold will be multiplied by this number. 1.0 means no change. Use higher vales (<1.5 usually) when you want to separate segments more.
 
 `first_opening_size: 2`
 
@@ -124,20 +140,20 @@ These parameters have to do with creating cell lineages from segmentations acros
 
 Amount of frames after which a cell is dropped because no new regions linked to it.
 
-`print_lineages: False`
-
-Boolean for printing out segmentations and lineages over time. This is extremely slow, so only do this a few channels and shorter times. Good for debugging.
-
-`max_growth_length: 1.2`
-`min_growth_length: 0.95`
-`max_growth_area: 1.2`
-`min_growth_area: 0.95`
+`max_growth_length: 1.3`
+`min_growth_length: 0.8`
+`max_growth_area: 1.3`
+`min_growth_area: 0.8`
 
 Parameters for the minimum and maximum a region can when linking new regions to existing potential cell. Unit is ratio.
 
-`new_cell_y_cutoff: 200`
+`new_cell_y_cutoff: 150`
 
 Regions only less than this value down the channel from the closed end will be considered to start potential new cells. Does not apply to daughters. Unit is pixels.
+
+`new_cell_region_cutoff: 2`
+
+Regions with values only less than or equal to this number will be considered to start new cells. The mother cell has region value 1. 
 
 ### Set movie making parameters.
 

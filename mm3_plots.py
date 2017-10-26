@@ -249,11 +249,22 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
                     # print(fov, peak, 'Made it')
 
                     # now filter it to only those cells within the two times
-                    Cells = find_cells_born_after(Cells, born_after=t1)
-                    Cells = find_cells_born_before(Cells, born_before=t2)
+                    Cells_cont = find_cells_born_after(Cells, born_after=t1)
+                    Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
-                    # and add it to the big dictionary if possible
-                    Continuous_Lineages[fov][peak] = Cells
+                    # append the mother of the first cell in filtered list
+                    cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
+                    cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
+
+                    first_in_line = cells_cont_sorted[0][1]
+                    Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
+
+                    # this is to add one more cell after
+                    # last_in_line = cells_cont_sorted[-1][1]
+                    # Cells_cont[last_in_line.daughters[0]] = Cells[last_in_line.daughters[0]]
+
+                    # and add it to the big dictionary
+                    Continuous_Lineages[fov][peak] = Cells_cont
         # else:
         #     continue
 
@@ -262,6 +273,20 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
             Continuous_Lineages.pop(fov)
 
     return Continuous_Lineages
+
+def lineages_to_dict(Lineages):
+    '''Converts the lineage structure of cells organized by peak back
+    to a dictionary of cells. Useful for filtering but then using the
+    dictionary based plotting functions'''
+
+    Cells = {}
+
+    for fov, peaks in Lineages.iteritems():
+        for peak, cells in peaks.iteritems():
+            Cells.update(cells)
+
+    return Cells
+
 
 ### Statistics and analysis functions ##############################################################
 def stats_table(Cells_df):
@@ -451,14 +476,14 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
     sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
 
     # lists for plotting and formatting
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
-    ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$','daughter/mother']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[15,5*len(columns)/2], squeeze=False)
+                            figsize=[10,5*len(columns)/2], squeeze=False)
     ax = np.ravel(axes)
 
     # over what times should we calculate stats?
@@ -491,7 +516,7 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
     ax[5].set_xlabel('%s [min]' % time_mark, size=16)
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.925, hspace=0.25)
+    plt.subplots_adjust(top=0.9, hspace=0.25)
     fig.suptitle('Cell Parameters Over Time', size=24)
 
     sns.despine()

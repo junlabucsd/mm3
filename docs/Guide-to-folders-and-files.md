@@ -33,6 +33,7 @@ The file postfix `t0000xy00c0.tif`, with information about the time point `t`, t
 This is where most metadata and processed images go that are accumulated during processing. This includes:
 * TIFF_metadata.pkl and .txt : Python dictionary of metadata associated with each TIFF file. Created by mm3_Compile.py.
 * channel_masks.pkl and .txt : Python dictionary that records the location of the channels in each FOV. Is a nested dictionaries of FOVs and then channel peaks. The final values are 4 pixel coordinates, ((y1, y2), (x1, x2)). Created by mm3_Compile.py.
+* time_table.pkl and .txt : Python dictionary that maps the nominal time point per FOV to the actual elapsed time in seconds each picture was taken.
 * crosscorrs.pkl and .txt : Python dictionary that contains image correlation value for channels over time. Used to guess if a channel is full or empty. Same structure as channel_masks. Created by mm3_ChannelPicker.py.
 * specs.pkl and .txt : Python dictionary which is the specifications of channels as full (1), empty (0), or ignore (-1). Same structure as channel_masks. Created by mm3_ChannelPicker.py.
 
@@ -56,7 +57,7 @@ Where `experiment_name` is from the parameters file. `xy` is the 3 digit FOV num
 
 Contains the averaged empty channel templates, as created by mm3_ChannelPicker.py, to be used during subtraction. There should be one empty channel stack per FOV. Uses the naming convention:
 
-`experimental_name_xy000_empty.tif`
+`experimental_name_xy000_empty_c1.tif`
 
 #### Subtracted
 
@@ -64,7 +65,7 @@ Contains the averaged empty channel templates, as created by mm3_ChannelPicker.p
 
 Contains the subtracted phase contrast images as created by mm3_Subtract.py. Uses the naming convention:
 
-`experimental_name_xy000_p0000_sub.tif`
+`experimental_name_xy000_p0000_sub_c1.tif`
 
 #### Segmented
 
@@ -78,7 +79,7 @@ Contains the segmented images as created by mm3_Segment.py. Uses the naming conv
 
 `/experimental_directory/analysis/lineages/`
 
-This optional folder is created if during segmentation you want to create lineage images after segmentation and lineage finding. These images show how the cells grow and are connected to each other over time. Useful for debugging segmentation. Find the parameter `print_lineages` in your parameters.yaml file.
+This optional folder is created if you want to create lineage images after segmentation and lineage finding. These images show how the cells grow and are connected to each other over time. Useful for debugging segmentation.
 
 `experimental_name_xy000_p0000_lin.png`
 

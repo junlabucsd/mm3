@@ -1,8 +1,9 @@
-# mm3 Overview as of March 2017
+# mm3 Overview
+# Updated October 2017
 
-This is an overview of how to use mm3. Refer to the individual guides referenced in this document for more specific information about usage and function of each script. This guide is current for March 2017.
+This is an overview of how to use mm3. Refer to the individual guides referenced in this document for more specific information about usage and function of each script.
 
-mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 supports reading TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells). This is done via segmentation of subtracted images and lineage recreation. A parameter (.yaml) file is used to pass parameters specific to the experiment to the scripts of mm3.
+mm3 is a set of python scripts designed to facilitate analyzing time-lapse mother machine experiments. This can be thought of in two general tasks which are mostly independent. The first task is the bookkeeping of taking raw data (image files), identifying cell-containing growth channels, and creating image stacks that contain a single channel. mm3 supports reading .nd2 or TIFF files from Nikon Elements, and supports saving to TIFF stacks or HDF5 datasets. The second task is to take those image stacks and actually identify cells and features to create analyzed data (curated cells). This is done via segmentation of subtracted images and lineage creation. A parameter (.yaml) file is used to pass parameters specific to the experiment to the scripts of mm3.
 
 ## Installation
 
@@ -10,7 +11,7 @@ See the script **Install-guide** for requirements and installation procedure.
 
 ## Workflow
 
-Generally, there is one script for one process. The mm3 library file mm3_helpers.py contains the functions that do the actual heavy lifting. Scripts are best run from a Python session started in Terminal:
+Generally, there is one script for one process. The mm3 library file mm3_helpers.py contains the functions that do the actual heavy lifting. Scripts are best run from a Python session started in Terminal in the following general format:
 
 > python /path/to/mm3_script.py -f /path/to/parameter/file.yaml
 
@@ -46,7 +47,7 @@ The working directory now contains:
 └── params.yaml
 ```
 
-### 4. Locate channels, create channel stacks, and return metadata (mm3_Compile.py).
+### 3. Locate channels, create channel stacks, and return metadata (mm3_Compile.py).
 
 mm3_Compile.py is responsible for the initial bookkeeping. It attempts to automatically identify and crop out individual growth channels. Images corresponding to a specific channel are then stacked in time, and these "channel stacks" are the basis of further analysis. If there are multiple colors, a channel stack is made for each color for each channel.
 
@@ -58,6 +59,8 @@ The working directory now contains:
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
 ├── analysis
+│   ├── time_table.pkl
+│   ├── time_table.txt
 │   ├── TIFF_metadata.pkl
 │   ├── TIFF_metadata.txt
 │   ├── channel_masks.pkl
@@ -66,9 +69,9 @@ The working directory now contains:
 └── params.yaml
 ```
 
-### 5. User guided selection of empty and full channels (mm3_ChannelPicker.py).
+### 4. User guided selection of empty and full channels (mm3_ChannelPicker.py).
 
-mm3_Compile.py identifies all growth channels, regardless of if they contain or do not contain cells. mm3_ChannelPicker.py first attempts to guess, and then presents the user with a GUI to decide which channels should be analyzed, which channels should be ignored, and which channels should be used as empty channels during subtraction. See **mm3_ChannelPicker guide** for usage and details.
+mm3_Compile.py identifies all growth channels, regardless of if they contain or do not contain cells. mm3_ChannelPicker.py first attempts to guess, and then presents the user with a GUI to decide which channels should be analyzed, which channels should be ignored, and which channels should be used as empty channels during subtraction. This information is contained within the specs.pkl file. See **mm3_ChannelPicker guide** for usage and details.
 
 The working directory is now:
 ```
@@ -76,6 +79,8 @@ The working directory is now:
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
 ├── analysis
+│   ├── time_table.pkl
+│   ├── time_table.txt
 │   ├── TIFF_metadata.pkl
 │   ├── TIFF_metadata.txt
 │   ├── channel_masks.pkl
@@ -88,7 +93,7 @@ The working directory is now:
 └── params.yaml
 ```
 
-### 6. Subtract phase contrast images (mm3_Subtract.py).
+### 5. Subtract phase contrast images (mm3_Subtract.py).
 
 Downstream analysis of phase contrast (brightfield) images requires background subtraction to remove artifacts of the PDMS device in the images. See **mm3_Subtract guide**.
 
@@ -98,6 +103,8 @@ The working directory is now:
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
 ├── analysis
+│   ├── time_table.pkl
+│   ├── time_table.txt
 │   ├── TIFF_metadata.pkl
 │   ├── TIFF_metadata.txt
 │   ├── channel_masks.pkl
@@ -112,9 +119,9 @@ The working directory is now:
 └── params.yaml
 ```
 
-### 7. Segment images and create cell lineages (mm3_Segment.py).
+### 6. Segment images and create cell lineages (mm3_Segment.py).
 
-mm3 Uses a relies on Otsu thresholding and watershedding algorithms to locate cells from the subtracted images. After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages. See **mm3_Segment guide** for usage and details.
+mm3 relies on Otsu thresholding, morphological operations and watershedding to locate cells from the subtracted images. After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages. See **mm3_Segment guide** for usage and details.
 
 The working directory is now:
 ```
@@ -122,6 +129,8 @@ The working directory is now:
 ├── 20170720_SJ388_mopsgluc12aa.nd2
 ├── TIFF
 ├── analysis
+│   ├── time_table.pkl
+│   ├── time_table.txt
 │   ├── TIFF_metadata.pkl
 │   ├── TIFF_metadata.txt
 │   ├── cell_data
@@ -147,7 +156,8 @@ There are some optional and additional processes that you may want to perform ba
 
 * Make movies (mm3_MovieMaker.py).
 * Add fluorescent or additional image-based analysis (mm3_Colors.py).
-* Output data to various formats (mm3_OutputData.py).
+* Foci detection (mm3_Foci.py)
+* Output data to various formats and plot data (mm3_OutputData.py).
 * mm3 can process images in real-time (mm3_Agent.py).
 
 ### Make movies per FOV (mm3_MovieMaker.py).
