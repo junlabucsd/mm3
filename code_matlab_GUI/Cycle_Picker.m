@@ -22,7 +22,7 @@ function varargout = Cycle_Picker(varargin)
 
 % Edit the above text to modify the response to help Cycle_Picker
 
-% Last Modified by GUIDE v2.5 31-Aug-2017 15:12:29
+% Last Modified by GUIDE v2.5 02-Oct-2017 12:34:01
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -58,14 +58,14 @@ clc;
 
 %-------------start pre-prosessing-----------
 handles.dir_name = '../../analysis/';
-handles.cell_data = load([handles.dir_name 'cell_data/all_cells_foci.mat']);
+handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
 handles.px_to_mu = 0.065;
-handles.IW_thr = 10000; % threshold of intensity weighting
-handles.n_oc = 3; %number of overlapping cell cycle
+handles.IW_thr = 3945; % threshold of intensity weighting
+handles.n_oc = 2; %number of overlapping cell cycle (default value)
 
-handles.xlim_max = 400;
-handles.ylim_max = 6;
-handles.time_int = 2;
+handles.xlim_max = 310;
+handles.ylim_max = 7;
+handles.time_int = 3;
 %%%
 
 if exist([handles.dir_name 'picked/']) == 0
@@ -118,6 +118,8 @@ handles.channle_idx = 1;
 set(handles.display, 'String' , handles.display_name );
 
 handles.clicks = 0;
+
+handles.n_oc_curr = handles.n_oc; %the number of overlapping cycle for current cell
 handles.initiation_time = [];
 handles.initiation_time_n = [];
 handles.termination_time = [];
@@ -127,6 +129,19 @@ handles.birth_time_m = [];
 handles.initiation_mass = [];
 handles.initiation_mass_n = [];
 handles.termination_mass = [];
+
+handles.cell_name_n_tmp = [];
+handles.cell_name_tmp = [];
+
+handles.p1 = [];
+handles.p2 = [];
+handles.p3 = [];
+handles.p4 = [];
+handles.l1 = [];
+handles.l2 = [];
+handles.l3 = [];
+
+set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
 
 %-------------end pre-prosessing-----------
 
@@ -178,70 +193,80 @@ end
 [R_1, j_1] = min(d_1);
 
 if color_idx == 1
-    plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'p', 'LineWidth',1 , 'MarkerEdgeColor','r','MarkerFaceColor','none','MarkerSize',15);
+           
+    handles.p1 = plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'p', 'LineWidth',1 , 'MarkerEdgeColor','r','MarkerFaceColor','none','MarkerSize',15);
     handles.initiation_time = handles.foci_list(j_1, 1);
     handles.initiation_pos = handles.foci_list(j_1, 2);
-    handles.initiation_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.initiation_time)) / (2^(handles.n_oc-1)); %note that number of origins at initiation is fixed;
+    handles.initiation_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.initiation_time)) / (2^(handles.n_oc_curr-1)); %note that number of origins at initiation is updated to the current OC number;
     
     handles.initiation_time_n = handles.initiation_time;
     handles.initiation_mass_n = handles.initiation_mass;
     
+    %saving as the current initiation time & initiaion mass in the current generation
     for i = 1:size(handles.division_list, 1)
-        if  handles.initiation_time_n > handles.birth_list(i, 1) && handles.initiation_time_n <= handles.division_list(i, 1)
+        if  handles.initiation_time_n >= handles.birth_list(i, 1) && handles.initiation_time_n < handles.division_list(i, 1) %if the initiation is right at division, then regard it as happening at the birth of new cell
             cell_idx_n = i;
         end
     end
-    cell_name_n_tmp = handles.cell_names{cell_idx_n,1};
+    handles.cell_name_n_tmp = handles.cell_names{cell_idx_n,1};
     
-    handles.cell_list.(cell_name_n_tmp).initiation_time_n = handles.initiation_time_n;
-    if isempty(find(handles.division_list==handles.initiation_time_n)) && isempty(find(handles.birth_list==handles.initiation_time_n)) %if the initiation falls at division, the number of origins should be half   
-        handles.cell_list.(cell_name_n_tmp).initiation_mass_n = handles.initiation_mass_n;
+    %save the second initiation event in the current generation if double-initiation happens
+    if isfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n') == 0
+        handles.cell_list.(handles.cell_name_n_tmp).initiation_time_n = handles.initiation_time_n;
+        handles.cell_list.(handles.cell_name_n_tmp).initiation_mass_n = handles.initiation_mass_n;
+        handles.cell_list.(handles.cell_name_n_tmp).n_oc_n = handles.n_oc_curr;
     else
-        handles.cell_list.(cell_name_n_tmp).initiation_mass_n = handles.initiation_mass_n*2;
+        handles.cell_list.(handles.cell_name_n_tmp).initiation_time_n2 = handles.initiation_time_n;
+        handles.cell_list.(handles.cell_name_n_tmp).initiation_mass_n2 = handles.initiation_mass_n;
+        handles.cell_list.(handles.cell_name_n_tmp).n_oc_n2 = handles.n_oc_curr;
     end
+
     
 elseif color_idx == 2
-    plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'o', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10);
+        
+    handles.p2 = plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'o', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10);
     handles.termination_time = handles.foci_list(j_1, 1);
     handles.termination_pos = handles.foci_list(j_1, 2);
     handles.termination_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.termination_time));
     
-    plot( [handles.initiation_time handles.termination_time], [handles.initiation_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
-    
+    handles.l1 = plot( [handles.initiation_time handles.termination_time], [handles.initiation_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
+            
 elseif color_idx == 3
+      
     for i = 1:size(handles.birth_list, 1)
         d_3(i) = abs(a(1, 1)-handles.birth_list(i, 1));
     end
     [R_3, j_3] = min(d_3);
-    plot( handles.birth_list(j_3, 1), handles.initiation_pos, 's', 'LineWidth',1 , 'MarkerEdgeColor','r','MarkerFaceColor','None','MarkerSize',10);
+    handles.p3 = plot( handles.birth_list(j_3, 1), handles.initiation_pos, 's', 'LineWidth',1 , 'MarkerEdgeColor','r','MarkerFaceColor','None','MarkerSize',10);
     handles.birth_time_m = handles.birth_list(j_3, 1);
-    plot( [handles.birth_time_m handles.initiation_time], [handles.initiation_pos handles.initiation_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
+    handles.l2 = plot( [handles.birth_time_m handles.initiation_time], [handles.initiation_pos handles.initiation_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
 
 elseif color_idx == 0
+    
     for i = 1:size(handles.division_list, 1)
         d_4(i) = abs(a(1, 1)-handles.division_list(i, 1));
     end
     [R_4, j_4] = min(d_4);
-    plot( handles.division_list(j_4, 1), handles.termination_pos, 's', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','None','MarkerSize',10);
+    handles.p4 = plot( handles.division_list(j_4, 1), handles.termination_pos, 's', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','None','MarkerSize',10);
     handles.division_time = handles.division_list(j_4, 1);
-    plot( [handles.termination_time handles.division_time], [handles.termination_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
+    handles.l3 = plot( [handles.termination_time handles.division_time], [handles.termination_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
     
     cell_idx = find(handles.division_list == handles.division_time);
     
-    cell_name_tmp = handles.cell_names{cell_idx,1};
+    handles.cell_name_tmp = handles.cell_names{cell_idx,1};
 
-    handles.cell_list.(cell_name_tmp).birth_time_m = handles.birth_time_m;
+    handles.cell_list.(handles.cell_name_tmp).birth_time_m = handles.birth_time_m;
     
-    handles.cell_list.(cell_name_tmp).initiation_time = handles.initiation_time;
-    handles.cell_list.(cell_name_tmp).termination_time = handles.termination_time;
+    %saving as the mother initiation time & initiaion mass in the current generation
+    handles.cell_list.(handles.cell_name_tmp).initiation_time = handles.initiation_time;
+    handles.cell_list.(handles.cell_name_tmp).initiation_mass = handles.initiation_mass;
+    handles.cell_list.(handles.cell_name_tmp).n_oc = handles.n_oc_curr;
     
-    if isempty(find(handles.division_list==handles.initiation_time)) && isempty(find(handles.birth_list==handles.initiation_time)) %if the initiation falls at division, the number of origins should be half
-        handles.cell_list.(cell_name_tmp).initiation_mass = handles.initiation_mass;
-    else
-        handles.cell_list.(cell_name_tmp).initiation_mass = handles.initiation_mass*2;
-    end
-
-    handles.cell_list.(cell_name_tmp).termination_mass = handles.termination_mass;
+    handles.cell_list.(handles.cell_name_tmp).termination_time = handles.termination_time;
+    handles.cell_list.(handles.cell_name_tmp).termination_mass = handles.termination_mass;
+    
+    handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+    set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
     
     guidata(hObject, handles);
 end
@@ -254,7 +279,7 @@ function pushbutton1_Callback(hObject, eventdata, handles)
 % hObject    handle to pushbutton1 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-cell_name_tmp = handles.cell_names;
+
 cell_list = handles.cell_list;
 
 save(handles.save_name,'cell_list');
@@ -272,6 +297,10 @@ function pushbutton2_Callback(hObject, eventdata, handles)
 handles.channle_idx = handles.channle_idx-1;
 
 cla;
+
+handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
+
 [handles.length_list, handles.foci_list, handles.birth_list, handles.division_list, handles.cell_list, handles.cell_names, handles.save_name, handles.save_name_png, handles.display_name] ...
     = plot_channel(handles.dir_name, handles.cell_data, handles.px_to_mu, handles.IW_thr, handles.fnames_sort, handles.channels, handles.channle_idx, handles.xlim_max, handles.ylim_max, handles.time_int);
 set(handles.display, 'String' , handles.display_name );
@@ -297,6 +326,10 @@ function pushbutton3_Callback(hObject, eventdata, handles)
 handles.channle_idx = handles.channle_idx+1;
 
 cla;
+
+handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
+    
 [handles.length_list, handles.foci_list, handles.birth_list, handles.division_list, handles.cell_list, handles.cell_names, handles.save_name, handles.save_name_png, handles.display_name] ...
     = plot_channel(handles.dir_name, handles.cell_data, handles.px_to_mu, handles.IW_thr, handles.fnames_sort, handles.channels, handles.channle_idx, handles.xlim_max, handles.ylim_max, handles.time_int);
 set(handles.display, 'String' , handles.display_name );
@@ -313,8 +346,104 @@ handles.termination_mass = [];
 guidata(hObject, handles);
 
 
+% --- Executes on button press in pushbutton4.
+function pushbutton4_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton4 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles.n_oc_curr = handles.n_oc_curr+1;
+set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
+
+guidata(hObject, handles);
+
+
+% --- Executes on button press in pushbutton5.
+function pushbutton5_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton5 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+handles.n_oc_curr = handles.n_oc_curr-1;
+set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
+
+guidata(hObject, handles);
+
+
+% --- Executes on button press in pushbutton6.
+function pushbutton6_Callback(hObject, eventdata, handles)
+% hObject    handle to pushbutton6 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+color_idx =  mod(handles.clicks,4);
+
+%can only undo one generation
+if color_idx == 1
+    
+    if isempty(handles.p1)==0
+        handles.p1.Visible = 'off';   
+    end
+    
+    %remove the second initiation event in the current generation if double-initiation happens
+    if isfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n2') == 1
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n2');
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_mass_n2');
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'n_oc_n2');
+    else
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n');
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_mass_n');
+        handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'n_oc_n');
+    end
+    
+elseif color_idx == 2
+    
+    if isempty(handles.p2)==0
+        handles.p2.Visible = 'off';   
+    end
+    if isempty(handles.l1)==0
+        handles.l1.Visible = 'off';   
+    end
+    
+elseif color_idx == 3
+    
+    if isempty(handles.p3)==0
+        handles.p3.Visible = 'off';   
+    end
+    if isempty(handles.l2)==0
+        handles.l2.Visible = 'off';   
+    end
+        
+elseif color_idx == 0
+    
+    if isempty(handles.p4)==0
+        handles.p4.Visible = 'off';   
+    end
+    if isempty(handles.l3)==0
+        handles.l3.Visible = 'off';   
+    end
+    
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'birth_time_m');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'initiation_time');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'initiation_mass');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'n_oc');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'termination_time');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'termination_mass');
+
+end
+
+if handles.clicks >0
+    handles.clicks = handles.clicks - 1;
+else
+    handles.clicks = 0;
+end
+
+guidata(hObject, handles);
+
 % --- Executes during object deletion, before destroying properties.
 function axes2_DeleteFcn(hObject, eventdata, handles)
 % hObject    handle to axes2 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
+
+
