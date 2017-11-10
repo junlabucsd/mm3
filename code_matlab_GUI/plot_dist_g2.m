@@ -53,11 +53,11 @@ for j = 1:12
     end
     
     xlabel(labels(j),'fontsize',20) 
-    tick1 = mean(pool_data(:,j))-3*std(pool_data(:,j));
-    tick2 = mean(pool_data(:,j));
-    tick3 = mean(pool_data(:,j))+3*std(pool_data(:,j));
-    bd1 = mean(pool_data(:,j))-4*std(pool_data(:,j));
-    bd2 = mean(pool_data(:,j))+4*std(pool_data(:,j));
+    tick1 = nanmean(pool_data(:,j))-3*nanstd(pool_data(:,j));
+    tick2 = nanmean(pool_data(:,j));
+    tick3 = nanmean(pool_data(:,j))+3*nanstd(pool_data(:,j));
+    bd1 = nanmean(pool_data(:,j))-4*nanstd(pool_data(:,j));
+    bd2 = nanmean(pool_data(:,j))+4*nanstd(pool_data(:,j));
     
     set(gca,'TickLength',[0.05 0.1],'fontsize',10,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
     

@@ -10,8 +10,14 @@ corr_pval = zeros(12,12);
 
 for i = 1:12
     for j = 1:12
-       fit_temp = fit(pool_data(:,i),pool_data(:,j),ft1);
-       [corr_coef(i,j),corr_pval(i,j)] = corr(pool_data(:,i),pool_data(:,j),'type','Spearman');
+        
+       pool_data_tmp = [pool_data(:,i),pool_data(:,j)]';
+        
+       pool_data_isnan = any(isnan(pool_data_tmp));
+       pool_data_tmp = pool_data_tmp(:,find(pool_data_isnan==0))';
+              
+       fit_temp = fit(pool_data_tmp(:,1),pool_data_tmp(:,2),ft1);
+       [corr_coef(i,j),corr_pval(i,j)] = corr(pool_data_tmp(:,1),pool_data_tmp(:,2),'type','Pearson');
        fit_a(i,j) = fit_temp.a;
        fit_b(i,j) = fit_temp.b;
     end
@@ -80,9 +86,6 @@ for i = 1:12
         k = k+1;
     end
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 %% plot: correlations - 2d histogram
 colors = [46 49 146;
@@ -148,9 +151,6 @@ for i = 1:12
         k = k+1;
     end
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 %% plot: correlations - binned
 colors = [46 49 146;
@@ -226,8 +226,5 @@ for i = 1:12
         k = k+1;
     end
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 end

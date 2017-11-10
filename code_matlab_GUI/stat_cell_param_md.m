@@ -4,11 +4,11 @@ warning off;
 
 %% load data
 
-dir_name = '/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/picked/';
+dir_name = '../../analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.065;
-t_int = 2.0;
+t_int = 3.0;
 
 %% extract and calculate all cell data
 
@@ -25,25 +25,30 @@ for i=1:numel(fnames)
 
         length_g2_temp = double(px_to_mu*cell_g2_temp.lengths_w_div);
 
-        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) %&& cell_g2_temp.peak > 512 && cell_g2_temp.peak < 2048 %filter out filamentous cells
+%         if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) %&& cell_g2_temp.peak > 0 && cell_g2_temp.peak < 2000  %filter out filamentous cells
+        if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) %&& cell_g2_temp.peak > 0 && cell_g2_temp.peak < 2000  %filter out filamentous cells
+%         if cell_g2_temp.birth_label ==1 && isfield(cell_g2_temp,'initiation_time') == 1 && isfield(cell_g2_temp,'initiation_time_n') == 1 && isfield(cell_g2_temp,'initiation_time_n2') == 0 && cell_g2_temp.n_oc_n == 2 && cell_g2_temp.lengths_w_div(end) < 20 && ismember(cell_g2_temp.daughters(1,:),fnames_channel) %&& cell_g2_temp.peak > 0 && cell_g2_temp.peak < 2000  %filter out filamentous cells
+
 
             cell_g3_id = cell_g2_temp.daughters(1,:);
             cell_g3_temp = struct_tmp.cell_list.(cell_g3_id);
 
             length_g3_temp = double(px_to_mu*cell_g3_temp.lengths_w_div);
 
-            if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1 && isfield(cell_g3_temp,'initiation_time_n') == 1 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
+%             if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
+            if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1  && isfield(cell_g3_temp,'initiation_time_n') == 1 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
+%             if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1  && isfield(cell_g3_temp,'initiation_time_n') == 1 && isfield(cell_g3_temp,'initiation_time_n2') == 0 && cell_g3_temp.n_oc_n == 2 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
+
 
                 
                 %----------parameters for mother generation--------
                 generation_time_g2( mother_cell_counter ) = double( cell_g2_temp.tau ) ;
 
                 newborn_length_g2( mother_cell_counter ) = cell_g2_temp.sb;
-                newborn_width_g2( mother_cell_counter ) = px_to_mu*cell_g2_temp.widths(1);
+                newborn_width_g2( mother_cell_counter ) = cell_g2_temp.widths_w_div(1);
 
-                % dvision length = length of dividing mother cells; dvision width = width of dividing mother cells;
                 division_length_g2( mother_cell_counter ) = cell_g2_temp.sd;
-                division_width_g2( mother_cell_counter ) = px_to_mu*cell_g2_temp.widths(end);
+                division_width_g2( mother_cell_counter ) = cell_g2_temp.widths_w_div(end);
 
                 newborn_volume_g2( mother_cell_counter ) = (newborn_length_g2( mother_cell_counter )-newborn_width_g2( mother_cell_counter ))*pi*(newborn_width_g2( mother_cell_counter )/2)^2+(4/3)*pi*(newborn_width_g2( mother_cell_counter )/2)^3;
                 division_volume_g2( mother_cell_counter ) = (division_length_g2( mother_cell_counter )-division_width_g2( mother_cell_counter ))*pi*(division_width_g2( mother_cell_counter )/2)^2+(4/3)*pi*(division_width_g2( mother_cell_counter )/2)^3;
@@ -52,7 +57,7 @@ for i=1:numel(fnames)
 
                 added_volume_g2( mother_cell_counter ) = division_volume_g2( mother_cell_counter ) - newborn_volume_g2( mother_cell_counter );
 
-                cell_width_g2( mother_cell_counter ) = px_to_mu*mean(cell_g2_temp.widths(1:end));
+                cell_width_g2( mother_cell_counter ) = mean(cell_g2_temp.widths_w_div(1:end));
 
                 septum_position_g2( mother_cell_counter ) = cell_g2_temp.septum_position;
 
@@ -92,11 +97,10 @@ for i=1:numel(fnames)
                 generation_time_g3( mother_cell_counter ) = double( cell_g3_temp.tau ) ;
 
                 newborn_length_g3( mother_cell_counter ) = cell_g3_temp.sb;
-                newborn_width_g3( mother_cell_counter ) = px_to_mu*cell_g3_temp.widths(1);
+                newborn_width_g3( mother_cell_counter ) = cell_g3_temp.widths_w_div(1);
 
-                % dvision length = length of dividing mother cells; dvision width = width of dividing mother cells;
                 division_length_g3( mother_cell_counter ) = cell_g3_temp.sd;
-                division_width_g3( mother_cell_counter ) = px_to_mu*cell_g3_temp.widths(end);
+                division_width_g3( mother_cell_counter ) = cell_g3_temp.widths_w_div(end);
 
                 newborn_volume_g3( mother_cell_counter ) = (newborn_length_g3( mother_cell_counter )-newborn_width_g3( mother_cell_counter ))*pi*(newborn_width_g3( mother_cell_counter )/2)^2+(4/3)*pi*(newborn_width_g3( mother_cell_counter )/2)^3;
                 division_volume_g3( mother_cell_counter ) = (division_length_g3( mother_cell_counter )-division_width_g3( mother_cell_counter ))*pi*(division_width_g3( mother_cell_counter )/2)^2+(4/3)*pi*(division_width_g3( mother_cell_counter )/2)^3;
@@ -105,7 +109,7 @@ for i=1:numel(fnames)
 
                 added_volume_g3( mother_cell_counter ) = division_volume_g3( mother_cell_counter ) - newborn_volume_g3( mother_cell_counter );
 
-                cell_width_g3( mother_cell_counter ) = px_to_mu*mean(cell_g3_temp.widths(1:end));
+                cell_width_g3( mother_cell_counter ) = mean(cell_g3_temp.widths_w_div(1:end));
 
                 septum_position_g3( mother_cell_counter ) = cell_g3_temp.septum_position;
 
@@ -153,4 +157,4 @@ for i=1:numel(fnames)
     end
 end
 
-% save('/Users/Fangwei/Documents/Adder/Analysis/20170515_FS103_DnaN_yPet_12aa_30p_250msx2/analysis/cell_cycle_stat_md_GUI.mat');
+% save('../../analysis/cell_cycle_stat_md_GUI_noc2.mat');

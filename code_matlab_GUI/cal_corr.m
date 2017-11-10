@@ -5,8 +5,8 @@ function [pool_data, pool_data_norm, pool_CV, pool_corr, L_corr] = cal_corr(inpu
 % 2 - elongation rate
 % 3 - initiation mass
 % 4 - cell cycle duration
-% 5 - cell cycle duration
-% 6 - cell cycle duration
+% 5 - C period
+% 6 - D period
 % 7 - division volume
 % 8 - newborn volume
 % 9 - generation time
@@ -28,7 +28,8 @@ pool_data(:,8) = input_strct.newborn_length;
 pool_data(:,9) = input_strct.generation_time;
 pool_data(:,10) = pool_data(:,7) - pool_data(:,8);
 % pool_data(:,11) = input_strct.B_period;
-pool_data(:,11) = pool_data(:,7)-pool_data(:,3);
+% pool_data(:,11) = pool_data(:,7)-pool_data(:,3);
+pool_data(:,11) = input_strct.cell_width;
 
 pool_data_norm(:,1) = pool_data(:,1)/mean(pool_data(:,1));
 pool_data_norm(:,2) = pool_data(:,2)/mean(pool_data(:,2));
