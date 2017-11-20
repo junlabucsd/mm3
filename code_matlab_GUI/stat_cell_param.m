@@ -8,7 +8,7 @@ dir_name = '../../analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.065;
-t_int = 3.0;
+t_int = 1.0;
 
 %% extract and calculate all cell data
 
@@ -25,8 +25,10 @@ for i=1:numel(fnames)
 
         length_temp = double(px_to_mu*cell_temp.lengths_w_div);
 
-        if cell_temp.birth_label ==1 && isfield(cell_temp,'initiation_time') == 1  && isfield(cell_temp,'initiation_time_n') == 1  && cell_temp.lengths_w_div(end) < 20 %&& cell_temp.peak > 0 && cell_temp.peak < 2000  %only look at mother cells and only those have cell cycle information; %filter out filamentous cells
+        if cell_temp.birth_label ==1 && isfield(cell_temp,'initiation_time') == 1 % && isfield(cell_temp,'initiation_time_n') == 1  && cell_temp.lengths_w_div(end) < 20 %&& cell_temp.peak > 0 && cell_temp.peak < 2000  %only look at mother cells and only those have cell cycle information; %filter out filamentous cells
 
+            cell_id( mother_cell_counter ) = {cell_temp.id} ;
+            
             generation_time( mother_cell_counter ) = double( cell_temp.tau ) ;
 
             newborn_length( mother_cell_counter ) = cell_temp.sb;
@@ -68,18 +70,22 @@ for i=1:numel(fnames)
             end
 
             initiation_time_m( mother_cell_counter ) = t_int*double(cell_temp.initiation_time); %note the change in definitions
-            initiation_time( mother_cell_counter ) = t_int*double(cell_temp.initiation_time_n);
+%             initiation_time( mother_cell_counter ) = t_int*double(cell_temp.initiation_time_n);
             termination_time( mother_cell_counter ) = t_int*double(cell_temp.termination_time);
 
             initiation_mass_m( mother_cell_counter ) = cell_temp.initiation_mass; %note the change in definitions
-            initiation_mass( mother_cell_counter ) = cell_temp.initiation_mass_n;
+%             initiation_mass( mother_cell_counter ) = cell_temp.initiation_mass_n;
             termination_mass( mother_cell_counter ) = cell_temp.termination_mass;
 
+            % calculate occ of mother cell for volumn calculation
+            n_oc( mother_cell_counter) = cell_temp.n_oc ; 
+            
             B_period( mother_cell_counter ) = t_int*double(cell_temp.initiation_time - cell_temp.birth_time_m);
             C_period( mother_cell_counter ) = t_int*double(cell_temp.termination_time - cell_temp.initiation_time);
             D_period( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.termination_time);
             tau_cyc( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.initiation_time);
-
+            
+            
             mother_cell_counter = mother_cell_counter + 1;
 
         end
