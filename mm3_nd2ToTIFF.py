@@ -58,6 +58,7 @@ if __name__ == "__main__":
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
     vertical_crop = [] # [[y1_min, y1_max], [y2_min, y2_max]]
+    #vertical_crop = [0.,0.9] # [[y1_min, y1_max], [y2_min, y2_max]]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
     tif_compress = 4
@@ -105,6 +106,12 @@ if __name__ == "__main__":
     information ('Loading experiment parameters.')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
+
+    # cropping
+    try:
+        vertical_crop = [p['crop_ymin'],p['crop_ymax']]
+    except KeyError:
+        pass
 
     # assign shorthand directory names
     TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
@@ -196,7 +203,10 @@ if __name__ == "__main__":
 
                         # for just a simple crop
                         if number_of_rows == 1:
-                            image_data = image_data[:,vertical_crop[0]:vertical_crop[1],:]
+                            nc,H,W =image_data.shape
+                            ylo=int(vertical_crop[0]*H)
+                            yhi=int(vertical_crop[1]*H)
+                            image_data = image_data[:,ylo:yhi,:]
 
                         # for dealing with two rows of channel
                         elif number_of_rows == 2:
