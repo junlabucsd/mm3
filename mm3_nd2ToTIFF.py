@@ -71,25 +71,27 @@ if __name__ == "__main__":
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:o:s:x:n:")
+        unixoptions='f:o:s:x:n:'
+        gnuoptions=['paramfile=','fov=','fov-start=','pathtond2=','fov-label-start=']
+        opts, args = getopt.getopt(sys.argv[1:], unixoptions, gnuoptions)
     except getopt.GetoptError:
         warning('No arguments detected (-f -o -s -x -n).')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f','--paramfile']:
             param_file_path = arg
-        if opt == '-o':
+        if opt in ['-o','--fov']:
             arg.replace(" ", "")
             [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
-        if opt == '-s':
+        if opt in ['-s','--fov-start']:
             try:
                 start_fov = int(arg)
             except:
                 warning("Could not convert start parameter (%s) to an integer." % arg)
                 raise ValueError
-        if opt == '-x':
+        if opt in ['-x','--pathtond2']:
             external_directory = arg
-        if opt == '-n':
+        if opt in ['-n','--fov-label-start']:
             try:
                 fov_naming_start = int(arg)
             except:

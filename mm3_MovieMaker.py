@@ -165,9 +165,9 @@ if __name__ == "__main__":
     shift_time = None
 
     # Fluorescent image parameters (two color movies)
-    two_colors = False # set to true if you want to do two color movies.
-    phase_plane_index = 0 # index of the phase plane
-    fl_plane_index = 1 # index of the fluorescent plane
+    two_colors =  True # set to true if you want to do two color movies.
+    phase_plane_index = 1 # index of the phase plane
+    fl_plane_index = 0 # index of the fluorescent plane
     fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # soft defaults, overridden by command line parameters if specified
@@ -284,7 +284,7 @@ if __name__ == "__main__":
         # display a frame and send it to write
         for t, img in enumerate(images, start=1):
             # skip images not specified by param file.
-            if t < p['image_start'] or t > p['image_end']:
+            if (t < p['image_start']) or (t > p['image_end']):
                 continue
 
             image_data = tiff.imread(img) # get the image
