@@ -1898,7 +1898,8 @@ def feretdiameter(region):
     # r_coords = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
 
     # limit to perimeter coords. pixels are relative to bounding box
-    distance_image = ndi.distance_transform_edt(region.image)
+    region_binimg = np.pad(region.image, 1, 'constant') # pad region binary image by 1 to avoid boundary non-zero pixels
+    distance_image = ndi.distance_transform_edt(region_binimg) 
     r_coords = np.where(distance_image == 1)
     r_coords = zip(r_coords[0], r_coords[1])
 
