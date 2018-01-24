@@ -61,14 +61,14 @@ if __name__ == "__main__":
     #vertical_crop = [0.,0.9] # [[y1_min, y1_max], [y2_min, y2_max]]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 4
+    tif_compress = 5
 
     # parameters will be overwritten by switches
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     specify_fovs = []
     start_fov = -1
     external_directory = ""
-    fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
+    #fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
 
     # switches
     try:
@@ -92,6 +92,7 @@ if __name__ == "__main__":
                 raise ValueError
         if opt in ['-x','--pathtond2']:
             external_directory = arg
+        """
         if opt in ['-n','--fov-label-start']:
             try:
                 fov_naming_start = int(arg)
@@ -99,6 +100,7 @@ if __name__ == "__main__":
                 raise ValueError("Could not convert FOV numbering offset (%s) to an integer." % arg)
             if fov_naming_start < 0:
                 raise ValueError("FOV offset (%s) should probably be positive." % fov_num_offset)
+        #"""
 
     # Load the project parameters file
     if len(param_file_path) == 0:
@@ -157,15 +159,16 @@ if __name__ == "__main__":
                 # timepoint output name (1 indexed rather than 0 indexed)
                 t = t_id + 1
                 # set counter for FOV output name
-                fov = fov_naming_start
+                #fov = fov_naming_start
 
                 for fov_id in range(0, nd2f.sizes[u'm']): # for every FOV
                     # fov_id is the fov index according to elements, fov is the output fov ID
+                    fov = fov_id + 1
 
                     # skip FOVs as specified above
-                    if len(specify_fovs) > 0 and not (fov_id + 1) in specify_fovs:
+                    if len(specify_fovs) > 0 and not (fov in specify_fovs):
                         continue
-                    if start_fov > -1 and fov_id + 1 < start_fov:
+                    if start_fov > -1 and (fov < start_fov):
                         continue
 
                     # set the FOV we are working on in the nd2 file object
@@ -212,21 +215,20 @@ if __name__ == "__main__":
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = file_prefix + "_t%04dxy%02d_1.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
 
                             # cut and save bottom row
-                            fov += 1 # add one to naming of FOV
                             metadata_t['fov'] = fov # update metdata
                             metadata_json = json.dumps(metadata_t)
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = file_prefix + "_t%04dxy%02d_2.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
 
                             # increase FOV counter
-                            fov += 1
+                            #fov += 1
                             # Continue to next FOV and not execute code below (extra saving)
                             continue
 
@@ -237,4 +239,4 @@ if __name__ == "__main__":
                                 compress=tif_compress)
 
                     # increase FOV counter
-                    fov += 1
+                    #fov += 1

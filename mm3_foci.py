@@ -37,16 +37,22 @@ if __name__ == "__main__":
     # switches which may be overwritten
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     cell_filename = 'complete_cells.pkl'
+    cell_file_path = None
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:")
+        unixoptions="f:c:"
+        gnuoptions=["paramfile=","cellfile="]
+        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
     except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f), using hardcoded parameters.')
+        mm3.warning('No arguments detected (-f -c), using hardcoded parameters.')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f',"--paramfile"]:
             param_file_path = arg # parameter file path
+        if opt in ['-c',"--cellfile="]:
+            cell_file_path = arg
+            cell_filename = os.path.basename(cell_file_path)
 
     # Load the project parameters file & initialized the helper library
     p = mm3.init_mm3_helpers(param_file_path)
@@ -59,7 +65,9 @@ if __name__ == "__main__":
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     mm3.information("Loading cell dictionary.")
-    with open(os.path.join(p['cell_dir'], cell_filename), 'r') as cell_file:
+    if cell_file_path == None:
+        cell_file_path = os.path.join(p['cell_dir'], cell_filename)
+    with open(cell_file_path, 'r') as cell_file:
         Cells = pickle.load(cell_file)
     mm3.information("Finished loading cell dictionary.")
 
@@ -72,7 +80,17 @@ if __name__ == "__main__":
     # for each set of cells in one fov/peak, find the foci
     for fov_id in fov_id_list:
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
+            # test
+            print ('Peak no',peak_id)
+            print ('Cells_of_peak')
+            print (Cells_of_peak)
+            if (len(Cells_of_peak) == 0):
+                continue
+
             mm3.foci_analysis(fov_id, peak_id, Cells_of_peak)
+
+            # test
+            sys.exit()
 
     # Output data to both dictionary and the .mat format used by the GUI
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:

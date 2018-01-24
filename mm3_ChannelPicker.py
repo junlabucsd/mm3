@@ -137,8 +137,8 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.',phase_plane='c1')
         else:
             ax.plot(np.zeros(10), range(10))
 
+        ax.get_xaxis().set_ticks([0.8,0.9,1.0])
         ax.set_xlim((0.8,1))
-        ax.get_xaxis().set_ticks([0.,0.5,1.0])
         ax.tick_params('x',labelsize=8)
         if not n == 0:
             ax.set_yticks([])

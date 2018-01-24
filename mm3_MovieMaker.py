@@ -165,7 +165,7 @@ if __name__ == "__main__":
     shift_time = None
 
     # Fluorescent image parameters (two color movies)
-    two_colors =  True # set to true if you want to do two color movies.
+    two_colors = True # set to true if you want to do two color movies.
     phase_plane_index = 1 # index of the phase plane
     fl_plane_index = 0 # index of the fluorescent plane
     fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
@@ -177,16 +177,18 @@ if __name__ == "__main__":
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:o:s:")
+        unixoptions='f:o:s:'
+        gnuoptions=['paramfile=','fov=','start-fov=']
+        opts, args = getopt.getopt(sys.argv[1:], unixoptions, gnuoptions)
     except getopt.GetoptError:
         print('No or wrong arguments detected (-f -o -s).')
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f','--paramfile']:
             param_file = arg
-        if opt == '-o':
+        if opt in ['-o','--fov']:
             arg.replace(" ", "")
             [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
-        if opt == '-s':
+        if opt in ['-s','--start-fov']:
             try:
                 start_fov = int(arg)
             except:
@@ -245,7 +247,7 @@ if __name__ == "__main__":
         else:
             # it is hardcoded.
             imin['phase'], imax['phase'] = 200, 3000
-            imin['488'], imax['488'] = 200, 300
+            imin['488'], imax['488'] = 150, 300
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
@@ -289,7 +291,7 @@ if __name__ == "__main__":
 
             image_data = tiff.imread(img) # get the image
 
-            if two_colors or image_data.shape[0] < 10:
+            if two_colors or image_data.shape[0] < 10 or len(image_data.shape[0]) > 1:
                 phase = image_data[phase_plane_index] # get phase plane
             else:
                 phase = image_data
@@ -305,9 +307,35 @@ if __name__ == "__main__":
             if two_colors:
                 # dim phase
                 phase = phase * 0.75
+                phase = phase * 0.
 
             # three color stack
             phase = np.dstack((phase, phase, phase))
+
+            """
+            # test
+            import matplotlib.pyplot as plt
+            fl488 = image_data[fl_plane_index].astype('float64') # pick red image
+            hist,edges = np.histogram(np.ravel(fl488),bins='auto')
+            #for e0,e1,h in zip(edges[:-1],edges[1:],hist):
+            #    print ("{:<20.6g}{:<20.6g}{:<20.6g}".format(e0,e1,h))
+            fig = plt.figure()
+            idx = hist > 0.
+            ax1=fig.add_subplot(2,1,1)
+            ax1.plot(edges[:-1][idx],hist[idx],'b-')
+            ax1.set_xlabel("I")
+            ax1.set_ylabel("pdf")
+            ax2=fig.add_subplot(2,1,2)
+            myimg = ax2.imshow(fl488)
+            ax2.axis('off')
+            plt.colorbar(myimg, ax=ax2)
+            fig.tight_layout()
+            fdir = "debug"
+            fileout = os.path.join(fdir,"fov{:03d}_time{:04d}.pdf".format(fov,t))
+            fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+            plt.close('all')
+            # test
+            #"""
 
             if two_colors:
                 # combine with fluorescent image
