@@ -235,8 +235,7 @@ if __name__ == "__main__":
                     # save the tiff
                     tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
                     information('Saving %s.' % tif_filename)
-                    tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json,
-                                compress=tif_compress)
+                    tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                     # increase FOV counter
                     #fov += 1
