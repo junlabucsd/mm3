@@ -25,6 +25,7 @@ except:
 import numpy as np
 import pims_nd2
 import warnings
+from mm3_helpers import julian_day_number
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -132,12 +133,19 @@ if __name__ == "__main__":
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
-        file_prefix = nd2_file.split(".nd")[0].split("/")[-1] # used for tiff name saving
+        file_prefix = os.path.splitext(nd2_file)[0]
         information('Extracting %s ...' % file_prefix)
 
         # load the nd2. the nd2f file object has lots of information thanks to pims
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
-            starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+            try:
+                starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+            except ValueError:
+                # problem with the date
+                jdn = julian_day_number()
+                nd2f._lim_metadata_desc.dTimeStart = jdn
+                starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
@@ -230,12 +238,7 @@ if __name__ == "__main__":
                             # increase FOV counter
                             #fov += 1
                             # Continue to next FOV and not execute code below (extra saving)
-                            continue
-
-                    # save the tiff
-                    tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
-                    information('Saving %s.' % tif_filename)
-                    tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json, compress=tif_compress, photometric='minisblack')
+                    print("")
 
                     # increase FOV counter
                     #fov += 1

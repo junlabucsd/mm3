@@ -1,10 +1,10 @@
-#!/usr/bin/python
 from __future__ import print_function
 
 # import modules
 import sys # input, output, errors, and files
 import os # interacting with file systems
 import time # getting time
+import datetime
 import inspect # get passed parameters
 import yaml # parameter importing
 import json # for importing tiff metadata
@@ -77,6 +77,18 @@ def warning(*objs):
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
+def julian_day_number():
+    """
+    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
+    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
+    https://en.wikipedia.org/wiki/Julian_day
+    """
+    dt=datetime.datetime.now()
+    tt=dt.timetuple()
+    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
+
+    return jdn
+
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
@@ -101,6 +113,14 @@ def init_mm3_helpers(param_file_path):
     return params
 
 # loads and image stack from TIFF or HDF5 using mm3 conventions
+def get_plane(filepath):
+    pattern = '(c\d+).tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return res.group(1)
+    else:
+        return None
+
 def load_stack(fov_id, peak_id, color='c1'):
     '''
     Loads an image stack.
