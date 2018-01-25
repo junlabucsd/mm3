@@ -156,11 +156,11 @@ if __name__ == "__main__":
 
             # extraction range is the time points that will be taken out. Note the indexing,
             # it is zero indexed to grab from nd2, but TIFF naming starts at 1.
-            extraction_range = range(p['image_start'], p['image_end'])
             # if there is more than one FOV (len(nd2f) != 1), make sure the user input
             # last time index is before the actual time index. Ignore it.
             if len(nd2f) != 1 and len(nd2f) - 1 < p['image_end']:
-                extraction_range = range(0, len(nd2f) - 1)
+                p['image_end'] = len(nd2f) - 1
+            extraction_range = range(p['image_start'], p['image_end']+1)
 
             # loop through time points
             for t_id in extraction_range:
@@ -219,13 +219,18 @@ if __name__ == "__main__":
                             yhi=int(vertical_crop[1]*H)
                             image_data = image_data[:,ylo:yhi,:]
 
+                            # save the tiff
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            information('Saving %s.' % tif_filename)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json, compress=tif_compress, photometric='minisblack')
+
                         # for dealing with two rows of channel
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
                             tif_filename = file_prefix + "_t%04dxy%02d_1.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                             # cut and save bottom row
                             metadata_t['fov'] = fov # update metdata
@@ -233,12 +238,12 @@ if __name__ == "__main__":
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
                             tif_filename = file_prefix + "_t%04dxy%02d_2.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                             # increase FOV counter
                             #fov += 1
                             # Continue to next FOV and not execute code below (extra saving)
-                    print("")
+
 
                     # increase FOV counter
-                    #fov += 1
+                    fov += 1
