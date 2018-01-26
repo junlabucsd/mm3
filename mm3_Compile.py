@@ -50,30 +50,35 @@ if __name__ == "__main__":
     do_time_table = True
     do_channel_masks = True
     do_slicing = True
+    user_spec_fovs = []
     t_end = None # only analyze images up until this t point. Put in None otherwise
+    nproc = 2   # number of threads for multiprocessing
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
+        unixoptions='f:o:j:'
+        gnuoptions=['paramfile=','fov=','nproc=']
+        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
         # switches which may be overwritten
-        specify_fovs = False
-        user_spec_fovs = []
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     except getopt.GetoptError:
-        print('No arguments detected (-f -o).')
+        print('No arguments detected.')
 
     # set parameters
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f','--paramfile']:
             param_file_path = arg # parameter file path
-        if opt == '-o':
+        if opt in ['-o', '--fov']:
             try:
-                specify_fovs = True
-                for fov_to_proc in arg.split(","):
-                    user_spec_fovs.append(int(fov_to_proc))
+                [user_spec_fovs.append(int(val)) for val in arg.split(",")]
             except:
                 mm3.warning("Couldn't convert argument to an integer:",arg)
                 raise ValueError
+        if opt in ['-j', '--nproc']:
+            try:
+                nproc = int(arg)
+            except ValueError:
+                mm3.warning("Could not convert \"{}\" to an integer".format(arg))
 
     # Load the project parameters file
     # if the paramfile string has no length ie it has not been specified, ERROR
@@ -122,7 +127,7 @@ if __name__ == "__main__":
                     break # get out of the loop
 
         # if user has specified only certain FOVs, filter for those
-        if specify_fovs:
+        if (len(user_spec_fovs) > 0):
             mm3.information('Filtering TIFFs by FOV.')
             fitered_files = []
             for fov_id in user_spec_fovs:
@@ -130,7 +135,6 @@ if __name__ == "__main__":
                 fitered_files += [ifile for ifile in found_files if fov_string in ifile]
 
             found_files = fitered_files[:]
-            del fitered_files
 
         # get information for all these starting tiffs
         if len(found_files) > 0:
@@ -139,7 +143,8 @@ if __name__ == "__main__":
             mm3.warning('No TIFF files found')
 
         # initialize pool for analyzing image metadata
-        pool = Pool(p['num_analyzers'])
+        #pool = Pool(p['num_analyzers'])
+        pool = Pool(nproc)
 
         # loop over images and get information
         for fn in found_files:

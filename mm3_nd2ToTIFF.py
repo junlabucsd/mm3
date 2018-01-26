@@ -25,6 +25,7 @@ except:
 import numpy as np
 import pims_nd2
 import warnings
+from mm3_helpers import julian_day_number
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -58,44 +59,49 @@ if __name__ == "__main__":
     # crop out the area between these two y points. Leave empty for no cropping.
     # if there is more than one row, make a list of pairs
     vertical_crop = [] # [[y1_min, y1_max], [y2_min, y2_max]]
+    #vertical_crop = [0.,0.9] # [[y1_min, y1_max], [y2_min, y2_max]]
 
     # number between 0 and 9, 0 is no compression, 9 is most compression.
-    tif_compress = 4
+    tif_compress = 5
 
     # parameters will be overwritten by switches
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     specify_fovs = []
     start_fov = -1
     external_directory = ""
-    fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
+    #fov_naming_start = 1 # where to start with giving out FOV its for tiff saving
 
     # switches
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "f:o:s:x:n:")
+        unixoptions='f:o:s:x:n:'
+        gnuoptions=['paramfile=','fov=','fov-start=','pathtond2=','fov-label-start=']
+        opts, args = getopt.getopt(sys.argv[1:], unixoptions, gnuoptions)
     except getopt.GetoptError:
         warning('No arguments detected (-f -o -s -x -n).')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f','--paramfile']:
             param_file_path = arg
-        if opt == '-o':
+        if opt in ['-o','--fov']:
             arg.replace(" ", "")
             [specify_fovs.append(int(argsplit)) for argsplit in arg.split(",")]
-        if opt == '-s':
+        if opt in ['-s','--fov-start']:
             try:
                 start_fov = int(arg)
             except:
                 warning("Could not convert start parameter (%s) to an integer." % arg)
                 raise ValueError
-        if opt == '-x':
+        if opt in ['-x','--pathtond2']:
             external_directory = arg
-        if opt == '-n':
+        """
+        if opt in ['-n','--fov-label-start']:
             try:
                 fov_naming_start = int(arg)
             except:
                 raise ValueError("Could not convert FOV numbering offset (%s) to an integer." % arg)
             if fov_naming_start < 0:
                 raise ValueError("FOV offset (%s) should probably be positive." % fov_num_offset)
+        #"""
 
     # Load the project parameters file
     if len(param_file_path) == 0:
@@ -103,6 +109,12 @@ if __name__ == "__main__":
     information ('Loading experiment parameters.')
     with open(param_file_path, 'r') as param_file:
         p = yaml.safe_load(param_file) # load parameters into dictionary
+
+    # cropping
+    try:
+        vertical_crop = [p['crop_ymin'],p['crop_ymax']]
+    except KeyError:
+        pass
 
     # assign shorthand directory names
     TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
@@ -121,12 +133,19 @@ if __name__ == "__main__":
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
-        file_prefix = nd2_file.split(".nd")[0].split("/")[-1] # used for tiff name saving
+        file_prefix = os.path.splitext(nd2_file)[0]
         information('Extracting %s ...' % file_prefix)
 
         # load the nd2. the nd2f file object has lots of information thanks to pims
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
-            starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+            try:
+                starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+            except ValueError:
+                # problem with the date
+                jdn = julian_day_number()
+                nd2f._lim_metadata_desc.dTimeStart = jdn
+                starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
@@ -137,26 +156,27 @@ if __name__ == "__main__":
 
             # extraction range is the time points that will be taken out. Note the indexing,
             # it is zero indexed to grab from nd2, but TIFF naming starts at 1.
-            extraction_range = range(p['image_start'], p['image_end'])
             # if there is more than one FOV (len(nd2f) != 1), make sure the user input
             # last time index is before the actual time index. Ignore it.
             if len(nd2f) != 1 and len(nd2f) - 1 < p['image_end']:
-                extraction_range = range(0, len(nd2f) - 1)
+                p['image_end'] = len(nd2f) - 1
+            extraction_range = range(p['image_start'], p['image_end']+1)
 
             # loop through time points
             for t_id in extraction_range:
                 # timepoint output name (1 indexed rather than 0 indexed)
                 t = t_id + 1
                 # set counter for FOV output name
-                fov = fov_naming_start
+                #fov = fov_naming_start
 
                 for fov_id in range(0, nd2f.sizes[u'm']): # for every FOV
                     # fov_id is the fov index according to elements, fov is the output fov ID
+                    fov = fov_id + 1
 
                     # skip FOVs as specified above
-                    if len(specify_fovs) > 0 and not (fov_id + 1) in specify_fovs:
+                    if len(specify_fovs) > 0 and not (fov in specify_fovs):
                         continue
-                    if start_fov > -1 and fov_id + 1 < start_fov:
+                    if start_fov > -1 and (fov < start_fov):
                         continue
 
                     # set the FOV we are working on in the nd2 file object
@@ -194,35 +214,36 @@ if __name__ == "__main__":
 
                         # for just a simple crop
                         if number_of_rows == 1:
-                            image_data = image_data[:,vertical_crop[0]:vertical_crop[1],:]
+                            nc,H,W =image_data.shape
+                            ylo=int(vertical_crop[0]*H)
+                            yhi=int(vertical_crop[1]*H)
+                            image_data = image_data[:,ylo:yhi,:]
+
+                            # save the tiff
+                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            information('Saving %s.' % tif_filename)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                         # for dealing with two rows of channel
                         elif number_of_rows == 2:
                             # cut and save top row
                             image_data_one = image_data[:,vertical_crop[0][0]:vertical_crop[0][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = file_prefix + "_t%04dxy%02d_1.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_one, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                             # cut and save bottom row
-                            fov += 1 # add one to naming of FOV
                             metadata_t['fov'] = fov # update metdata
                             metadata_json = json.dumps(metadata_t)
                             image_data_two = image_data[:,vertical_crop[1][0]:vertical_crop[1][1],:]
-                            tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                            tif_filename = file_prefix + "_t%04dxy%02d_2.tif" % (t, fov)
                             information('Saving %s.' % tif_filename)
-                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress)
+                            tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                             # increase FOV counter
-                            fov += 1
+                            #fov += 1
                             # Continue to next FOV and not execute code below (extra saving)
-                            continue
 
-                    # save the tiff
-                    tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
-                    information('Saving %s.' % tif_filename)
-                    tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json,
-                                compress=tif_compress)
 
                     # increase FOV counter
                     fov += 1

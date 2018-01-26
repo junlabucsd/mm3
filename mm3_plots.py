@@ -18,6 +18,7 @@ from skimage.measure import regionprops # used for creating lineages
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.gridspec as gridspec
 import seaborn as sns
 sns.set(style="ticks", color_codes=True, font_scale=1.25)
 
@@ -226,10 +227,12 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
     Continuous_Lineages = {}
 
     for fov, peaks in Lineages.iteritems():
+#        print("fov = {:d}".format(fov))
         # Create a dictionary to hold this FOV
         Continuous_Lineages[fov] = {}
 
         for peak, Cells in peaks.iteritems():
+#            print("{:<4s}peak = {:d}".format("",peak))
             # sort the cells by time in a list for this peak
             cells_sorted = [(cell_id, cell) for cell_id, cell in Cells.iteritems()]
             cells_sorted = sorted(cells_sorted, key=lambda x: x[1].birth_time)
@@ -267,6 +270,7 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
                     Continuous_Lineages[fov][peak] = Cells_cont
         # else:
         #     continue
+
 
         # remove keys that do not have any lineages
         if not Continuous_Lineages[fov]:
@@ -561,7 +565,7 @@ def plot_traces(Cells, trace_limit=1000):
 
     return fig, ax
 
-def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
+def saw_tooth_plot(Lineages, FOVs=None, peaks=None, tif_width=2000, mothers=True):
     '''
     Plot individual cell traces, where each FOV gets its own subplot.
 
@@ -582,14 +586,34 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
     if FOVs == None:
         FOVs = Lineages.keys()
 
-    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 2.5*len(FOVs)), squeeze=False)
-    ax = axes.flat
+    #fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 2.5*len(FOVs)), squeeze=False)
+    #ax = axes.flat
 
+    figs=[]
     for i, fov in enumerate(FOVs):
+        if peaks == None:
+            peaks = Lineages[fov].keys()
+        npeaks = len(peaks)
+
+        if (npeaks == 0):
+            continue
+
+        fig = plt.figure(num=i,facecolor='w',figsize=(15,2.5*npeaks))
+        gs = gridspec.GridSpec(nrows=npeaks,ncols=1)
+
         # record max div length for whole FOV to set y lim
         max_div_length = 0
 
-        for peak, lin in Lineages[fov].iteritems():
+        for r,(peak, lin) in enumerate(Lineages[fov].iteritems()):
+            # append axes
+            ax = fig.add_subplot(gs[r,0])
+
+            # continue if peaks is not selected
+            if not (peak in peaks):
+                print ("passing peak {:d}".format(peak))
+                continue
+            print ("Processing peak {:d}".format(peak))
+
             # this is to map mothers to daugthers with lines
             last_div_time = None
             last_length = None
@@ -601,14 +625,14 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
 
             peak_color = plt.cm.jet(int(255*peak/tif_width))
 
-            for cell_id, cell in lin:
-                ax[i].semilogy(np.array(cell.times_w_div), cell.lengths_w_div,
-                               color=peak_color, lw=1, alpha=0.75)
+            for k,(cell_id, cell) in enumerate(lin):
+                ax.semilogy(np.array(cell.times_w_div), cell.lengths_w_div,
+                        color=peak_color, lw=1, alpha=0.75)
 
                 if mothers:
                     # draw a connecting lines betwee mother and daughter
                     if cell.birth_time == last_div_time:
-                        ax[i].semilogy([last_div_time, cell.birth_time],
+                        ax.semilogy([last_div_time, cell.birth_time],
                                        [last_length, cell.sb],
                                        color=peak_color, lw=1, alpha=0.75)
 
@@ -620,21 +644,25 @@ def saw_tooth_plot(Lineages, FOVs=None, tif_width=2000, mothers=True):
                 if last_length > max_div_length:
                     max_div_length = last_length
 
-        title_string = 'FOV %d' % fov
-        ax[i].set_title(title_string, size=18)
-        ax[i].set_ylabel('Length [um]', size=16)
+            ax.set_ylabel('Length [um]', size=16)
+            ax.set_title("peak {:d}".format(peak), fontsize=14)
+
+        #ax[i].legend(loc='upper center',frameon=True, bbox_to_anchor=(0.5,-0.6),ncol= 6, fontsize=14)
+        ax.set_xlabel('Time [min]', size=16)
         # ax[i].set_ylim([0, max_div_length + 2])
+        title_string = 'FOV %d' % fov
+        fig.suptitle(title_string, size=18)
 
-    ax[-1].set_xlabel('Time [min]', size=16)
 
-    plt.tight_layout()
+    rect=[0.,0.,1.,1.0]
+    gs.tight_layout(fig,rect=rect)
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
-    # fig.suptitle('Cell Length vs Time ', size=24)
+    figs.append(fig)
 
     sns.despine()
     # plt.subplots_adjust(hspace=0.5)
 
-    return fig, ax
+    return figs
 
 def average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
     '''

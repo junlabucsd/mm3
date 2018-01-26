@@ -37,18 +37,31 @@ import mm3_plots
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
+    fov_to_proc = None # not used for now
+    pklfile = None
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
+        unixoptions="f:o:p:"
+        gnuoptions=["paramfile=","fov=","picklefile="]
+        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
         # switches which may be overwritten
         param_file_path = ''
     except getopt.GetoptError:
         warning('No arguments detected (-f -o).')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f',"--paramfile"]:
             param_file_path = arg # parameter file path
+        if opt in ['-o',"--fov"]:
+            try:
+                for fov_to_proc in arg.split(","):
+                    user_spec_fovs.append(int(fov_to_proc))
+            except:
+                mm3.warning("Couldn't convert -o argument to an integer:",arg)
+                raise ValueError
+        if opt in ['-p',"--picklefile"]:
+            pklfile = arg # parameter file path
 
     # Load the project parameters file
     if len(param_file_path) == 0:
@@ -61,7 +74,9 @@ if __name__ == "__main__":
         specs = pickle.load(specs_file)
 
     # load cell data dict.
-    with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'r') as cell_file:
+    if pklfile == None:
+        pklfile = os.path.join(p['cell_dir'],'complete_cells.pkl')
+    with open(pklfile, 'r') as cell_file:
         Cells = pickle.load(cell_file)
 
     ### Filters you may want to apply
