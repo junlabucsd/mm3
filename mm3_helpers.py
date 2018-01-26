@@ -1,10 +1,10 @@
-#!/usr/bin/python
 from __future__ import print_function
 
 # import modules
 import sys # input, output, errors, and files
 import os # interacting with file systems
 import time # getting time
+import datetime
 import inspect # get passed parameters
 import yaml # parameter importing
 import json # for importing tiff metadata
@@ -77,6 +77,18 @@ def warning(*objs):
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
+def julian_day_number():
+    """
+    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
+    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
+    https://en.wikipedia.org/wiki/Julian_day
+    """
+    dt=datetime.datetime.now()
+    tt=dt.timetuple()
+    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
+
+    return jdn
+
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
@@ -101,6 +113,14 @@ def init_mm3_helpers(param_file_path):
     return params
 
 # loads and image stack from TIFF or HDF5 using mm3 conventions
+def get_plane(filepath):
+    pattern = '(c\d+).tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return res.group(1)
+    else:
+        return None
+
 def load_stack(fov_id, peak_id, color='c1'):
     '''
     Loads an image stack.
@@ -208,7 +228,8 @@ def get_tif_params(image_filename, find_channels=True):
             # if the image data has more than 1 plane restrict image_data to phase,
             # which should have highest mean pixel data
             if len(image_data.shape) > 2:
-                ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                #ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                ph_index = int(params['phase_plane'][1:]) - 1
                 image_data = image_data[ph_index]
 
             # get shape of single plane
@@ -1899,7 +1920,7 @@ def feretdiameter(region):
 
     # limit to perimeter coords. pixels are relative to bounding box
     region_binimg = np.pad(region.image, 1, 'constant') # pad region binary image by 1 to avoid boundary non-zero pixels
-    distance_image = ndi.distance_transform_edt(region_binimg) 
+    distance_image = ndi.distance_transform_edt(region_binimg)
     r_coords = np.where(distance_image == 1)
     r_coords = zip(r_coords[0], r_coords[1])
 
@@ -2116,7 +2137,7 @@ def find_complete_cells(Cells):
 
     return Complete_Cells
 
-# finds cells whose birht label is 1
+# finds cells whose birth label is 1
 def find_mother_cells(Cells):
     '''Return only cells whose starting region label is 1.'''
 
@@ -2142,6 +2163,20 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     fl_stack = load_stack(fov_id, peak_id, color='c1')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
+    # determine absolute time index
+    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
+    with open(time_table_path,'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = []
+    for fov in time_table:
+        times_all = np.append(times_all, time_table[fov].keys())
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+    t0 = times_all[0] # first time index
+    tN = times_all[-1] # last time index
+
+
     # Loop through cells
     for Cell in Cells.values():
         # give this cell two lists to hold new information
@@ -2151,10 +2186,10 @@ def find_cell_intensities(fov_id, peak_id, Cells):
         # and the time points that make up this cell's life
         for n, t in enumerate(Cell.times):
             # create fluorescent image only for this cell and timepoint.
-            fl_image_masked = np.copy(fl_stack[t])
-            fl_image_masked[seg_stack[t] != Cell.labels[n]] = 0
+            fl_image_masked = np.copy(fl_stack[t-t0])
+            fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
 
-            # append total flourescent image
+            # append total fluorescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
 
             # and the average fluorescence
@@ -2179,6 +2214,19 @@ def foci_analysis(fov_id, peak_id, Cells):
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci_plane']))
 
+    # determine absolute time index
+    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
+    with open(time_table_path,'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = []
+    for fov in time_table:
+        times_all = np.append(times_all, time_table[fov].keys())
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+    t0 = times_all[0] # first time index
+    tN = times_all[-1] # last time index
+
     for cell_id, cell in Cells.items():
 
         # declare lists holding information about foci.
@@ -2190,10 +2238,9 @@ def foci_analysis(fov_id, peak_id, Cells):
 
         # Go through each time point of this cell
         for t in cell.times:
-
             # retrieve this timepoint and images.
-            image_data_temp = image_data_FL[t,:,:]
-            image_data_temp_seg = image_data_seg[t,:,:]
+            image_data_temp = image_data_FL[t-t0,:,:]
+            image_data_temp_seg = image_data_seg[t-t0,:,:]
 
             # find foci as long as there is information in the fluorescent image
             if np.sum(image_data_temp) != 0:
@@ -2229,11 +2276,15 @@ def foci_analysis(fov_id, peak_id, Cells):
 
         information('Extracting foci information for %s cells.' % (cell_id))
 
+        # test
+        sys.exit()
+        # test
+
     return
 
 # actual worker function for foci detection
 def foci_lap(img, img_foci, cell, t):
-    '''foci_dog finds foci using a laplacian convolution then fits a 2D
+    '''foci_lap finds foci using a laplacian convolution then fits a 2D
     Gaussian.
 
     The returned information are the parameters of this Gaussian.
@@ -2278,6 +2329,10 @@ def foci_lap(img, img_foci, cell, t):
     thresh = params['foci_log_thresh']
     peak_med_ratio = params['foci_log_peak_med_ratio']
 
+    # test
+    #print ("minsig={:d}  maxsig={:d}  thres={:.4g}  peak_med_ratio={:.2g}".format(minsig,maxsig,thresh,peak_med_ratio))
+    # test
+
     # calculate median cell intensity. Used to filter foci
     img_foci_masked = np.copy(img_foci).astype(np.float)
     img_foci_masked[img != region] = np.nan
@@ -2302,7 +2357,7 @@ def foci_lap(img, img_foci, cell, t):
     blobs = blob_log(img_foci, min_sigma=minsig, max_sigma=maxsig,
                      overlap=over_lap, num_sigma=numsig, threshold=thresh)
 
-    # these will hold information abou foci position temporarily
+    # these will hold information about foci position temporarily
     x_blob, y_blob, r_blob = [], [], []
     x_gaus, y_gaus, w_gaus = [], [], []
 
@@ -2355,9 +2410,15 @@ def foci_lap(img, img_foci, cell, t):
                 disp_l = np.append(disp_l, disp_y)
                 disp_w = np.append(disp_w, disp_x)
                 foci_h = np.append(foci_h, np.sum(gfit_area))
+        else:
+            print ('Blob not in bounding box.')
 
     # draw foci on image for quality control
     if params['debug_foci']:
+        outputdir = os.path.join('debug','foci')
+        if not os.path.isdir(outputdir):
+            os.makedirs(outputdir)
+
         # print(np.min(gfit_area), np.max(gfit_area), gfit_median, avg_int, peak)
         # processing of image
         fig = plt.figure(figsize=(12,12))
@@ -2365,12 +2426,12 @@ def foci_lap(img, img_foci, cell, t):
         plt.title('fluor image')
         plt.imshow(img_foci, interpolation='nearest', cmap='gray')
         ax = fig.add_subplot(1,5,2)
-        plt.title('segmented image')
-        plt.imshow(img, interpolation='nearest', cmap='gray')
+        ax.set_title('segmented image')
+        ax.imshow(img, interpolation='nearest', cmap='gray')
 
         ax = fig.add_subplot(1,5,3)
-        plt.title('DoG blobs')
-        plt.imshow(img_foci, interpolation='nearest', cmap='gray')
+        ax.set_title('DoG blobs')
+        ax.imshow(img_foci, interpolation='nearest', cmap='gray')
         # add circles for where the blobs are
         for i, spot in enumerate(x_blob):
             foci_center = Ellipse([x_blob[i], y_blob[i]], r_blob[i], r_blob[i],
@@ -2379,24 +2440,31 @@ def foci_lap(img, img_foci, cell, t):
 
         # show the shape of the gaussian for recorded foci
         ax = fig.add_subplot(1,5,4)
-        plt.title('final foci')
-        plt.imshow(img_foci, interpolation='nearest', cmap='gray')
+        ax.set_title('final foci')
+        ax.imshow(img_foci, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(x_gaus):
             foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], w_gaus[i], w_gaus[i],
                                     color=(0, 1.0, 0.0), linewidth=2, fill=False, alpha=0.5)
             ax.add_patch(foci_ellipse)
 
-        ax6 = fig.add_subplot(1,5,5)
-        plt.title('overlay')
-        plt.imshow(img, interpolation='nearest', cmap='gray')
+        ax = fig.add_subplot(1,5,5)
+        ax.set_title('overlay')
+        ax.imshow(img, interpolation='nearest', cmap='gray')
         # print foci that pass and had gaussians fit
         for i, spot in enumerate(x_gaus):
             foci_ellipse = Ellipse([x_gaus[i], y_gaus[i]], 3, 3,
                                     color=(1.0, 1.0, 0), linewidth=2, fill=False, alpha=0.5)
-            ax6.add_patch(foci_ellipse)
+            ax.add_patch(foci_ellipse)
 
-        plt.show()
+        #plt.show()
+        filename = 'foci_' + cell.id + '_time{:04d}'.format(t) + '.pdf'
+        fileout = os.path.join(outputdir,filename)
+        fig.savefig(fileout, bbox_inches='tight', pad_inches=0)
+        print (fileout)
+        plt.close('all')
+        nblobs = len(blobs)
+        print ("nblobs = {:d}".format(nblobs))
 
     # img_overlay = img
     # for i, spot in enumerate(xx):
