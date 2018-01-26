@@ -228,7 +228,8 @@ def get_tif_params(image_filename, find_channels=True):
             # if the image data has more than 1 plane restrict image_data to phase,
             # which should have highest mean pixel data
             if len(image_data.shape) > 2:
-                ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                #ph_index = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+                ph_index = int(params['phase_plane'][1:]) - 1
                 image_data = image_data[ph_index]
 
             # get shape of single plane
@@ -1919,7 +1920,7 @@ def feretdiameter(region):
 
     # limit to perimeter coords. pixels are relative to bounding box
     region_binimg = np.pad(region.image, 1, 'constant') # pad region binary image by 1 to avoid boundary non-zero pixels
-    distance_image = ndi.distance_transform_edt(region_binimg) 
+    distance_image = ndi.distance_transform_edt(region_binimg)
     r_coords = np.where(distance_image == 1)
     r_coords = zip(r_coords[0], r_coords[1])
 
