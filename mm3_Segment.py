@@ -43,19 +43,21 @@ if __name__ == "__main__":
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:")
+        unixoptions="f:o:"
+        gnuoptions=["paramfile=","fov="]
+        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o), using hardcoded parameters.')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f',"--paramfile"]:
             param_file_path = arg # parameter file path
-        if opt == '-o':
+        if opt in ['-o',"--fov"]:
             try:
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
+                mm3.warning("Couldn't convert -o argument to an integer:",arg)
                 raise ValueError
 
     # Load the project parameters file & initialized the helper library

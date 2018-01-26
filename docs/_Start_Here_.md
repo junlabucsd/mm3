@@ -71,7 +71,7 @@ The working directory now contains:
 
 ### 4. User guided selection of empty and full channels (mm3_ChannelPicker.py).
 
-mm3_Compile.py identifies all growth channels, regardless of if they contain or do not contain cells. mm3_ChannelPicker.py first attempts to guess, and then presents the user with a GUI to decide which channels should be analyzed, which channels should be ignored, and which channels should be used as empty channels during subtraction. This information is contained within the specs.pkl file. See **mm3_ChannelPicker guide** for usage and details.
+mm3_ChannelPicker.py identifies all growth channels, regardless of if they contain or do not contain cells. mm3_ChannelPicker.py first attempts to guess, and then presents the user with a GUI to decide which channels should be analyzed, which channels should be ignored, and which channels should be used as empty channels during subtraction. This information is contained within the specs.pkl file. See **mm3_ChannelPicker guide** for usage and details.
 
 The working directory is now:
 ```

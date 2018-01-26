@@ -54,21 +54,23 @@ if __name__ == "__main__":
 
     # get switches and parameters
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:c:")
+        unixoptions="f:o:c:"
+        gnuoptions=["paramfile=","fov=","phase-plane="]
+        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
     except getopt.GetoptError:
         mm3.warning('No arguments detected (-f -o -c), using hardcoded parameters.')
 
     for opt, arg in opts:
-        if opt == '-f':
+        if opt in ['-f',"--paramfile"]:
             param_file_path = arg # parameter file path
-        if opt == '-o':
+        if opt in ['-o',"--fov"]:
             try:
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
                 mm3.warning("Couldn't convert -o argument to an integer:",arg)
                 raise ValueError
-        if opt == '-c':
+        if opt in ['-c',"--phase-plane"]:
             sub_plane = arg # this should be a postfix c1, c2, c3, etc.
 
     # Load the project parameters file
@@ -99,7 +101,7 @@ if __name__ == "__main__":
 
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
-    # determine if we are doing fluorecece or phase subtraction, and set flags
+    # determine if we are doing fluorescence or phase subtraction, and set flags
     if sub_plane == p['phase_plane']:
         align = True # used when averaging empties
         sub_method = 'phase' # used in subtract_fov_stack
