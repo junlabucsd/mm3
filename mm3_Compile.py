@@ -52,7 +52,7 @@ if __name__ == "__main__":
     do_slicing = True
     user_spec_fovs = []
     t_end = None # only analyze images up until this t point. Put in None otherwise
-    nproc = 2   # number of threads for multiprocessing
+    nproc = 6 # number of threads for multiprocessing
 
     # get switches and parameters
     try:
@@ -143,7 +143,6 @@ if __name__ == "__main__":
             mm3.warning('No TIFF files found')
 
         # initialize pool for analyzing image metadata
-        #pool = Pool(p['num_analyzers'])
         pool = Pool(nproc)
 
         # loop over images and get information
