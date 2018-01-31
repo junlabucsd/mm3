@@ -667,6 +667,84 @@ def saw_tooth_plot(Lineages, FOVs=None, peaks=None, tif_width=2000, mothers=True
 
     return figs
 
+def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
+    '''
+    Plot individual cell traces, where each FOV gets its own subplot.
+
+    tif_width : int
+        Width of the original .tif image in pixels. This is used to color the traces,
+        where the color of the line corresponds to the peak position.
+    mothers : boolean
+        If mothers is True, connecting lines will be drawn between cells in the
+        same channel which share a division and birth time. If False, then connecting lines
+        will not be drawn.
+    '''
+    # fig, axes = plt.subplots(ncols=1, nrows=2,
+    #                      figsize=(16, 2*3))
+
+    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+
+    # if specific FOVs not noted
+    if FOVs == None:
+        FOVs = Lineages.keys()
+
+    fig, axes = plt.subplots(ncols=1, nrows=len(FOVs), figsize=(15, 2.5*len(FOVs)), squeeze=False)
+    ax = axes.flat
+
+    for i, fov in enumerate(FOVs):
+        # record max div length for whole FOV to set y lim
+        max_div_length = 0
+
+        for peak, lin in Lineages[fov].iteritems():
+            # this is to map mothers to daugthers with lines
+            last_div_time = None
+            last_length = None
+
+            # turn it into a list so it retains time order
+            lin = [(cell_id, cell) for cell_id, cell in lin.iteritems()]
+            # sort cells by birth time for the hell of it.
+            lin = sorted(lin, key=lambda x: x[1].birth_time)
+
+            peak_color = plt.cm.jet(int(255*peak/tif_width))
+
+            for cell_id, cell in lin:
+                ax[i].plot(np.array(cell.times_w_div), cell.lengths_w_div,
+                               color=peak_color, lw=1, alpha=0.75)
+
+                if mothers:
+                    # draw a connecting lines betwee mother and daughter
+                    if cell.birth_time == last_div_time:
+                        ax[i].plot([last_div_time, cell.birth_time],
+                                       [last_length, cell.sb],
+                                       color=peak_color, lw=1, alpha=0.75)
+
+                    # record the last division time and length for next time
+                    last_div_time = cell.division_time
+
+                # save the max div length for axis plotting
+                last_length = cell.sd
+                if last_length > max_div_length:
+                    max_div_length = last_length
+
+        title_string = 'FOV %d' % fov
+        ax[i].set_title(title_string, size=18)
+        ax[i].set_ylabel('Length [um]', size=16)
+        ax[i].set_yscale('symlog')
+        ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
+        ax[i].set_yticks([2, 3, 4, 6])
+        ax[i].set_ylim([1.75, 6.5])
+
+    ax[-1].set_xlabel('Time [min]', size=16)
+
+    plt.tight_layout()
+    # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
+    # fig.suptitle('Cell Length vs Time ', size=24)
+
+    sns.despine()
+    # plt.subplots_adjust(hspace=0.5)
+
+    return fig, ax
+
 def average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
     '''
     Plot the average numerical derivative (instantaneous elongation rate in 1/hours) against
