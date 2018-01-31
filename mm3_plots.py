@@ -567,7 +567,7 @@ def plot_traces(Cells, trace_limit=1000):
 
 def saw_tooth_plot(Lineages, FOVs=None, peaks=None, tif_width=2000, mothers=True):
     '''
-    Plot individual cell traces, where each FOV gets its own subplot.
+    Plot individual cell traces, where each channel gets its own subplot.
 
     tif_width : int
         Width of the original .tif image in pixels. This is used to color the traces,
