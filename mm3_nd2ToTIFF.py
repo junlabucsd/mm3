@@ -140,12 +140,13 @@ if __name__ == "__main__":
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
             try:
                 starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
+                information('Starttime got from nd2 metadata.')
             except ValueError:
                 # problem with the date
                 jdn = julian_day_number()
                 nd2f._lim_metadata_desc.dTimeStart = jdn
                 starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
-
+                information('Starttime found from lim.')
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
@@ -214,10 +215,10 @@ if __name__ == "__main__":
 
                         # for just a simple crop
                         if number_of_rows == 1:
-                            nc,H,W =image_data.shape
-                            ylo=int(vertical_crop[0]*H)
-                            yhi=int(vertical_crop[1]*H)
-                            image_data = image_data[:,ylo:yhi,:]
+                            nc, H, W = image_data.shape
+                            ylo = int(vertical_crop[0]*H)
+                            yhi = int(vertical_crop[1]*H)
+                            image_data = image_data[:, ylo:yhi, :]
 
                             # save the tiff
                             tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
@@ -240,10 +241,10 @@ if __name__ == "__main__":
                             information('Saving %s.' % tif_filename)
                             tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data_two, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
-                            # increase FOV counter
-                            #fov += 1
-                            # Continue to next FOV and not execute code below (extra saving)
-
+                    else: # just save the image if no cropping was done.
+                        tif_filename = file_prefix + "_t%04dxy%02d.tif" % (t, fov)
+                        information('Saving %s.' % tif_filename)
+                        tiff.imsave(os.path.join(TIFF_dir, tif_filename), image_data, description=metadata_json, compress=tif_compress, photometric='minisblack')
 
                     # increase FOV counter
                     fov += 1
