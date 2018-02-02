@@ -1,9 +1,11 @@
 # mm3
-### Version 3.12
+### Version 3.13
 
 Please refer to the docs subfolder for information and usage.
 
 ## Version History
+
+3.13 2018.02.02 Non-interactive channel picking.
 
 3.12 2017.10.26 Increased speed for Feret diameter (length and width) calculation.
 
