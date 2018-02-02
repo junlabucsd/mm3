@@ -409,11 +409,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[10,5*len(columns)/3], squeeze=False)
+                            figsize=[12,5*len(columns)/2.5], squeeze=False)
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 5 # minimum bin size to display
+    binmin = 3 # minimum bin size to display
     bingrid = (50, 10) # how many bins to have in the x and y directions
     moving_window = 10 # window to calculate moving stat
 
@@ -423,11 +423,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
-        bin_extents = [(x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 2),
-                      (x_extents[0], x_extents[1], 0, 12),
-                      (x_extents[0], x_extents[1], 0, 100),
-                      (x_extents[0], x_extents[1], 0, 6),
+        bin_extents = [(x_extents[0], x_extents[1], 0, 5),
+                      (x_extents[0], x_extents[1], 0, 1.5),
+                      (x_extents[0], x_extents[1], 0, 10),
+                      (x_extents[0], x_extents[1], 0, 90),
+                      (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
@@ -450,14 +450,14 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
 
         # formatting
-        ax[i].set_title(titles[i], size=18)
-        ax[i].set_ylabel(ylabels[i], size=16)
+        ax[i].set_title(titles[i], size=20)
+        ax[i].set_ylabel(ylabels[i], size=18)
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
     ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('%s [min]' % time_mark, size=16)
-    ax[5].set_xlabel('%s [min]' % time_mark, size=16)
+    ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
+    ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
 
     # Make title, need a little extra space
     plt.subplots_adjust(top=0.925, hspace=0.25)
@@ -731,10 +731,10 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-        ax[i].set_yticks([2, 3, 4, 6])
-        ax[i].set_ylim([1.75, 6.5])
+        ax[i].set_yticks([2, 4, 8, 12])
+        ax[i].set_ylim([2, 12])
 
-    ax[-1].set_xlabel('Time [min]', size=16)
+    ax[-1].set_xlabel('Time point [2 min]', size=16)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
