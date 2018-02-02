@@ -2,17 +2,25 @@ function [] = plot_corr_md(pool_corr, pool_data_m, pool_data_d)
 
 %% calculate correlation efficient
 ft1 = fittype('a*x+b');
-fit_a = zeros(11,1);
-fit_b = zeros(11,1);
-% fit_pval = zeros(11,1);
-corr_coef = zeros(11,1);
-corr_pval = zeros(11,1);
+fit_a = zeros(12,12);
+fit_b = zeros(12,12);
+% fit_pval = zeros(12,12);
+corr_coef = zeros(12,12);
+corr_pval = zeros(12,12);
 
-for i = 1:11
-   fit_temp = fit(pool_data_m(:,i),pool_data_d(:,i),ft1);
-   [corr_coef(i,1),corr_pval(i,1)] = corr(pool_data_m(:,i),pool_data_d(:,i),'type','Spearman');
-   fit_a(i,1) = fit_temp.a;
-   fit_b(i,1) = fit_temp.b;
+for i = 1:12
+    for j = 1:12
+        
+        pool_data_tmp = [pool_data_m(:,i),pool_data_d(:,j)]';
+
+        pool_data_isnan = any(isnan(pool_data_tmp));
+        pool_data_tmp = pool_data_tmp(:,find(pool_data_isnan==0))';
+        
+        fit_temp = fit(pool_data_tmp(:,1),pool_data_tmp(:,2),ft1);
+        [corr_coef(i,j),corr_pval(i,j)] = corr(pool_data_tmp(:,1),pool_data_tmp(:,2),'type','Pearson');
+        fit_a(i,j) = fit_temp.a;
+        fit_b(i,j) = fit_temp.b;
+    end
 end
 
 x_fit = 0.5:0.1:1.5;
@@ -27,7 +35,7 @@ colors = [46 49 146;
           241 90 41;
           239 65 54]/255; %illustrator
 
-positions = [400, 400, 1255, 200];
+positions = [400, 400, 1255, 1350];
 
 labels = {'S_{1/2}/<S_{1/2}>',...
           '\lambda/<\lambda>',...
@@ -39,36 +47,39 @@ labels = {'S_{1/2}/<S_{1/2}>',...
           'S_d/<S_d>',...
           'S_b/<S_b>',...
           '\tau/<\tau>',...
-          '\Delta_d/<\Delta_d>'};
+          '\Delta_d/<\Delta_d>',...
+          '\Delta_i/<\Delta_i>',};
 
 fig1 = figure;
 set(fig1,'Position',positions(1,:));
 hold on;
 
 k = 1;
-for i = 1:11
-    h = subplot('Position',[i/13.85,1/13.85,1/14,1]);
-    hold on           
-    h1 = plot(pool_data_d(:,i),pool_data_m(:,i));
-    h1.Color = colors(1,:); set(h1,'LineWidth',0.5,'Markersize',2.5,'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
-    
-    xlabel(labels(i),'fontsize',20)
-    xlim([0.4 1.6])
-    set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
+for i = 1:12
+    for j = 1:12
+        h = subplot('Position',[j/13.85,(13-i)/13.85,1/14,1/14]);
 
-    if i==1
-        ylabel('daughter cell','fontsize',20) 
+        hold on           
+        h1 = plot(pool_data_m(:,j),pool_data_d(:,i));
+        h1.Color = colors(1,:); set(h1,'LineWidth',0.5,'Markersize',2.5,'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+         
+        if i==12
+            xlabel(labels(j),'fontsize',20)
+        end
+        xlim([0.4 1.6])
+        set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
+        
+        if j==1
+            ylabel(labels(i),'fontsize',20) 
+        end
+        ylim([0.4 1.6])
+        set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
+
+        set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
+        
+        k = k+1;
     end
-    ylim([0.4 1.6])
-    set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-
-    set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
-
-    k = k+1;
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 %% plot: correlations - 2d histogram
 colors = [46 49 146;
@@ -80,7 +91,7 @@ colors = [46 49 146;
           241 90 41;
           239 65 54]/255; %illustrator
 
-positions = [400, 400, 1255, 200];
+positions = [400, 400, 1255, 1350];
 
 labels = {'S_{1/2}/<S_{1/2}>',...
           '\lambda/<\lambda>',...
@@ -92,38 +103,41 @@ labels = {'S_{1/2}/<S_{1/2}>',...
           'S_d/<S_d>',...
           'S_b/<S_b>',...
           '\tau/<\tau>',...
-          '\Delta_d/<\Delta_d>'};
+          '\Delta_d/<\Delta_d>',...
+          '\Delta_i/<\Delta_i>',};
 
 fig1 = figure;
 set(fig1,'Position',positions(1,:));
 hold on;
 
 k = 1;
-for i = 1:11
-    h = subplot('Position',[i/13.85,1/13.85,1/14,1]);
-    hold on           
+for i = 1:12
+    for j = 1:12
+        h = subplot('Position',[j/13.85,(13-i)/13.85,1/14,1/14]);
 
-    Xedges = 0.4:0.07:1.6;
-    Yedges = 0.4:0.07:1.6;
-    h2 = histogram2(pool_data_d(:,i),pool_data_m(:,i),Xedges,Yedges,'DisplayStyle','tile','ShowEmptyBins','on','EdgeColor','none');
-    
-    xlabel(labels(i),'fontsize',20)
-    xlim([0.4 1.6])
-    set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
+        hold on           
 
-    if i==1
-        ylabel('daughter cell','fontsize',20) 
+        Xedges = 0.4:0.07:1.6;
+        Yedges = 0.4:0.07:1.6;
+        h2 = histogram2(pool_data_m(:,j),pool_data_d(:,i),Xedges,Yedges,'DisplayStyle','tile','ShowEmptyBins','on','EdgeColor','none');
+            
+        if i==12
+            xlabel(labels(j),'fontsize',20)
+        end
+        xlim([0.4 1.6])
+        set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
+        
+        if j==1
+            ylabel(labels(i),'fontsize',20) 
+        end
+        ylim([0.4 1.6])
+        set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
+
+        set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
+        
+        k = k+1;
     end
-    ylim([0.4 1.6])
-    set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-
-    set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
-
-    k = k+1;
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 %% plot: correlations - binned
 colors = [46 49 146;
@@ -135,7 +149,7 @@ colors = [46 49 146;
           241 90 41;
           239 65 54]/255; %illustrator
 
-positions = [400, 400, 1255, 200];
+positions = [400, 400, 1255, 1350];
 
 labels = {'S_{1/2}/<S_{1/2}>',...
           '\lambda/<\lambda>',...
@@ -147,47 +161,48 @@ labels = {'S_{1/2}/<S_{1/2}>',...
           'S_d/<S_d>',...
           'S_b/<S_b>',...
           '\tau/<\tau>',...
-          '\Delta_d/<\Delta_d>',};
+          '\Delta_d/<\Delta_d>',...
+          '\Delta_i/<\Delta_i>',};
 
 fig2 = figure;
 set(fig2,'Position',positions(1,:));
 hold on;
 
 k = 1;
-for i = 1:11
+for i = 1:12
+    for j = 1:12
+        h = subplot('Position',[j/13.85,(13-i)/13.85,1/14,1/14]);
 
-    h = subplot('Position',[i/13.85,1/13.85,1/14,1]);
-    hold on
-    h1 = errorbar(pool_corr{i,1}(1,:),pool_corr{i,1}(3,:),pool_corr{i,1}(4,:));
-    h1.Color = colors(1,:); set(h1,'LineWidth',0.5,'Markersize',5,'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+        hold on
+        h1 = errorbar(pool_corr{j,i}(1,:),pool_corr{j,i}(3,:),pool_corr{j,i}(4,:));
+        h1.Color = colors(1,:); set(h1,'LineWidth',0.5,'Markersize',5,'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+           
+        hold on
+        y_fit = fit_a(j,i)*x_fit + fit_b(j,i);
 
-
-    hold on
-    y_fit = fit_a(i,1)*x_fit + fit_b(i,1);
-
-    f1 = plot(x_fit,y_fit);
-    f1.Color = colors(1,:); set(f1,'LineWidth',0.25,'Markersize',5,'Marker','None','MarkerFaceColor',[1 1 1],'LineStyle','-');
-
-
-    xlabel(labels(i),'fontsize',20)
-    xlim([0.4 1.6])
-    set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
-
-    if i==1
-        ylabel(labels(i),'fontsize',20) 
-    end
-    ylim([0.4 1.6])
-    set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-
-    set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])
-
-    text(0.4, 0.45, ['Corr = ' num2str(corr_coef(i,1),2)],'FontSize',11);
-
-    k = k+1;
+        f1 = plot(x_fit,y_fit);
+        f1.Color = colors(1,:); set(f1,'LineWidth',0.25,'Markersize',5,'Marker','None','MarkerFaceColor',[1 1 1],'LineStyle','-');
         
+                
+        if i==12
+            xlabel(labels(j),'fontsize',20)
+        end
+        xlim([0.4 1.6])
+        set(gca,'XScale','linear','XTick',[],'XTickLabel',{})
+        
+        if j==1
+            ylabel(labels(i),'fontsize',20) 
+        end
+        ylim([0.4 1.6])
+        set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
+        
+
+        set(gca,'TickLength',[0.05 0.1],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])
+        
+        text(0.4, 0.45, ['Corr = ' num2str(corr_coef(j,i),2)],'FontSize',12);
+        
+        k = k+1;
+    end
 end
-% text(-4.5, 12, '\delta(\tau_{cyc})\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(S_0)\neq0','FontSize',30);
-% text(-4.5, 12, '\delta(\lambda)\neq0','FontSize',30);
 
 end

@@ -2,63 +2,60 @@ clear all; clc;
 % close all;
 
 %% load data
-% cell_data = load('/Users/Fangwei/Documents/Adder/Analysis/20170519_FS103_DnaN_yPet_glu_25p_200ms_SJW104_2min/analysis_FL/cell_data/all_cells_foci.mat');
-% 
-% px_to_mu = 0.065;
-% t_int = 2.0;
-% start_cut = 0;
-% end_cut = 1500;
+cell_data = load('../../analysis/cell_data/complete_cells_foci.mat');
 
-%% extract data
-% L = length(fieldnames(cell_data));
-% fnames = fieldnames(cell_data);
-% 
-% channel = cell(1,1);
-% Foci_all = [];
-% N_foci = 0;
-% 
-% 
-% for i = 1:L
-%     
-%     N = length( cell_data.(fnames{i}).times );
-%           
-%     channel = cell_data.(fnames{i}); 
-%     
-%     if isempty(channel.foci_h) == 0 && channel.division_time < end_cut
-%     
-%         for j = 1:N
-%             
-%             if isempty(channel.N_foci(1,j)) == 0
-%                 
-%                 N_foci = channel.N_foci(1,j);
-%                     
-%                 iscell_foci = double(iscell(channel.foci_h1));
-% 
-%                 if iscell_foci == 1
-%                     Foci_all = [Foci_all; [channel.foci_h1{1,j}' channel.foci_h2{1,j}' channel.foci_h3{1,j}' channel.foci_h{1,j}']];
-%                 end
-% 
-%                 if iscell_foci == 0
-%                     Foci_all = [Foci_all; [channel.foci_h1(j,1)' channel.foci_h2(j,1)' channel.foci_h3(j,1)' channel.foci_h(j,1)']];
-%                 end 
-%                 
-%             end
-% 
-%         end
-%         
-%     end
-%     
-%     if mod(i,100)==0
-%         i
-%     end
-%     
-% end
-% 
-% save('/Users/Fangwei/Documents/Adder/Analysis/20170519_FS103_DnaN_yPet_glu_25p_200ms_SJW104_2min/analysis_FL/IW_foci_20170519.mat');
+px_to_mu = 0.065;
+t_int = 3.0;
+start_cut = 0;
+end_cut = 1500;
+
+% extract data
+L = length(fieldnames(cell_data));
+fnames = fieldnames(cell_data);
+
+channel = cell(1,1);
+Foci_all = [];
+
+
+for i = 1:L
+    
+    N = length( cell_data.(fnames{i}).times );
+          
+    channel = cell_data.(fnames{i}); 
+    
+    if isempty(channel.foci_h) == 0 && channel.division_time < end_cut %&& channel.peak > 0 && channel.peak < 2000 
+    
+        for j = 1:N
+            
+            if isempty(channel.foci_h) == 0
+
+                iscell_foci = double(iscell(channel.foci_h));
+
+                if iscell_foci == 1
+                    Foci_all = [Foci_all; [channel.foci_h{1,j}']];
+                end
+
+                if iscell_foci == 0
+                    Foci_all = [Foci_all; [channel.foci_h(j,1)']];
+                end 
+                
+            end
+
+        end
+        
+    end
+    
+    if mod(i,100)==0
+        i
+    end
+    
+end
+
+save('../../analysis/IW_foci_20171026.mat');
 
 %% plot
 close all;
-load('/Users/Fangwei/Documents/Adder/Analysis/20170519_FS103_DnaN_yPet_glu_25p_200ms_SJW104_2min/analysis_FL/IW_foci_20170519.mat');
+load('../../analysis/IW_foci_20171026.mat');
 
 foci_counter = length(Foci_all(:,1));
 bin_wid_scale = 500;
@@ -76,76 +73,14 @@ positions = [400, 400, 420, 400];
 
 
 % %-------------Fitted Peak intensity of focus------------
-% bin_wid1 = mean(Foci_all(:,1))/bin_wid_scale;
-%       
-% fig = figure;
-% set(fig,'Position',positions(1,:));
-% hold on;
-%       
-% [f, x] = hist(Foci_all(:,1), (max(Foci_all(:,1))-min(Foci_all(:,1)))/bin_wid1);
-% h1 = plot(x,f/length(foci_counter));
-% h1.Color = colors(1,:);
-% set(h1,'LineWidth',1,'LineStyle','-');
-% 
-% 
-% set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-% 
-% xlabel('Fitted Peak intensity of focus (AU)','fontsize',20) 
-% set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240],'XTickLabel',{'0','','','','120','','','','240'})
-% xlim([0 mean(Foci_all(:,1))+6*std(Foci_all(:,1))]);
-% 
-% set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
-% 
-% %-------------Fitted Total intensity of focus------------
-% bin_wid2 = mean(Foci_all(:,2))/bin_wid_scale;
-%       
-% fig = figure;
-% set(fig,'Position',positions(1,:));
-% hold on;
-%       
-% [f, x] = hist(Foci_all(:,2), (max(Foci_all(:,2))-min(Foci_all(:,2)))/bin_wid2);
-% h1 = plot(x,f/length(foci_counter));
-% h1.Color = colors(1,:);
-% set(h1,'LineWidth',1,'LineStyle','-');
-% 
-% 
-% set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-% 
-% xlabel('Fitted Total intensity of focus (AU)','fontsize',20) 
-% set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240]*1e2,'XTickLabel',{'0','','','','1.2\times10^4','','','','2.4\times10^4'})
-% xlim([0 mean(Foci_all(:,2))+6*std(Foci_all(:,2))])
-% 
-% set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1]) 
-%        
-%-------------Peak intensity of focus------------
-bin_wid3 = mean(Foci_all(:,3))/bin_wid_scale;
-      
-fig = figure;
-set(fig,'Position',positions(1,:));
-hold on;
-      
-[f, x] = hist(Foci_all(:,3), (max(Foci_all(:,3))-min(Foci_all(:,3)))/bin_wid3);
-h1 = plot(x,f/length(foci_counter));
-h1.Color = colors(1,:);
-set(h1,'LineWidth',1,'LineStyle','-');
-
-
-set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
-
-xlabel('Peak intensity of focus (AU)','fontsize',20) 
-set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240],'XTickLabel',{'0','','','','120','','','','240'})
-xlim([0 mean(Foci_all(:,3))+6*std(Foci_all(:,3))]);
-
-set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])  
-
 %-------------Total intensity of focus------------
-bin_wid4 = 2*mean(Foci_all(:,4))/bin_wid_scale;
+bin_wid4 = 2*mean(Foci_all(:,1))/bin_wid_scale;
       
 fig = figure;
 set(fig,'Position',positions(1,:));
 hold on;
       
-[f, x] = hist(Foci_all(:,4), (max(Foci_all(:,4))-min(Foci_all(:,4)))/bin_wid4);
+[f, x] = hist(Foci_all(:,1), (max(Foci_all(:,1))-min(Foci_all(:,1)))/bin_wid4);
 h1 = plot(x,f/length(foci_counter));
 h1.Color = colors(1,:);
 set(h1,'LineWidth',1,'LineStyle','-');
@@ -156,25 +91,16 @@ set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
 % xlabel('Total intensity of focus (AU)','fontsize',20) 
 % set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240]*1e2,'XTickLabel',{'0','','','','1.2\times10^4','','','','2.4\times10^4'})
 set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240]*2e2,'XTickLabel',{'','','','','','','','',''})
-xlim([0 mean(Foci_all(:,2))+5*std(Foci_all(:,2))])
+xlim([0 mean(Foci_all(:,1))+5*std(Foci_all(:,1))])
 
 set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1]) 
 
 %% fit the intensity weighting distribution
 % close all;
-N_peak = 2; %two-peak fitting
-[FitResults_temp,GOF_temp,baseline,coeff,residual,xi,yi,BootResults] = peakfit([x' f'],(mean(x)+1*std(x))/2,(mean(x)+1*std(x)),N_peak);
-
-xi_equal = 0;
-for j=2:length(xi)-1
-    sign_temp = (yi(1,j)-yi(2,j))*(yi(1,j+1)-yi(2,j+1));
-    if sign_temp<0;
-        xi_equal = xi(j);
-    end
-end
-
 %%------multi-gaussian fitting
 [fit1 gof] = fit(x.', f.','gauss2');
+% [fit1 gof] = fit(x.', f.','gauss2','Lower',[80 5e3 0 20 1.0e4 0],'Upper',[160 8e3 1e4 80 2.5e4 1e4])
+
 g1 = fit1.a1*exp(-((x-fit1.b1)./fit1.c1).^2);
 g2 = fit1.a2*exp(-((x-fit1.b2)./fit1.c2).^2);
 % g3 = fit1.a3*exp(-((x-fit1.b3)./fit1.c3).^2);
