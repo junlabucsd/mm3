@@ -15,11 +15,11 @@ except:
     import pickle
 import numpy as np
 import matplotlib as mpl
+# mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 # global settings mpl
-mpl.use('Agg')
 plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
@@ -328,7 +328,7 @@ def preload_images(specs, fov_id_list):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    do_crosscorrs = False
+    do_crosscorrs = True
     interactive = True
     nproc = 6
     specfile = None
