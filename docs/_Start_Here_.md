@@ -171,3 +171,34 @@ The cell data output by mm3_Segment.py contains information about all cells in t
 ### Output data to various formats (mm3_OutputData.py).
 
 The cell information output by mm3_Segment.py is in the form of a dictionary of Cell objects which describe individual cells. You can use mm3_OutputData.py to both filter that dictionary and to save the data in different formats. See **Cell_data_description** for more information.
+
+### Filtering of the cells pickle file (mm3_postprocessing.py)
+The `all_cells.pkl` file may contain problematic cells. For example incomplete generations, or simply non-healthy cells. The `mm3_postprocessing.py` script implements a straightforward pipeline for filtering consiting of:
+1. Removal of incomplete cells (*i.e.* without parent and daughters).
+2. Retaining certain label types (*e.g.* mother cell label type).
+3. Filtering based on scalar quantities such as cell size at birth or generation time.
+4. Retaining cells belonging to continuous lineages of at least a given length.
+
+All these operations can be adjusted in the yaml file given as input (see the template named `params_postprocessing.yaml`). The syntax for applying the filtering is:
+```
+python mm3_postprocessing.py all_cells.pkl -f path/to/params_postprocessing.yaml
+```
+
+The output will be:
+* a filtered pickle file (*e.g.* `all_cells_filtered.pkl`)
+* a file containing the list of lineages of a given length (*e.g.* `all_cells_lineages.pkl`). Note that the filtered cells pickle file will be restrained to those continuous lineages only if the option `keep_continuous_only` in the parameters file is set to `True`.
+
+### Plots based on the cells pickle file (mm3_plots_alternative.py)
+The `mm3_plots_alternative.py` has the following syntax:
+```
+python mm3_plots_alternative.py all_cells_filtered.pkl -f path/to/params_postprocessing.yaml [--distributions] [--crosscorrelations] [--autocorrelations] [-l lineages.pkl]
+```
+
+Each option has the following function:
+* `--distributions`: plot the distributions of the selected variables.
+* `--crosscorrelations`: plot the cross-correlations of the selected variables.
+* `--autocorrelations`: plot the autocorrelations of the selected variables.
+* `-l lineages.pkl`: plots on a per lineage basis.
+
+All options for plots are passed through the `params_postprocessing.yaml` file.
+

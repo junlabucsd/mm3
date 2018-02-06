@@ -1,0 +1,104 @@
+###############################################################################
+# filtering
+###############################################################################
+filters:
+  cell_generation_index: [1]
+    # mother cell: 1
+
+  fovpeak:
+    # dictionary format fov: [peak1, peak2, ..., peakN]
+    # leave value empty for selection of whole FOV
+    # otherwise list of peaks as value
+    # leave blank to select all fovs and all peaks
+
+  lineages:
+    keep_continuous_only: False
+    args:
+      min_gen: 3
+
+  cutoffs:
+    # keys of this dictionary must map scalar or array of scalars attributes in the Cell class
+    sb:
+      plo: 2
+      phi: 2
+      #method: logmean
+      #method: mean
+      method: median
+    tau:
+      plo: 1.5
+      phi: 4
+      #method: median-min
+      method: median
+      #method: mean
+
+###############################################################################
+# plots
+###############################################################################
+plots:
+  distributions:
+    attributes:
+      sb:
+        label: "$S_b$"
+      sd:
+        label: "$S_d$"
+      delta:
+        label: "$\\Delta_d$"
+      elong_rate:
+        label: "$\\lambda$"
+      tau:
+        label: "$\\tau$"
+
+  cross correlations:
+    attributes:
+      sb:
+        label: "$S_b$"
+      sd:
+        label: "$S_d$"
+      delta:
+        label: "$\\Delta_d$"
+      elong_rate:
+        label: "$\\lambda$"
+      tau:
+        label: "$\\tau$"
+    args:
+      method: pearsonr
+      #method: spearmanr
+
+  autocorrelations:
+    attributes:
+      sb:
+        label_d: "$S_b^{n+1}$"
+        label_m: "$S_b^{n}$"
+      sd:
+        label_d: "$S_d^{n+1}$"
+        label_m: "$S_d^{n}$"
+      delta:
+        label_d: "$\\Delta_d^{n+1}$"
+        label_m: "$\\Delta_d^{n}$"
+      elong_rate:
+        label_d: "$\\lambda^{n+1}$"
+        label_m: "$\\lambda^{n}$"
+      tau:
+        label_d: "$\\tau^{n+1}$"
+        label_m: "$\\tau^{n}$"
+    args:
+      method: pearsonr
+      #method: spearmanr
+
+  plot_lineages_byfov:
+    args:
+      color: black
+      ax_height: 3
+      ax_width_per_hour: 2
+      fovs:
+
+  plot_lineages_individually:
+    fovs:
+      #5: [694, 1656]
+    args:
+      color: black
+      stitch: True
+      logscale: True
+      pfit: 2
+      showfits: False
+
