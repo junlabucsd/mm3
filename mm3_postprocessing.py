@@ -164,6 +164,25 @@ def filter_cells(cells, par=None):
     # return new dict
     return {key: cells[key] for key in np.array(cells.keys())[idx]}
 
+def compute_growth_rate_minute(cell, mpf=1):
+    """
+    Compute the growth in minute for the input cell object.
+    """
+    cell.times_min = np.array(cell.times) * mpf # create a time index in minutes
+
+    X = np.array(cell.times_min, dtype=np.float_)
+    Y = np.array(cell.lengths, dtype=np.float_)
+    idx = np.argsort(X)
+    X = X[idx]
+    Y = Y[idx]
+    Z = np.log(Y)
+    pf = np.polyfit(X-X[0],Z,deg=1) # fit to a line of the log-length
+    gr = pf[0]  # growth rate in per minute
+    cell.growth_rate = gr
+    cell.growth_rate_intercept = pf[1]
+
+    return
+
 ################################################
 # main
 ################################################
@@ -176,7 +195,6 @@ if __name__ == "__main__":
     namespace = parser.parse_args(sys.argv[1:])
     paramfile = namespace.paramfile.name
     allparams = yaml.load(namespace.paramfile)
-    params = allparams['filters']
     data = pkl.load(namespace.pklfile)
     dataname = os.path.splitext(os.path.basename(namespace.pklfile.name))[0]
     ddir = os.path.dirname(namespace.pklfile.name)
@@ -184,6 +202,9 @@ if __name__ == "__main__":
 
     ncells = len(data)
     print "ncells = {:d}".format(ncells)
+
+    # first initialization of parameters
+    params = allparams['filters']
 
 ################################################
 # Make test set
@@ -299,8 +320,21 @@ if __name__ == "__main__":
 ################################################
 # compute extra-quantities
 ################################################
+    # second initialization of parameters
     print print_time(), "Compute extra-quantities..."
-    if namespace.computations:
+    if namespace.computations and ('computations' in allparams):
+        params = allparams['computations']
+
+        # Compute the growth rate in minutes
+        for key in data:
+            cell = data[key]
+            try:
+                mpf = float(params['growth_rate']['min_per_frame'])
+            except KeyError:
+                print "Could not read the min_per_frame parameter. Default to mpf=1"
+                mpf = 1.
+            compute_growth_rate_minute(cell, mpf=mpf)
+
 
 ################################################
 # write dictionary

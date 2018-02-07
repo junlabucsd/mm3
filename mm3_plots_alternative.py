@@ -172,7 +172,7 @@ def plot_lineages_byfov(lineages,cells,fileoutspl, color='black', lw=0.5, ax_hei
             for lin in lineage_byfov_bypeak(lineages, cells, fov=fov, peaks=[peak]):
                 for key in lin:
                     cell = cells[key]
-                    X = np.array(cell.times)
+                    X = np.array(cell.times_min)
                     Y = np.array(cell.lengths)
                     Y *= scale
                     ax.plot(X, Y, '-', color=color, lw=lw)
@@ -204,7 +204,7 @@ def plot_lineages_byfov(lineages,cells,fileoutspl, color='black', lw=0.5, ax_hei
         plt.close('all')
     return
 
-def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, color='black', color1='darkblue', color2='darkred', lw=0.5, logscale=True, pfit=2, showfits=False, acf_dtau_max=2, T_filter=None):
+def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, color='black', color1='darkblue', color2='darkgreen', lw=0.5, ms=1, logscale=True, pfit=2, showfits=False, acf_dtau_max=2, T_filter=None):
     """
     plot lineage.
     plot growth rate.
@@ -234,6 +234,9 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     XX = []
     YY = []
     YYs = []
+    ZZ = [] # hold line for constant gr per generation
+    ZZs = []
+    GR = []
 
     cell = cells[lineage[0]]
     Sref = cell.sb
@@ -241,19 +244,27 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     for key in lineage:
         cell = cells[key]
-        X = np.array(cell.times)
+        X = np.array(cell.times_min)
         Y = np.array(cell.lengths) * scale
+        gr = cell.growth_rate
+        y0 = np.exp(cell.growth_rate_intercept) * scale
+        Z = y0*np.exp(gr*(X-X[0]))
+        GR.append(gr)
 
         fac = Sref/Y[0]
         Ys = Y*fac
         Sref = Ys[-1]
+        Zs = y0*fac*np.exp(gr*(X-X[0]))
 
         XX.append(X)
         YY.append(Y)
         YYs.append(Ys)
+        ZZ.append(Z)
+        ZZs.append(Zs)
 
         if not stitch:
-            ax.plot(X, Y, '-', color=color, lw=lw)
+            ax.plot(X, Y, '.', color=color, ms=ms)
+            ax.plot(X, Z, '-', color=color2, lw=lw)
 
     for i in range(ncell-1):
         x0 = XX[i][-1]
@@ -267,12 +278,15 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     Xs = []
     Ys = []
-    for x, ys in zip(XX,YYs):
+    Zs = []
+    for x, ys, zs in zip(XX,YYs,ZZs):
         Xs = np.append(Xs,x)
         Ys = np.append(Ys,ys)
+        Zs = np.append(Zs,zs)
 
     if stitch:
-        ax.plot(Xs, Ys, '.', color=color, lw=lw, ms=2)
+        ax.plot(Xs, Ys, '.', color=color, ms=ms)
+        ax.plot(Xs, Zs, '-', color=color2, lw=lw)
 
     if logscale:
         ax.set_yscale('log', basey=2)
@@ -286,7 +300,11 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     ## plot growth rate
     ax = ax_left_bot
-    # compute growth rates
+    # plot generation growth rates
+    for x, gr in zip(XX,GR):
+        ax.plot([x[0],x[-1]],[gr*60,gr*60], '-', color=color2, lw=lw)
+
+    # compute instantaneous growth rates
     Zs = np.log(Ys)
     pf = np.polyfit(Xs,Zs,deg=1)
     Xfit = np.linspace(np.min(Xs),np.max(Xs),100)
@@ -296,7 +314,7 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     X1, Z1, X1fits, Z1fits = get_derivative(Xs,Zs,p=pfit,deg=1, fits=True)
 
-    ax.plot(X1, Z1*60, '-', color=color1, lw=lw)
+    ax.plot(X1, Z1*60, '--', color=color1, lw=lw)
 
     # filter
     #wn = 0.05
@@ -304,14 +322,14 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     tmin = np.min(X1)
     tnyq = (tmax-tmin)/len(X1) # sampling time
     if (T_filter == None):
-        T_filter = np.log(2.)/gr_glb  * 0.5
-    fn = 0.5 * 1./T_filter
-    fnyq = 0.5 * 1./ (tnyq) # the fastest frequency is when a cosine performs one half-cycle per sampling time. There is no sense in authorizing fluctuations faster than the sampling interval.
+        T_filter = np.log(2.)/gr_glb
+    fn = 0.5/T_filter
+    fnyq = 0.5/ tnyq # the fastest frequency is when a cosine performs one half-cycle per sampling time. There is no sense in authorizing fluctuations faster than the sampling interval.
     wn = fn/fnyq
     #print "wn = {:.4f}".format(wn)
     b, a = signal.butter(3, wn) # second argument is in unit of the nyquist frequency = 1/2 1/N (N = len(sample)). The input given in minutes is therefore the half period of the fastest sine wave. A good rule of thumb seems to be choosing a half-period which is ~1 generation time. first argument is the order of the low-pass filter.
     Z1_fil = signal.filtfilt(b,a, Z1,method='gust')
-    ax.plot(X1, Z1_fil*60, '-', color=color2, lw=2.*lw)
+    ax.plot(X1, Z1_fil*60, '-', color=color1, lw=2.*lw)
     """
     Ys_fil = signal.filtfilt(b,a, Ys ,method='gust')
     Zs_fil = np.log(Ys_fil)
@@ -346,16 +364,17 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
         ax.axvline(x=0.5*(x0+x1), linestyle='--', color=color, lw=lw)
 
     time = X1[:]
-    growth_rates = Z1[:]
+    growth_rates_raw = Z1[:]
     growth_rates_fil = Z1_fil[:]
-    gr_mean = np.mean(growth_rates)
-    gr_std = np.std(growth_rates)
-    gr_cv = gr_std / gr_mean
+    growth_rates_gen = np.array(GR)[:]
+    gr_mean_gen = np.mean(growth_rates_gen)
+    gr_std_gen = np.std(growth_rates_gen)
+    gr_cv_gen = gr_std_gen / gr_mean_gen
     gr_mean_fil = np.mean(growth_rates_fil)
     gr_std_fil = np.std(growth_rates_fil)
     gr_cv_fil = gr_std_fil / gr_mean_fil
-    tau = np.log(2.)/gr_mean
-    ax.axhline(y=gr_mean*60, color=color, linestyle='--', lw=lw, label="$<\lambda> = {:.2f}$ $[h^{{-1}}]$\n$\\tau = {:.0f}$ [min]".format(gr_mean*60, tau))
+    tau = np.log(2.)/gr_glb
+    ax.axhline(y=gr_glb*60, color=color, linestyle='--', lw=lw, label="$<\lambda> = {:.2f}$ $[h^{{-1}}]$\n$\\tau = {:.0f}$ [min]".format(gr_glb*60, tau))
     ax.legend(loc='best', fontsize='x-small')
 
     ax.set_xlabel('time [min]', fontsize='x-small')
@@ -370,18 +389,17 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     ## histogram
     ax = ax_right_top
 
-    hist,edges = histogram(growth_rates, density=False)
+    hist,edges = histogram(growth_rates_gen*60., density=True)
     #ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color='none', edgecolor=color, lw=lw)
-    label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(gr_mean*60,gr_cv*100.)
-    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color1, edgecolor='none', lw=0., alpha=0.5, label=label)
+    label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(gr_mean_gen*60,gr_cv_gen*100.)
+    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color2, edgecolor='none', lw=0., alpha=0.7, label=label)
 
-    hist,edges = histogram(growth_rates_fil, density=False)
+    hist,edges = histogram(growth_rates_fil*60., density=True)
     #ax.plot(edges[:-1], hist, '-', color=color, lw=lw)
     #ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color='none', edgecolor=color, lw=lw)
     label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(gr_mean_fil*60,gr_cv_fil*100.)
-    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color2, edgecolor='none', lw=0., alpha=0.5, label=label)
+    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color1, edgecolor='none', lw=0., alpha=0.5, label=label)
 
-    label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(gr_mean*60,gr_cv*100.)
     #text = "Mean = {:.2f} ({:.2f}) $[h^{{-1}}]$\nCV = {:<.0f}% ({:<.0f}%)".format(gr_mean*60,gr_mean_fil*60, gr_cv*100., gr_cv_fil*100)
     #ax.set_title(text, fontsize='x-small')
     ax.legend(loc='best', fontsize='xx-small')
@@ -396,27 +414,27 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     ## autocorrelation function
     ax = ax_right_bot
 
-    r_gr=correlation_pearsonr(growth_rates,growth_rates)
-    r_gr_fil=correlation_pearsonr(growth_rates_fil,growth_rates_fil)
-
-    idx = ((time - time[0]) <= acf_dtau_max*tau)
-    X=time[idx] - time[0]
-    Y=r_gr[idx]
-    Y_fil=r_gr_fil[idx]
-    M = len(X)
-    npts=1000
-    dn = max(1,np.int_(np.float_(M)/npts))
-    X=X[::dn]
-    Y=Y[::dn]
-    ax.plot(X,Y,'-.', color=color, lw=lw)
-    ax.plot(X,Y_fil,'-', color=color, lw=lw)
-
-    k0 = np.argmin(np.abs(X-tau))
-    x0 = X[k0]
-    y0 = Y[k0]
-    ax.axvline(x=x0, lw=lw, linestyle='--', color=color)
-    text = "$r_{{PE}}(\\tau) = {:.1f}$".format(y0)
-    ax.annotate(text, xy=(x0,y0), xycoords='data', xytext=(1.,0.98), textcoords='axes fraction', fontsize='x-small', ha='right', va='top')
+    #r_gr=correlation_pearsonr(growth_rates,growth_rates)
+#    r_gr_fil=correlation_pearsonr(growth_rates_fil,growth_rates_fil)
+#
+#    idx = ((time - time[0]) <= acf_dtau_max*tau)
+#    X=time[idx] - time[0]
+#    Y=r_gr[idx]
+#    Y_fil=r_gr_fil[idx]
+#    M = len(X)
+#    npts=1000
+#    dn = max(1,np.int_(np.float_(M)/npts))
+#    X=X[::dn]
+#    Y=Y[::dn]
+#    ax.plot(X,Y,'-.', color=color, lw=lw)
+#    ax.plot(X,Y_fil,'-', color=color, lw=lw)
+#
+#    k0 = np.argmin(np.abs(X-tau))
+#    x0 = X[k0]
+#    y0 = Y[k0]
+#    ax.axvline(x=x0, lw=lw, linestyle='--', color=color)
+#    text = "$r_{{PE}}(\\tau) = {:.1f}$".format(y0)
+#    ax.annotate(text, xy=(x0,y0), xycoords='data', xytext=(1.,0.98), textcoords='axes fraction', fontsize='x-small', ha='right', va='top')
 
     ax.set_xlabel('time [min]', fontsize='x-small')
     ax.set_ylabel('ACF', fontsize='x-small')
@@ -461,6 +479,14 @@ def plot_distributions(cells, attrdict, fileout, color='darkblue', nbins_max=8):
             except ValueError:
                 continue
         X = np.array(X)
+
+        # rescale
+        try:
+            scale = attrdict[attr]['scale']
+            X = X *scale
+        except KeyError:
+            pass
+
         #print len(X)
         mean = np.mean(X)
         std = np.std(X)
@@ -535,6 +561,20 @@ def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2=
             X = np.array(X)
             #print len(X)
             Y = np.array(Y)
+
+            # rescale
+            try:
+                scale = attrdict[attr_col]['scale']
+                X = X * scale
+            except KeyError:
+                pass
+
+            try:
+                scale = attrdict[attr_row]['scale']
+                Y = Y * scale
+            except KeyError:
+                pass
+
             xmean = np.mean(X)
             xstd = np.std(X)
             ymean = np.mean(Y)
@@ -646,6 +686,14 @@ def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='b
                 continue
         X = np.array(X)
         Y = np.array(Y)
+
+        # rescale
+        try:
+            scale = attrdict[attr]['scale']
+            X = X * scale
+            Y = Y * scale
+        except KeyError:
+            pass
 
         # add plot
         ax = fig.add_subplot(gs[0,col])
