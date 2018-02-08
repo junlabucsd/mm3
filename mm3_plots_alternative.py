@@ -123,7 +123,7 @@ def lineage_byfov_bypeak(lineages, cells, fov=None, peaks=None):
 
 def plot_lineages_byfov(lineages,cells,fileoutspl, color='black', lw=0.5, ax_height=3, ax_width_per_hour=2, fovs=None):
     # all cells
-    if (fovs == None):
+    if (fovs is None):
         all_lineages = np.concatenate(lineages)
         fovs = {fov: None for fov in np.unique([cells[key].fov for key in all_lineages])}
 
@@ -142,8 +142,8 @@ def plot_lineages_byfov(lineages,cells,fileoutspl, color='black', lw=0.5, ax_hei
         for lin in selection:
             cellref = cells[lin[0]]
             peak = cellref.peak
-            tstart = np.min([cells[key].birth_time for key in lin])
-            tend = np.max([cells[key].division_time for key in lin])
+            tstart = np.min([cells[key].times_min[0] for key in lin])
+            tend = np.max([cells[key].times_min[-1] for key in lin])
             try:
                 tmin = min_bypeak[peak]
                 if (tstart < tmin):
@@ -179,9 +179,9 @@ def plot_lineages_byfov(lineages,cells,fileoutspl, color='black', lw=0.5, ax_hei
                 for keym,keyd in zip(lin[:-1],lin[1:]):
                     cellm = cells[keym]
                     celld = cells[keyd]
-                    x0 = np.array(cellm.times)[-1]
+                    x0 = np.array(cellm.times_min)[-1]
                     y0 = np.array(cellm.lengths)[-1]
-                    x1 = np.array(celld.times)[0]
+                    x1 = np.array(celld.times_min)[0]
                     y1 = np.array(celld.lengths)[0]
                     y0 *= scale
                     y1 *= scale
@@ -227,6 +227,21 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     ax_left_bot = fig.add_subplot(gs[1,0])
     ax_right_top = fig.add_subplot(gs[0,1])
     ax_right_bot = fig.add_subplot(gs[1,1])
+
+    # compute average growth rate
+    Xpop = []
+    for key in cells:
+        cell = cells[key]
+        try:
+            x = np.float_(cell.growth_rate)
+            if np.isfinite(x):
+                Xpop.append(x)
+        except ValueError:
+            continue
+    Xpop = np.array(Xpop)
+    gr_mean_pop = np.mean(Xpop)
+    gr_std_pop = np.std(Xpop)
+    gr_cv_pop = gr_std_pop / gr_mean_pop
 
     # fill-in first axes
     ## plot growth curves
@@ -287,6 +302,8 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     if stitch:
         ax.plot(Xs, Ys, '.', color=color, ms=ms)
         ax.plot(Xs, Zs, '-', color=color2, lw=lw)
+
+        ax.plot(Xs, Ys[0]*np.exp(gr_mean_pop*(Xs-Xs[0])), '-.', color=color, lw=lw, label='$\\lambda_{{pop}} = {:.2f}$ $[h^{{-1}}]$'.format(gr_mean_pop*60.))
 
     if logscale:
         ax.set_yscale('log', basey=2)
@@ -356,7 +373,7 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
             ax_left_top.plot(Xs_fil, np.exp(Zs_fil), '-b', lw=lw)
             for x1fit, z1fit in zip(X1fits,Z1fits):
                 y1fit = np.exp(z1fit)
-                ax_left_top.plot(x1fit,y1fit, '-g', lw=lw)
+                ax_left_top.plot(x1fit,y1fit, '-', color=color1, lw=lw)
 
     for i in range(ncell-1):
         x0 = XX[i][-1]
@@ -392,7 +409,7 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     hist,edges = histogram(growth_rates_gen*60., density=True)
     #ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color='none', edgecolor=color, lw=lw)
     label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(gr_mean_gen*60,gr_cv_gen*100.)
-    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color2, edgecolor='none', lw=0., alpha=0.7, label=label)
+    ax.bar(left=edges[:-1], height=hist, width=edges[1:]-edges[:-1], linestyle='-', color=color2, edgecolor='none', lw=0., alpha=0.5, label=label)
 
     hist,edges = histogram(growth_rates_fil*60., density=True)
     #ax.plot(edges[:-1], hist, '-', color=color, lw=lw)
@@ -411,10 +428,21 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-    ## autocorrelation function
-    ax = ax_right_bot
 
-    #r_gr=correlation_pearsonr(growth_rates,growth_rates)
+    ax = ax_right_bot
+    X_gen = np.arange(len(growth_rates_gen))+1
+    Y = growth_rates_gen[:]*60.
+    ax.plot(X_gen,Y,'-o', color=color2, lw=lw, ms=2*ms)
+    ax.set_xlabel('generation', fontsize='x-small')
+    ax.set_ylabel('growth rate $[h^{-1}]$', fontsize='x-small')
+    #ax.tick_params(length=2)
+    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+#    ## autocorrelation function
+#    ax = ax_right_bot
+#    #r_gr=correlation_pearsonr(growth_rates,growth_rates)
 #    r_gr_fil=correlation_pearsonr(growth_rates_fil,growth_rates_fil)
 #
 #    idx = ((time - time[0]) <= acf_dtau_max*tau)
@@ -435,17 +463,522 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 #    ax.axvline(x=x0, lw=lw, linestyle='--', color=color)
 #    text = "$r_{{PE}}(\\tau) = {:.1f}$".format(y0)
 #    ax.annotate(text, xy=(x0,y0), xycoords='data', xytext=(1.,0.98), textcoords='axes fraction', fontsize='x-small', ha='right', va='top')
+#    ax.set_xlabel('time [min]', fontsize='x-small')
+#    ax.set_ylabel('ACF', fontsize='x-small')
+#    #ax.tick_params(length=2)
+#    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+#    ax.spines['right'].set_visible(False)
+#    ax.spines['top'].set_visible(False)
+
+    fig.suptitle("FOV {:d}{:4s}peak = {:d}".format(fov,',',peak), fontsize='medium')
+    rect = [0.,0.,1.,0.98]
+    gs.tight_layout(fig,rect=rect)
+    fileout = "{}_xy{:03d}p{:04d}t{:d}-{:d}.pdf".format(fileoutspl,fov,peak,tstart,tend)
+    print "{:<20s}{:<s}".format('fileout',fileout)
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    return
+
+def plot_lineage_variables(lineage, cells, fileoutspl, attrdict=None, stitch=False, color='black', color1='darkgreen', lw=0.5, ms=1, logscale=True):
+    """
+    plot lineage.
+    plot choosen attributes:
+        o cv across lineage
+        o evolution during lineage
+    """
+    # preliminary check
+    if (attrdict is None) or (type(attrdict) != dict) or (len(attrdict) == 0):
+        print "List of observables empty!"
+        return
+
+    # some information
+    cell_tp = cells[lineage[0]]
+    Sref = cell_tp.sb
+    scale = cell_tp.sb / cell_tp.lengths[0]
+    fov = cell_tp.fov
+    peak = cell_tp.peak
+    ncell = len(lineage)
+    tstart = np.min([cells[key].birth_time for key in lineage])
+    tend = np.max([cells[key].division_time for key in lineage])
+    attributes = attrdict.keys()
+    nattr = len(attributes)
+    ncol = nattr
+
+    # compute average growth rate
+    Xpop = []
+    for key in cells:
+        cell = cells[key]
+        try:
+            x = np.float_(cell.growth_rate)
+            if np.isfinite(x):
+                Xpop.append(x)
+        except ValueError:
+            continue
+    Xpop = np.array(Xpop)
+    gr_mean_pop = np.mean(Xpop)
+    gr_std_pop = np.std(Xpop)
+    gr_cv_pop = gr_std_pop / gr_mean_pop
+
+    # figure
+    fig = plt.figure(num='none', facecolor='w')
+    gs = gridspec.GridSpec(3,ncol, height_ratios=[1.5,1.5,2])
+    ax_trace = fig.add_subplot(gs[2,:])
+    axdict = {key: [fig.add_subplot(gs[0,i]), fig.add_subplot(gs[1,i])] for i,key in enumerate(attributes)}
+
+    # fill-in first axes
+    ## plot growth curves
+    ax = ax_trace
+    XX = []
+    YY = []
+    YYs = []
+
+    for key in lineage:
+        cell = cells[key]
+        X = np.array(cell.times_min)
+        Y = np.array(cell.lengths) * scale
+
+        fac = Sref/Y[0]
+        Ys = Y*fac
+        Sref = Ys[-1]
+
+        XX.append(X)
+        YY.append(Y)
+        YYs.append(Ys)
+
+        if not stitch:
+            ax.plot(X, Y, '-', color=color, lw=lw, ms=ms)
+
+    for i in range(ncell-1):
+        x0 = XX[i][-1]
+        x1 = XX[i+1][0]
+        if stitch:
+            ax.axvline(x=0.5*(x0+x1), linestyle='--', color=color, lw=lw)
+        else:
+            y0 = YY[i][-1]
+            y1 = YY[i+1][0]
+            ax.plot([x0,x1],[y0, y1], '--', color=color, lw=lw)
+
+    Xs = []
+    Ys = []
+    for x, ys in zip(XX,YYs):
+        Xs = np.append(Xs,x)
+        Ys = np.append(Ys,ys)
+
+    if stitch:
+        ax.plot(Xs, Ys, '-', color=color, lw=lw, ms=ms)
+        ax.plot(Xs, Ys[0]*np.exp(gr_mean_pop*(Xs-Xs[0])), '-.', color=color, lw=lw, label='$\\lambda_{{pop}} = {:.2f}$ $[h^{{-1}}]$'.format(gr_mean_pop*60.))
+        ax.legend(loc='best', fontsize='xx-small')
+
+    if logscale:
+        ax.set_yscale('log', basey=2)
 
     ax.set_xlabel('time [min]', fontsize='x-small')
-    ax.set_ylabel('ACF', fontsize='x-small')
+    ax.set_ylabel('length $[\mu m]$',fontsize='x-small')
     #ax.tick_params(length=2)
     ax.tick_params(axis='both', labelsize='xx-small', pad=2)
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
+    # plot per attrbute
+    for i, attr in enumerate(attributes):
+        ax_top, ax_bot = axdict[attr]
+
+        # build data
+        X = []
+        for key in lineage:
+            cell = cells[key]
+            try:
+                x = np.float_(getattr(cell,attr))
+                if np.isfinite(x):
+                    X.append(x)
+            except ValueError:
+                continue
+        X = np.array(X)
+
+        Xpop = []
+        for key in cells:
+            cell = cells[key]
+            try:
+                x = np.float_(getattr(cell,attr))
+                if np.isfinite(x):
+                    Xpop.append(x)
+            except ValueError:
+                continue
+        Xpop = np.array(Xpop)
+
+        # rescale
+        try:
+            scale = attrdict[attr]['scale']
+            X = X *scale
+            Xpop = Xpop *scale
+        except KeyError:
+            pass
+
+        #print len(X)
+        mean = np.mean(X)
+        std = np.std(X)
+        cv = std/mean
+        mean_pop = np.mean(Xpop)
+        std_pop = np.std(Xpop)
+
+        # axis label
+        try:
+            axis_label = attrdict[attr]['label']
+        except KeyError:
+            axis_label = attr
+
+        # histogram
+        ax = ax_top
+        hist,edges = histogram(X)
+        left = edges[:-1]
+        right = edges[1:]
+        idx = (hist != 0.)
+        label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(mean,cv*100)
+        ax.bar(left=left, height=hist, width=right-left, linestyle='-', color=color1, edgecolor='none', lw=0., label=label, alpha=0.5)
+        ax.axvline(x=mean_pop-std_pop, linestyle='--', color='k', lw=lw)
+        ax.axvline(x=mean_pop+std_pop, linestyle='--', color='k', lw=lw)
+        ax.axvline(x=mean_pop, linestyle='-', color='k', lw=lw)
+        ax.legend(loc='best', fontsize='xx-small')
+        ax.set_yticks([])
+        ax.set_xlabel(axis_label, fontsize='x-small')
+        ax.set_ylabel('pdf', fontsize='x-small')
+        #ax.tick_params(length=2)
+        ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+
+        # generation trace
+        ax = ax_bot
+        X_gen = np.arange(len(X))+1
+        ax.plot(X_gen,X,'-o', color=color1, lw=lw, ms=2*ms)
+        ax.set_xlabel('generation', fontsize='x-small')
+        ax.set_ylabel(axis_label, fontsize='x-small')
+        ax.axhline(y=mean_pop-std_pop, linestyle='--', color='k', lw=lw)
+        ax.axhline(y=mean_pop+std_pop, linestyle='--', color='k', lw=lw)
+        ax.axhline(y=mean_pop, linestyle='-', color='k', lw=lw, label='popul.')
+        #ax.tick_params(length=2)
+        ax.xaxis.set_major_locator(matplotlib.ticker.IndexLocator(base=2, offset=0))
+        #ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda x,pos: int(x+0.5)))
+        ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.legend(loc='best', fontsize='xx-small')
+
     fig.suptitle("FOV {:d}{:4s}peak = {:d}".format(fov,',',peak), fontsize='medium')
     rect = [0.,0.,1.,0.98]
     gs.tight_layout(fig,rect=rect)
+    fileout = "{}_xy{:03d}p{:04d}t{:d}-{:d}.pdf".format(fileoutspl,fov,peak,tstart,tend)
+    print "{:<20s}{:<s}".format('fileout',fileout)
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    return
+
+def plot_lineage_correlations(lineage, cells, fileoutspl, attrdict=None, stitch=False, color='black', color1='darkgreen', lw=0.5, ms=2, logscale=True):
+    """
+    plot lineage.
+    plot attributes correlations
+    """
+    # preliminary check
+    if (attrdict is None) or (type(attrdict) != dict) or (len(attrdict) == 0):
+        print "List of observables empty!"
+        return
+
+    # some information
+    cell_tp = cells[lineage[0]]
+    Sref = cell_tp.sb
+    scale = cell_tp.sb / cell_tp.lengths[0]
+    fov = cell_tp.fov
+    peak = cell_tp.peak
+    ncell = len(lineage)
+    tstart = np.min([cells[key].birth_time for key in lineage])
+    tend = np.max([cells[key].division_time for key in lineage])
+    attributes = np.array(attrdict.keys())
+    nattr = len(attributes)
+    ncol = nattr
+
+    # compute average growth rate
+    Xpop = []
+    for key in cells:
+        cell = cells[key]
+        try:
+            x = np.float_(cell.growth_rate)
+            if np.isfinite(x):
+                Xpop.append(x)
+        except ValueError:
+            continue
+    Xpop = np.array(Xpop)
+    gr_mean_pop = np.mean(Xpop)
+    gr_std_pop = np.std(Xpop)
+    gr_cv_pop = gr_std_pop / gr_mean_pop
+
+    # figure
+    r = 4./3.
+    axdim=1.5
+    figsize=nattr*r*axdim, (nattr + 1 + 1)*axdim
+    #fig = plt.figure(num='none', facecolor='w')
+    #gs = gridspec.GridSpec(nattr+1+1,nattr, height_ratios=[1.5]*(nattr+1)+[2])
+    fig = plt.figure(num='none', facecolor='w', figsize=figsize)
+    gs = gridspec.GridSpec(nattr+1+1,nattr)
+    ax_trace = fig.add_subplot(gs[-1,:])
+
+    # fill-in first axes
+    ## plot growth curves
+    ax = ax_trace
+    XX = []
+    YY = []
+    YYs = []
+
+    for key in lineage:
+        cell = cells[key]
+        X = np.array(cell.times_min)
+        Y = np.array(cell.lengths) * scale
+
+        fac = Sref/Y[0]
+        Ys = Y*fac
+        Sref = Ys[-1]
+
+        XX.append(X)
+        YY.append(Y)
+        YYs.append(Ys)
+
+        if not stitch:
+            ax.plot(X, Y, '-', color=color, lw=lw, ms=ms)
+
+    for i in range(ncell-1):
+        x0 = XX[i][-1]
+        x1 = XX[i+1][0]
+        if stitch:
+            ax.axvline(x=0.5*(x0+x1), linestyle='--', color=color, lw=lw)
+        else:
+            y0 = YY[i][-1]
+            y1 = YY[i+1][0]
+            ax.plot([x0,x1],[y0, y1], '--', color=color, lw=lw)
+
+    Xs = []
+    Ys = []
+    for x, ys in zip(XX,YYs):
+        Xs = np.append(Xs,x)
+        Ys = np.append(Ys,ys)
+
+    if stitch:
+        ax.plot(Xs, Ys, '-', color=color, lw=lw, ms=ms)
+        ax.plot(Xs, Ys[0]*np.exp(gr_mean_pop*(Xs-Xs[0])), '-.', color=color, lw=lw, label='$\\lambda_{{pop}} = {:.2f}$ $[h^{{-1}}]$'.format(gr_mean_pop*60.))
+        ax.legend(loc='best', fontsize='xx-small')
+
+    if logscale:
+        ax.set_yscale('log', basey=2)
+
+    ax.set_xlabel('time [min]', fontsize='x-small')
+    ax.set_ylabel('length $[\mu m]$',fontsize='x-small')
+    #ax.tick_params(length=2)
+    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    # plot per attrbute
+    for i, attr_y in enumerate(attributes): # row is y-axis
+        # get label data
+        try:
+            axis_labely = attrdict[attr_y]['label']
+        except KeyError:
+            axis_labely = attr_y
+
+        # build data for Y
+        Y = []
+        for key in lineage:
+            cell = cells[key]
+            try:
+                y = np.float_(getattr(cell,attr_y))
+                if np.isfinite(y):
+                    Y.append(y)
+            except ValueError:
+                continue
+        Y = np.array(Y)
+
+        # build data for average population
+        Ypop = []
+        for key in cells:
+            cell = cells[key]
+            try:
+                y = np.float_(getattr(cell,attr_y))
+                if np.isfinite(y):
+                    Ypop.append(y)
+            except ValueError:
+                continue
+        Ypop = np.array(Ypop)
+
+        # rescale
+        try:
+            scale = attrdict[attr_y]['scale']
+            Y = Y *scale
+            Ypop = Ypop *scale
+        except KeyError:
+            pass
+
+        ymean = np.mean(Y)
+        ystd = np.std(Y)
+        ycv = ystd/ymean
+        ymean_pop = np.mean(Ypop)
+        ystd_pop = np.std(Ypop)
+        Yticks = [ymean - ystd, ymean, ymean + ystd]
+
+        for j, attr_x in enumerate(attributes): # col is x-axis
+            # get label data
+            try:
+                axis_labelx = attrdict[attr_x]['label']
+            except KeyError:
+                axis_labelx = attr_x
+
+            # plot histogram in diagonals
+            if (j==i):
+                ax = fig.add_subplot(gs[i,i])
+                hist,edges = histogram(Y)
+                left = edges[:-1]
+                right = edges[1:]
+                label = "$\mu$ = {:.2f}, CV = {:<.0f}%".format(ymean,ycv*100)
+                ax.bar(left=left, height=hist, width=right-left, linestyle='-', color=color1, edgecolor='none', lw=0., label=label, alpha=0.5)
+
+                ax.set_xticks(Yticks)
+                ax.set_yticks([])
+                ax.tick_params(axis='x', which='both', bottom='on', top='off', labelsize='xx-small')
+                ax.legend(loc='best', fontsize='xx-small')
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+                #ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=nbins_max))
+                ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+
+            else:
+                # build data for X
+                X = []
+                for key in lineage:
+                    cell = cells[key]
+                    try:
+                        x = np.float_(getattr(cell,attr_x))
+                        if np.isfinite(x):
+                            X.append(x)
+                    except ValueError:
+                        continue
+                X = np.array(X)
+
+                # build data for average population
+                Xpop = []
+                for key in cells:
+                    cell = cells[key]
+                    try:
+                        x = np.float_(getattr(cell,attr_x))
+                        if np.isfinite(x):
+                            Xpop.append(x)
+                    except ValueError:
+                        continue
+                Xpop = np.array(Xpop)
+
+                # rescale
+                try:
+                    scale = attrdict[attr_x]['scale']
+                    X = X * scale
+                    Xpop = Xpop * scale
+                except KeyError:
+                    pass
+
+                xmean = np.mean(X)
+                xstd = np.std(X)
+                xcv = xstd/xmean
+                xmean_pop = np.mean(Xpop)
+                xstd_pop = np.std(Xpop)
+                Xticks = [xmean - xstd, xmean, xmean + xstd]
+
+                # axes label
+                ax = fig.add_subplot(gs[i,j])
+                ax.plot(X,Y,'o', color=color1, lw=lw, ms=ms)
+                ax.axvline(x=xmean_pop-xstd_pop, linestyle='-.', color='k', lw=lw, label='popul.')
+                ax.axvline(x=xmean_pop+xstd_pop, linestyle='-.', color='k', lw=lw)
+                ax.axvline(x=xmean_pop, linestyle='--', color='k', lw=lw)
+                ax.axhline(y=ymean_pop-ystd_pop, linestyle='-.', color='k', lw=lw)
+                ax.axhline(y=ymean_pop+ystd_pop, linestyle='-.', color='k', lw=lw)
+                ax.axhline(y=ymean_pop, linestyle='--', color='k', lw=lw)
+
+                ax.set_xticks(Xticks)
+                ax.set_yticks(Yticks)
+                ax.tick_params(axis='x', which='both', bottom='on', top='off', labelsize='xx-small')
+                ax.tick_params(axis='y', which='both', left='on', right='off', labelsize='xx-small')
+                ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+                ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+                #ax.legend(loc='best', fontsize='xx-small')
+                ax.spines['right'].set_visible(False)
+                ax.spines['top'].set_visible(False)
+
+            if (j == 0):
+                ax.annotate(axis_labely, xy=(-0.30,0.5), xycoords='axes fraction', va='center', ha='right', fontsize='x-small', rotation='vertical')
+            if (i == 0):
+                ax.annotate(axis_labelx, xy=(0.5,1.10), xycoords='axes fraction', ha='center', va='bottom', fontsize='x-small')
+
+
+    # plot autocorrelations
+    for j, attr in enumerate(attributes):
+        # get label data
+        try:
+            axis_labely = attrdict[attr]['label_d']
+        except KeyError:
+            axis_labely = attr_y
+        try:
+            axis_labelx = attrdict[attr]['label_m']
+        except KeyError:
+            axis_labelm = attr_m
+
+        # build data
+        X = []
+        Y = []
+        for keyd in lineage:
+            try:
+                celld = cells[keyd]
+                keym=celld.parent
+                cellm = cells[keym]
+                x = np.float_(getattr(cellm,attr))
+                y = np.float_(getattr(celld,attr))
+                if np.isfinite(x) and np.isfinite(y):
+                    X.append(x)
+                    Y.append(y)
+            except ValueError:
+                # error in isfinite tests
+                continue
+            except KeyError:
+                # error in cellm=cells[keym] statement
+                continue
+
+        X = np.array(X)
+        Y = np.array(Y)
+
+        # rescale
+        try:
+            scale = attrdict[attr]['scale']
+            X = X * scale
+            Y = Y * scale
+        except KeyError:
+            pass
+
+        xmean = np.mean(X)
+        xstd = np.std(X)
+        xcv = xstd/xmean
+        Xticks = [xmean - xstd, xmean, xmean + xstd]
+
+        # add plot
+        ax = fig.add_subplot(gs[nattr,j])
+        ax.plot(X,Y,'o', color=color1, ms=ms, lw=lw)
+
+        ax.set_xticks(Xticks)
+        ax.set_yticks(Xticks)
+        ax.tick_params(axis='x', which='both', bottom='on', top='off', labelsize='xx-small')
+        ax.tick_params(axis='y', which='both', left='on', right='off', labelsize='xx-small')
+        ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+        ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.set_ylabel(attrdict[attr]['label_d'], fontsize='x-small')
+        ax.set_xlabel(attrdict[attr]['label_m'], fontsize='x-small')
+
+    fig.suptitle("FOV {:d}{:4s}peak = {:d}".format(fov,',',peak), fontsize='medium')
+    rect = [0.,0.,1.,0.92]
+    gs.tight_layout(fig,rect=rect, w_pad=0.1, h_pad=0.1)
     fileout = "{}_xy{:03d}p{:04d}t{:d}-{:d}.pdf".format(fileoutspl,fov,peak,tstart,tend)
     print "{:<20s}{:<s}".format('fileout',fileout)
     fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
@@ -777,24 +1310,33 @@ if __name__ == "__main__":
 # plot general statistics
     if plot_dist:
         mm3.information ('Plotting distributions.')
+        popdir = os.path.join(plotdir,'population')
+        if not os.path.isdir(popdir):
+            os.makedirs(popdir)
         try:
-            fileout = os.path.join(plotdir,'{}_distributions.pdf'.format(cellnamespl))
+            fileout = os.path.join(popdir,'{}_distributions.pdf'.format(cellnamespl))
             plot_distributions(cells, attrdict=params['distributions']['attributes'], fileout=fileout)
         except:
             print "Error with distributions plotting."
 
     if plot_crosscorr:
         mm3.information ('Plotting cross-correlations.')
+        popdir = os.path.join(plotdir,'population')
+        if not os.path.isdir(popdir):
+            os.makedirs(popdir)
         try:
-            fileout = os.path.join(plotdir,'{}_cross_correlations.pdf'.format(cellnamespl))
+            fileout = os.path.join(popdir,'{}_cross_correlations.pdf'.format(cellnamespl))
             plot_cross_correlations(cells, attrdict=params['cross correlations']['attributes'], fileout=fileout, **params['cross correlations']['args'])
         except:
             print "Error with cross-correlations plotting."
 
     if plot_autocorr:
         mm3.information ('Plotting autocorrelations.')
+        popdir = os.path.join(plotdir,'population')
+        if not os.path.isdir(popdir):
+            os.makedirs(popdir)
         try:
-            fileout = os.path.join(plotdir,'{}_autocorrelations.pdf'.format(cellnamespl))
+            fileout = os.path.join(popdir,'{}_autocorrelations.pdf'.format(cellnamespl))
             plot_autocorrelations(cells, attrdict=params['autocorrelations']['attributes'], fileout=fileout, **params['autocorrelations']['args'])
         except:
             print "Error with autocorrelations plotting."
@@ -805,6 +1347,7 @@ if __name__ == "__main__":
         lineages = pkl.load(namespace.lineagesfile)
 
         if 'plot_lineages_byfov' in params:
+            mm3.information ('Plotting lineages -- by fov.')
             lindir = os.path.join(plotdir,'lineages_byfov')
             if not os.path.isdir(lindir):
                 os.makedirs(lindir)
@@ -813,13 +1356,14 @@ if __name__ == "__main__":
                 plot_lineages_byfov(lineages,cells,fileoutspl, **params['plot_lineages_byfov']['args'])
 
 
-        if 'plot_lineages_individually' in params:
-            lindir = os.path.join(plotdir,'lineages_individually')
+        if 'plot_lineages_with_growth_rate' in params:
+            mm3.information ('Plotting lineages individually -- growth rate.')
+            lindir = os.path.join(plotdir,'lineages_with_growth_rate')
             if not os.path.isdir(lindir):
                 os.makedirs(lindir)
             fileoutspl = os.path.join(lindir,'{}_lineages'.format(cellnamespl))
-            if 'fovs' in params['plot_lineages_individually']:
-                fovs = params['plot_lineages_individually']['fovs']
+            if 'fovs' in params['plot_lineages_with_growth_rate']:
+                fovs = params['plot_lineages_with_growth_rate']['fovs']
                 selection = []
                 if not (fovs is None):
                     for fov in fovs:
@@ -829,4 +1373,43 @@ if __name__ == "__main__":
                 selection = lineages
 
             for lineage in selection:
-                plot_lineage_with_growth_rate(lineage,cells,fileoutspl, **params['plot_lineages_individually']['args'])
+                plot_lineage_with_growth_rate(lineage, cells, fileoutspl, **params['plot_lineages_with_growth_rate']['args'])
+
+        if 'plot_lineages_variables' in params:
+            mm3.information ('Plotting lineages individually -- variables evolution.')
+            lindir = os.path.join(plotdir,'lineages_variables')
+            if not os.path.isdir(lindir):
+                os.makedirs(lindir)
+            fileoutspl = os.path.join(lindir,'{}_lineages'.format(cellnamespl))
+            if 'fovs' in params['plot_lineages_variables']:
+                fovs = params['plot_lineages_variables']['fovs']
+                selection = []
+                if not (fovs is None):
+                    for fov in fovs:
+                        peaks = fovs[fov]
+                        selection = lineage_byfov_bypeak(lineages, cells, fov=fov, peaks=peaks)
+            else:
+                selection = lineages
+
+            for lineage in selection:
+                plot_lineage_variables(lineage, cells,fileoutspl, attrdict=params['plot_lineages_variables']['attributes'], **params['plot_lineages_variables']['args'])
+
+        if 'plot_lineages_correlations' in params:
+            mm3.information ('Plotting lineages individually -- variables correlations.')
+            lindir = os.path.join(plotdir,'lineages_correlations')
+            if not os.path.isdir(lindir):
+                os.makedirs(lindir)
+            fileoutspl = os.path.join(lindir,'{}_lineages'.format(cellnamespl))
+            if 'fovs' in params['plot_lineages_correlations']:
+                fovs = params['plot_lineages_correlations']['fovs']
+                selection = []
+                if not (fovs is None):
+                    for fov in fovs:
+                        peaks = fovs[fov]
+                        selection = lineage_byfov_bypeak(lineages, cells, fov=fov, peaks=peaks)
+            else:
+                selection = lineages
+
+            for lineage in selection:
+                plot_lineage_correlations(lineage, cells,fileoutspl, attrdict=params['plot_lineages_correlations']['attributes'], **params['plot_lineages_correlations']['args'])
+
