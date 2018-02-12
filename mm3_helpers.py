@@ -2164,7 +2164,7 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
     # determine absolute time index
-    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
+    time_table_path = os.path.join(params['ana_dir'],'time_table.pkl')
     with open(time_table_path,'r') as fin:
         time_table = pickle.load(fin)
     times_all = []
