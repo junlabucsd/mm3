@@ -170,6 +170,11 @@ def compute_growth_rate_minute(cell, mpf=1):
     """
     cell.times_min = np.array(cell.times) * mpf # create a time index in minutes
 
+    if (len(cell.times_min) < 2):
+        cell.growth_rate = np.nan
+        cell.growth_rate_intercept = np.nan
+        return
+
     X = np.array(cell.times_min, dtype=np.float_)
     Y = np.array(cell.lengths, dtype=np.float_)
     idx = np.argsort(X)
@@ -191,7 +196,7 @@ if __name__ == "__main__":
     parser.add_argument('pklfile', type=file, help='Pickle file containing the cell dictionary.')
     parser.add_argument('-f', '--paramfile',  type=file, required=True, help='Yaml file containing parameters.')
     parser.add_argument('--trunc',  nargs=2, type=int, help='Make a truncated pkl file for debugging purpose.')
-    parser.add_argument('--computations',  action='store_true', help='Toogle on the computation of extra-quantities (some cells attributes may be overwritten).')
+    parser.add_argument('--nocomputations',  action='store_true', help='Toogle on the computation of extra-quantities (some cells attributes may be overwritten).')
     namespace = parser.parse_args(sys.argv[1:])
     paramfile = namespace.paramfile.name
     allparams = yaml.load(namespace.paramfile)
@@ -321,8 +326,8 @@ if __name__ == "__main__":
 # compute extra-quantities
 ################################################
     # second initialization of parameters
-    print print_time(), "Compute extra-quantities..."
-    if namespace.computations and ('computations' in allparams):
+    if (not namespace.nocomputations) and ('computations' in allparams):
+        print print_time(), "Compute extra-quantities..."
         params = allparams['computations']
 
         # Compute the growth rate in minutes

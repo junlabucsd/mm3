@@ -303,7 +303,6 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
         ax.plot(Xs, Ys, '.', color=color, ms=ms)
         ax.plot(Xs, Zs, '-', color=color2, lw=lw)
 
-        ax.plot(Xs, Ys[0]*np.exp(gr_mean_pop*(Xs-Xs[0])), '-.', color=color, lw=lw, label='$\\lambda_{{pop}} = {:.2f}$ $[h^{{-1}}]$'.format(gr_mean_pop*60.))
 
     if logscale:
         ax.set_yscale('log', basey=2)
@@ -323,11 +322,13 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     # compute instantaneous growth rates
     Zs = np.log(Ys)
-    pf = np.polyfit(Xs,Zs,deg=1)
-    Xfit = np.linspace(np.min(Xs),np.max(Xs),100)
+    pf = np.polyfit(Xs-Xs[0],Zs,deg=1)
+    Xfit = np.linspace(np.min(Xs-Xs[0]),np.max(Xs-Xs[0]),100)
     Zfit = np.poly1d(pf)(Xfit)
+    Xfit += Xs[0]
     Yfit = np.exp(Zfit)
     gr_glb = pf[0]
+    gr_intercept = pf[1]
 
     X1, Z1, X1fits, Z1fits = get_derivative(Xs,Zs,p=pfit,deg=1, fits=True)
 
@@ -358,7 +359,10 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
 
     if stitch:
         ax_left_top.plot(Xfit,Yfit,'r--', lw=lw, label='$\lambda = {:.2f}$ $[h^{{-1}}]$'.format(gr_glb*60))
+        ax_left_top.plot(Xs, np.exp(gr_mean_pop*(Xs-Xs[0]) + gr_intercept), '-.', color=color, lw=lw, label='$\\lambda_{{pop}} = {:.2f}$ $[h^{{-1}}]$'.format(gr_mean_pop*60.))
+        ax.axhline(y=gr_mean_pop*60, color='k', linestyle='-.', lw=lw)
         ax_left_top.legend(loc='best', fontsize='x-small')
+
         if showfits:
             #for x1fit, z1fit in zip(X1fits,Z1fits)[::2*(pfit + 1)]:
             Zs_fil = [Zs[pfit]]
@@ -391,7 +395,7 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     gr_std_fil = np.std(growth_rates_fil)
     gr_cv_fil = gr_std_fil / gr_mean_fil
     tau = np.log(2.)/gr_glb
-    ax.axhline(y=gr_glb*60, color=color, linestyle='--', lw=lw, label="$<\lambda> = {:.2f}$ $[h^{{-1}}]$\n$\\tau = {:.0f}$ [min]".format(gr_glb*60, tau))
+    ax.axhline(y=gr_glb*60, color='red', linestyle='--', lw=lw, label="$<\lambda> = {:.2f}$ $[h^{{-1}}]$\n$\\tau = {:.0f}$ [min]".format(gr_glb*60, tau))
     ax.legend(loc='best', fontsize='x-small')
 
     ax.set_xlabel('time [min]', fontsize='x-small')
