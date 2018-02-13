@@ -106,4 +106,6 @@ if __name__ == "__main__":
     # save the data out again
     # Just the complete cells, those with mother and daugther
     with open(os.path.join(p['cell_dir'],'complete_cells_fl.pkl'), 'wb') as cell_file:
-        pickle.dump(Complete_Cells, cell_file)
+        pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+    mm3.information('Finished.')
