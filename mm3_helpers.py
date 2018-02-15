@@ -22,7 +22,6 @@ import h5py # working with HDF5 files
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
-from scipy.optimize import curve_fit # fitting elongation rate
 from scipy.optimize import leastsq # fitting 2d gaussian
 from scipy import ndimage as ndi # labeling and distance transform
 from skimage import segmentation # used in make_masks and segmentation
@@ -31,6 +30,7 @@ from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
+from skimage.measure import profile_line
 
 # Parralelization modules
 import multiprocessing
@@ -77,6 +77,7 @@ def warning(*objs):
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
+# time from .nd2
 def julian_day_number():
     """
     Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
@@ -2160,22 +2161,21 @@ def find_cell_intensities(fov_id, peak_id, Cells):
 
     '''
     # Load fluorescent images and segmented images for this channel
-    fl_stack = load_stack(fov_id, peak_id, color='c1')
+    fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
     # determine absolute time index
-    time_table_path = os.path.join(params['ana_dir'],'time_table.pkl')
-    with open(time_table_path,'r') as fin:
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
         time_table = pickle.load(fin)
     times_all = []
     for fov in time_table:
         times_all = np.append(times_all, time_table[fov].keys())
     times_all = np.unique(times_all)
     times_all = np.sort(times_all)
-    times_all = np.array(times_all,np.int_)
+    times_all = np.array(times_all, np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
-
 
     # Loop through cells
     for Cell in Cells.values():
@@ -2490,7 +2490,7 @@ def fitgaussian(data):
     if params are not provided, they are calculated from the moments
     params should be (height, x, y, width_x, width_y)"""
     gparams = moments(data) # create guess parameters.
-    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -data)
+    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) - data)
     p, success = leastsq(errorfunction, gparams)
     return p
 
@@ -2519,6 +2519,49 @@ def moments(data):
     # width_y = np.sqrt(abs((np.arange(row.size)-x)**2*row).sum()/row.sum())
     height = data.max()
     return height, x, y, width
+
+# find Z-ring properties
+def analyze_ring(fov_id, peak_id, Cells):
+    '''
+    Finds the location of the ftsZ ring. This is done by summing the fluoresence signal along the long axis of the cell and then doing a wavelet transform to find the peak. This is done for one channel through time. Data is added to the Cell objects.
+
+    Parameters
+    ----------
+    fov_id, peak_id : int
+        FOV and peak number to analyze.
+    Cells : dict
+        Dictionary of cell objects from this channel.
+    '''
+
+    # Load data
+
+
+
+    # Loop through cells
+
+        # Make mask of fluorescent channel using segmented image
+
+
+        # Sum along long axis, use the profile_line function from skimage
+        # Use orientation of cell as calculated from the ellipsoid fit, the known length of the cell from the feret diameter, and a width that is greater than the cell width.
+
+
+        # Fit gaussian
+
+
+        # Find peak and calculate stats
+
+        # Peak location along long axis
+
+        # Peak height
+
+        # Peak width
+
+        # Peak confidence
+
+
+        # Add data to cells
+
 
 ### functions about converting dates and times
 # def days_to_hmsm(days):
