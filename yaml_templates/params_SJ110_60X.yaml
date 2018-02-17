@@ -19,9 +19,6 @@ TIFF_source: 'nd2ToTIFF'
 # HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
 output: 'TIFF' # 'HDF5'
 
-# nominal time between indexes for a single FOV used during image acquisition
-seconds_per_time_index: 60
-
 # indicate which color channel (plane) has the phase images. Used by channel picker
 phase_plane: 'c1'
 
@@ -106,6 +103,9 @@ new_cell_region_cutoff: 2
 ### movie parameters ###########################################################
 # set a subdirectory name to contain movies for this experiment
 movie_directory: 'movies/'
+
+# nominal time between indexes for a single FOV used during image acquisition
+seconds_per_time_index: 60
 
 # fps set the framerate per second
 fps: 24

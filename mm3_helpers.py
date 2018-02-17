@@ -1917,8 +1917,8 @@ def feretdiameter(region):
     # y: along vertical axis of the image; x: along horizontal axis of the image;
     # calculate the relative centroid in the bounding box (non-rotated)
     y0, x0 = region.centroid
-    y0 = y0 - np.int16(region.bbox[0])
-    x0 = x0 - np.int16(region.bbox[1])
+    y0 = y0 - np.int16(region.bbox[0]) + 1
+    x0 = x0 - np.int16(region.bbox[1]) + 1
     cosorient = np.cos(region.orientation)
     sinorient = np.sin(region.orientation)
     amp_param = 1.2 #amplifying number to make sure the axis is longer than actual cell length

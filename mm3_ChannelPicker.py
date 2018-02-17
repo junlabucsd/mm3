@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 # global settings mpl
-plt.rcParams['axes.linewidth']=0.5
 mpl.use('Agg')
+plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
 from scipy.misc import imresize
@@ -28,7 +28,6 @@ import multiprocessing
 from multiprocessing import Pool
 import warnings
 import h5py
-
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -329,9 +328,9 @@ def preload_images(specs, fov_id_list):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    do_crosscorrs = True
-    interactive=False
-    nproc=2
+    do_crosscorrs = False
+    interactive = True
+    nproc = 6
     specfile = None
 
     # get switches and parameters
@@ -381,10 +380,6 @@ if __name__ == "__main__":
 
     mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # set up how to manage cores for multiprocessing
-#    cpu_count = multiprocessing.cpu_count()
-#    num_analyzers = cpu_count*2 - 2
-
     # assign shorthand directory names
     ana_dir = os.path.join(p['experiment_directory'], p['analysis_directory'])
     chnl_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'channels')
@@ -430,7 +425,6 @@ if __name__ == "__main__":
             crosscorrs[fov_id] = {}
 
             # initialize pool for analyzing image metadata
-            #pool = Pool(num_analyzers)
             pool = Pool(nproc)
 
             # find all peak ids in the current FOV
@@ -509,18 +503,18 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
     else:
-        outputdir=os.path.join(ana_dir,"fovs")
+        outputdir = os.path.join(ana_dir, "fovs")
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
             specs = fov_plot_channels(fov_id, crosscorrs, specs,outputdir=outputdir,phase_plane=p['phase_plane'])
 
-        # write specfications to pickle and text
-        mm3.information("Writing specifications file.")
-        with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
-            pickle.dump(specs, specs_file, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
-            pprint(specs, stream=specs_file)
-        with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
-            yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
-        mm3.information("Finished.")
+    # write specfications to pickle and text
+    mm3.information("Writing specifications file.")
+    with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
+        pickle.dump(specs, specs_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
+        pprint(specs, stream=specs_file)
+    # with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
+    #     yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    mm3.information("Finished.")

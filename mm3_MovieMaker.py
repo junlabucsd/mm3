@@ -166,9 +166,9 @@ if __name__ == "__main__":
     shift_time = None
 
     # Fluorescent image parameters (two color movies)
-    two_colors = True # set to true if you want to do two color movies.
-    phase_plane_index = 2 # index of the phase plane
-    fl_plane_index = 0 # index of the fluorescent plane
+    two_colors = False # set to true if you want to do two color movies.
+    phase_plane_index = 0 # index of the phase plane
+    fl_plane_index = 1 # index of the fluorescent plane
     fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # soft defaults, overridden by command line parameters if specified
@@ -247,8 +247,8 @@ if __name__ == "__main__":
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
         else:
             # it is hardcoded.
-            imin['phase'], imax['phase'] = 200, 3000
-            imin['488'], imax['488'] = 150, 300
+            imin['phase'], imax['phase'] = 100, 3500
+            imin['488'], imax['488'] = 100, 200
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
