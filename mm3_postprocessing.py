@@ -1,10 +1,11 @@
-import os,sys
+import os,sys,glob
 import cPickle as pkl
 import argparse
 import yaml
 import numpy as np
 import time
 import shutil
+import scipy.io as spio
 
 import mm3_helpers
 
@@ -188,15 +189,53 @@ def compute_growth_rate_minute(cell, mpf=1):
 
     return
 
+def loadmat(filename):
+    '''
+    this function should be called instead of direct spio.loadmat
+    as it cures the problem of not properly recovering python dictionaries
+    from mat files. It calls the function check keys to cure all entries
+    which are still mat-objects
+    https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
+    '''
+    data = spio.loadmat(filename, struct_as_record=False, squeeze_me=True)
+    return _check_keys(data)
+
+def _check_keys(dict):
+    '''
+    checks if entries in dictionary are mat-objects. If yes
+    todict is called to change them to nested dictionaries
+    https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
+    '''
+    for key in dict:
+        if isinstance(dict[key], spio.matlab.mio5_params.mat_struct):
+            dict[key] = _todict(dict[key])
+    return dict
+
+def _todict(matobj):
+    '''
+    A recursive function which constructs from matobjects nested dictionaries
+    https://stackoverflow.com/questions/7008608/scipy-io-loadmat-nested-structures-i-e-dictionaries
+    '''
+    dict = {}
+    for strg in matobj._fieldnames:
+        elem = matobj.__dict__[strg]
+        if isinstance(elem, spio.matlab.mio5_params.mat_struct):
+            dict[strg] = _todict(elem)
+        else:
+            dict[strg] = elem
+    return dict
 ################################################
 # main
 ################################################
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(prog="Filtering of MM3 pickle file.")
-    parser.add_argument('pklfile', type=file, help='Pickle file containing the cell dictionary.')
+    parser = argparse.ArgumentParser(prog="Processing of MM3 pickle file.")
+    parser.add_argument('pklfile', metavar='cell pickle file', type=file, help='Pickle file containing the cell dictionary.')
     parser.add_argument('-f', '--paramfile',  type=file, required=True, help='Yaml file containing parameters.')
-    parser.add_argument('--trunc',  nargs=2, type=int, help='Make a truncated pkl file for debugging purpose.')
-    parser.add_argument('--nocomputations',  action='store_true', help='Toogle on the computation of extra-quantities (some cells attributes may be overwritten).')
+    parser.add_argument('--trunc',  nargs=2, metavar='t', type=int, help='Make a truncated pkl file for debugging purpose.')
+    parser.add_argument('--nofilters',  action='store_true', help='Disable the filters.')
+    parser.add_argument('--nocomputations',  action='store_true', help='Disable the computation of extra-quantities (some cells attributes may be overwritten).')
+    parser.add_argument('-c', '--cellcycledir',  metavar='picked', type=str, help='Directory containing all Matlab files (lineages) with cell cycle information.')
+    parser.add_argument('--complete_cc',  action='store_true', help='If passed, remove cells not mapped to cell cycle through a initiation --> division correspondence.')
     namespace = parser.parse_args(sys.argv[1:])
     paramfile = namespace.paramfile.name
     allparams = yaml.load(namespace.paramfile)
@@ -233,113 +272,170 @@ if __name__ == "__main__":
         sys.exit('Test pkl file written. Exit')
 
 ################################################
-# Remove cells without mother or without daughters
+# cell cycle
 ################################################
-    print print_time(), "Removing cells without mother or daughters..."
-    data_new = {}
-    for key in data:
-        cell = data[key]
-        if (cell.parent != None) and (cell.daughters != None):
-            data_new[key] = cell
-    data = data_new
+    if namespace.cellcycledir != None:
+        print print_time(), 'Loading cell cycle information'
+        if not os.path.isdir(namespace.cellcycledir):
+            sys.exit('Directory doesn\'t exist: {}'.format(namespace.cellcycledir))
 
-    ncells = len(data)
-    print "ncells = {:d}".format(ncells)
+        # initialize new attributes
+        #'initiation_mass', 'initiation_mass_n', 'termination_time', 'initiation_time', 'initiation_time_n'
+        required_attr = {'initiation_mass_n':'unit_size', 'termination_time':'termination_time', 'initiation_time':'initiation_time'}
+        for key,cell in data.items():
+            for attrcc,attr in required_attr.items():
+                setattr(cell,attr,None)
 
-################################################
-# cutoffs filtering
-################################################
-    print print_time(), "Applying cutoffs filtering..."
-    if ('cutoffs' in params):
-        data = filter_cells(data, params['cutoffs'])
+        for cellcyclefile in glob.glob(os.path.join(namespace.cellcycledir,'*.mat')):
+            ccdata = loadmat(cellcyclefile)['cell_list']
+            for key in ccdata.keys():
+                if not (key in data):
+                    print "Skipping cell from cell cycle data: {}".format(key)
+                    continue
 
-    ncells = len(data)
-    print "ncells = {:d}".format(ncells)
+                cell_cc = ccdata[key]
+                cell = data[key]
 
-################################################
-# Generation index
-################################################
-    print print_time(), "Selecting cell indexes..."
-    try:
-        labels_selection=params['cell_generation_index']
-        print "Labels: ", labels_selection
-        data = filter_by_generation_index(data, labels=labels_selection)
-    except KeyError:
-        print "Not applied."
+                for attrcc,attr in required_attr.items():
+                    try:
+                        setattr(cell,attr,cell_cc[attrcc])
+                    except KeyError:
+                        pass
 
-    ncells = len(data)
-    print "ncells = {:d}".format(ncells)
+        # if argument passed, remove cells without a cell cycle mapped.
+        if namespace.complete_cc:
+            has_cc = lambda cell: not ((cell.termination_time is None) or (cell.initiation_time is None))
+            data = {key: data[key] for key in data.keys() if has_cc(data[key])}
 
-################################################
-# FOVs and peaks
-################################################
-    print print_time(), "Selecting by FOVs and peaks..."
-    try:
-        fovpeak = params['fovpeak']
-        data = filter_by_fovs_peaks(data, fovpeak)
-    except KeyError:
-        print "Not applied."
-
-    ncells = len(data)
-    print "ncells = {:d}".format(ncells)
+            ncells = len(data)
+            print "ncells = {:d}".format(ncells)
 
 ################################################
-# continuous lineages
+# filters
 ################################################
-    print print_time(), "Selecting by continuous lineages..."
-    lineages = get_lineages_mother_cells(data)
-    bname = "{}_lineages.pkl".format(dataname)
-    fileout = os.path.join(ddir,bname)
-    with open(fileout,'w') as fout:
-        pkl.dump(lineages, fout)
-    print "{:<20s}{:<s}".format("fileout",fileout)
+    if not namespace.nofilters:
+        # Remove cells without mother or without daughters
+        print print_time(), "Removing cells without mother or daughters..."
+        data_new = {}
+        for key in data:
+            cell = data[key]
+            if (cell.parent != None) and (cell.daughters != None):
+                data_new[key] = cell
+        data = data_new
 
-    # keep only long enough lineages
-    try:
-        lineages = select_lineages(lineages, **params['lineages']['args'])
-        bname = "{}_lineages_selection_min{:d}.pkl".format(dataname, params['lineages']['args']['min_gen'])
+        ncells = len(data)
+        print "ncells = {:d}".format(ncells)
+
+        # cutoffs filtering
+        print print_time(), "Applying cutoffs filtering..."
+        if ('cutoffs' in params):
+            data = filter_cells(data, params['cutoffs'])
+
+        ncells = len(data)
+        print "ncells = {:d}".format(ncells)
+
+        # Generation index
+        print print_time(), "Selecting cell indexes..."
+        try:
+            labels_selection=params['cell_generation_index']
+            print "Labels: ", labels_selection
+            data = filter_by_generation_index(data, labels=labels_selection)
+            ncells = len(data)
+            print "ncells = {:d}".format(ncells)
+
+        except KeyError:
+            print "Not applied."
+
+        # FOVs and peaks
+        print print_time(), "Selecting by FOVs and peaks..."
+        try:
+            fovpeak = params['fovpeak']
+            data = filter_by_fovs_peaks(data, fovpeak)
+            ncells = len(data)
+            print "ncells = {:d}".format(ncells)
+
+        except KeyError:
+            print "Not applied."
+
+        # continuous lineages
+        ## list all lineages
+        print print_time(), "Selecting by continuous lineages..."
+        lineages = get_lineages_mother_cells(data)
+        bname = "{}_lineages.pkl".format(dataname)
         fileout = os.path.join(ddir,bname)
         with open(fileout,'w') as fout:
             pkl.dump(lineages, fout)
         print "{:<20s}{:<s}".format("fileout",fileout)
-    except KeyError:
-        pass
 
-    try:
-        if bool(params['lineages']['keep_continuous_only']):
-            selection = []
-            for lin in lineages:
-                selection += lin
-            selection = np.unique(selection)
-            data_new = {key: data[key] for key in selection}
-            data = data_new
-            ncells = len(data)
-            print "ncells = {:d}".format(ncells)
-    except KeyError, e :
-        print e
+        ## keep only long enough lineages
+        try:
+            lineages = select_lineages(lineages, **params['lineages']['args'])
+            bname = "{}_lineages_selection_min{:d}.pkl".format(dataname, params['lineages']['args']['min_gen'])
+            fileout = os.path.join(ddir,bname)
+            with open(fileout,'w') as fout:
+                pkl.dump(lineages, fout)
+            print "{:<20s}{:<s}".format("fileout",fileout)
+        except KeyError:
+            pass
 
-    for key in data:
-        cell = data[key]
-        cell.pwd = 'love you'
+        try:
+            if bool(params['lineages']['keep_continuous_only']):
+                selection = []
+                for lin in lineages:
+                    selection += lin
+                selection = np.unique(selection)
+                data_new = {key: data[key] for key in selection}
+                data = data_new
+                ncells = len(data)
+                print "ncells = {:d}".format(ncells)
+        except KeyError, e :
+            print e
+
+        for key in data:
+            cell = data[key]
 
 ################################################
 # compute extra-quantities
 ################################################
     # second initialization of parameters
-    if (not namespace.nocomputations) and ('computations' in allparams):
+    if (not namespace.nocomputations):
         print print_time(), "Compute extra-quantities..."
-        params = allparams['computations']
-
-        # Compute the growth rate in minutes
-        for key in data:
+        # cell cycle quantities
+        for key in data.keys():
             cell = data[key]
             try:
-                mpf = float(params['growth_rate']['min_per_frame'])
+                cell.B = cell.initiation_time - cell.birth_time
+                cell.C = cell.termination_time - cell.initiation_time
+                cell.D = cell.division_time - cell.termination_time
+                cell.taucyc = cell.C + cell.D
+            except (TypeError, AttributeError):
+                cell.B = None
+                cell.C = None
+                cell.D = None
+                cell.taucyc = None
+
+        # other quantities
+        if ('computations' in allparams):
+            params = allparams['computations']
+
+            # Several quantities in minutes
+            try:
+                mpf = float(params['min_per_frame'])
             except KeyError:
                 print "Could not read the min_per_frame parameter. Default to mpf=1"
                 mpf = 1.
-            compute_growth_rate_minute(cell, mpf=mpf)
 
+            for key in data:
+                cell = data[key]
+                compute_growth_rate_minute(cell, mpf=mpf)
+
+                try:
+                    cell.B_min = cell.B * mpf
+                    cell.D_min = cell.D * mpf
+                    cell.C_min = cell.C * mpf
+                    cell.taucyc_min = cell.taucyc * mpf
+                except TypeError:
+                    pass
 
 ################################################
 # write dictionary

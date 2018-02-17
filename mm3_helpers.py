@@ -121,6 +121,14 @@ def get_plane(filepath):
     else:
         return None
 
+def get_time(filepath):
+    pattern = 't(\d+)xy\w+.tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return np.int_(res.group(1))
+    else:
+        return None
+
 def load_stack(fov_id, peak_id, color='c1'):
     '''
     Loads an image stack.

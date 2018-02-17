@@ -32,34 +32,59 @@ filters:
       #method: mean
 
 ###############################################################################
+# computations
+###############################################################################
+computations:
+  min_per_frame: 2
+
+
+###############################################################################
 # plots
 ###############################################################################
 plots:
   distributions:
     attributes:
       sb:
-        label: "$S_b$"
+        label: "$S_b$ $[\\mu m]$"
       sd:
-        label: "$S_d$"
+        label: "$S_d$ $[\\mu m]$"
       delta:
-        label: "$\\Delta_d$"
-      elong_rate:
-        label: "$\\lambda$"
+        label: "$\\Delta_d$ $[\\mu m]$"
+      growth_rate:
+        label: "$\\lambda$ $[h^{-1}]$"
+        scale: 60.
       tau:
-        label: "$\\tau$"
+        label: "$\\tau$ $[min]$"
+      taucyc_min:
+        label: "$\\tau_{cyc}$ $[min]$"
+      C_min:
+        label: "$C$ $[min]$"
+      D_min:
+        label: "$D$ $[min]$"
+      unit_size:
+        label: "$S_{0}$ $[\\mu m]$"
 
   cross correlations:
     attributes:
       sb:
-        label: "$S_b$"
+        label: "$S_b$ $[\\mu m]$"
       sd:
-        label: "$S_d$"
+        label: "$S_d$ $[\\mu m]$"
       delta:
-        label: "$\\Delta_d$"
-      elong_rate:
-        label: "$\\lambda$"
+        label: "$\\Delta_d$ $[\\mu m]$"
+      growth_rate:
+        label: "$\\lambda$ $[h^{-1}]$"
+        scale: 60.
       tau:
-        label: "$\\tau$"
+        label: "$\\tau$ $[min]$"
+      taucyc_min:
+        label: "$\\tau_{cyc}$ $[min]$"
+      C_min:
+        label: "$C$ $[min]$"
+      D_min:
+        label: "$D$ $[min]$"
+      unit_size:
+        label: "$S_{0}$ $[\\mu m]$"
     args:
       method: pearsonr
       #method: spearmanr
@@ -67,38 +92,99 @@ plots:
   autocorrelations:
     attributes:
       sb:
-        label_d: "$S_b^{n+1}$"
-        label_m: "$S_b^{n}$"
+        label_d: "$S_b^{n+1}$ $[\\mu m]$"
+        label_m: "$S_b^{n}$ $[\\mu m]$"
       sd:
-        label_d: "$S_d^{n+1}$"
-        label_m: "$S_d^{n}$"
+        label_d: "$S_d^{n+1}$ $[\\mu m]$"
+        label_m: "$S_d^{n}$ $[\\mu m]$"
       delta:
-        label_d: "$\\Delta_d^{n+1}$"
-        label_m: "$\\Delta_d^{n}$"
-      elong_rate:
-        label_d: "$\\lambda^{n+1}$"
-        label_m: "$\\lambda^{n}$"
+        label_d: "$\\Delta_d^{n+1}$ $[\\mu m]$"
+        label_m: "$\\Delta_d^{n}$ $[\\mu m]$"
+      growth_rate:
+        label_d: "$\\lambda^{n+1}$ $[h^{-1}]$"
+        label_m: "$\\lambda^{n}$ $[h^{-1}]$"
+        scale: 60.
       tau:
-        label_d: "$\\tau^{n+1}$"
-        label_m: "$\\tau^{n}$"
+        label_d: "$\\tau^{n+1}$ $[min]$"
+        label_m: "$\\tau^{n}$ $[min]$"
+      taucyc_min:
+        label_d: "$\\tau_{cyc}^{n+1}$ $[min]$"
+        label_m: "$\\tau_{cyc}^{n}$ $[min]$"
+      C_min:
+        label_d: "$C^{n+1}$ $[min]$"
+        label_m: "$C^{n}$ $[min]$"
+      D_min:
+        label_d: "$D^{n+1}$ $[min]$"
+        label_m: "$D^{n}$ $[min]$"
+      unit_size:
+        label_d: "$S_{0}^{n+1}$ $[\\mu m]$"
+        label_m: "$S_{0}^{n}$ $[\\mu m]$"
     args:
       method: pearsonr
       #method: spearmanr
 
   plot_lineages_byfov:
+  # comment fovs to plot all lineages
+  # put fovs key with None value to disable plotting
+    fovs:
     args:
       color: black
       ax_height: 3
       ax_width_per_hour: 2
-      fovs:
 
-  plot_lineages_individually:
-    fovs:
-      #5: [694, 1656]
+  plot_lineages_with_growth_rate:
+  # comment fovs to plot all lineages
+  # put fovs key with None value to disable plotting
+  #    fovs:
+  #      6: [1692]
     args:
       color: black
       stitch: True
       logscale: True
-      pfit: 2
+      pfit: 3
       showfits: False
+
+  plot_lineages_variables:
+    attributes:
+      growth_rate:
+        label: "$\\lambda$ $[h^{-1}]$"
+        scale: 60.
+      delta:
+        label: "$\\Delta_d$ $[\\mu m]$"
+      sb:
+        label: "$S_b$ $[\\mu m]$"
+        #    fovs:
+        #      6: [1692]
+    args:
+      color: black
+      color1: darkblue
+      stitch: False
+      logscale: True
+
+  plot_lineages_correlations:
+    attributes:
+      growth_rate:
+        label: "$\\lambda$ $[h^{-1}]$"
+        label_d: "$\\lambda^{n+1}$ $[h^{-1}]$"
+        label_m: "$\\lambda^{n}$ $[h^{-1}]$"
+        scale: 60.
+      delta:
+        label: "$\\Delta_d$ $[\\mu m]$"
+        label_d: "$\\Delta_d^{n+1}$ $[\\mu m]$"
+        label_m: "$\\Delta_d^{n}$ $[\\mu m]$"
+      sb:
+        label: "$S_b$ $[\\mu m]$"
+        label_d: "$S_b^{n+1}$ $[\\mu m]$"
+        label_m: "$S_b^{n}$ $[\\mu m]$"
+      sd:
+        label: "$S_d$ $[\\mu m]$"
+        label_d: "$S_d^{n+1}$ $[\\mu m]$"
+        label_m: "$S_d^{n}$ $[\\mu m]$"
+        #    fovs:
+        #      6: [1692]
+    args:
+      color: black
+      color1: darkblue
+      stitch: False
+      logscale: True
 
