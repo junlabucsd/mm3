@@ -163,13 +163,28 @@ if __name__ == "__main__":
     fontface = Face(fontfile)
 
     # put in a timepoint to indicate the timing of a shift (colors the text)
-    shift_time = None
+    show_time_stamp = True
+    shift_time = None # will change color of timestamp upon shift. Make None is no shift.
 
-    # Fluorescent image parameters (two color movies)
-    two_colors = False # set to true if you want to do two color movies.
+    # color management
+    show_phase = True
     phase_plane_index = 0 # index of the phase plane
-    fl_plane_index = 1 # index of the fluorescent plane
-    fl_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+
+    show_green = True
+    fl_green_index = 2 # index of green channel.
+    fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+
+    show_red = True
+    fl_red_index = 1 # index of red fluorsecent channel.
+    fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+
+    # min and max pixel intensity for scaling the data
+    imin = {}
+    imax = {}
+    imin['phase'], imax['phase'] = 500, 4000
+    auto_phase_levels = False # set to true to find automatically
+    imin['green'], imax['green'] = 150, 250
+    imin['red'], imax['red'] = 125, 160
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -238,28 +253,16 @@ if __name__ == "__main__":
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
 
-        # get min max pixel intensity for scaling the data
-        imin = {}
-        imax = {}
-
-        if not two_colors:
+        if auto_phase_levels:
             # automatically scale images
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
-        else:
-            # it is hardcoded.
-            imin['phase'], imax['phase'] = 100, 3500
-            imin['488'], imax['488'] = 100, 200
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
         size_x, size_y = image.shape[-1], image.shape[-2] # does not work for stacked tiff
-        size_x = (size_x / 2) * 2
+        size_x = (size_x / 2) * 2 # fixes bug if images don't have even dimensions with ffmpeg
         size_y = (size_y / 2) * 2
         image = image[:, :size_y, :size_x]
-
-        if two_colors or image.shape[0] < 10:
-            image = image[phase_plane_index] # get phase plane
-        #size_x, size_y = image.shape[1], image.shape[0] # does not work for stacked tiff
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -298,25 +301,84 @@ if __name__ == "__main__":
 
             image_data = tiff.imread(img) # get the image
 
-            if two_colors or image_data.shape[0] < 10 or len(image_data.shape[0]) > 1:
-                phase = image_data[phase_plane_index] # get phase plane
-            else:
-                phase = image_data
+            # make phase color
+            if show_phase:
+                if len(image_data.shape) > 3:
+                    phase = image_data[phase_plane_index] # get phase plane
+                else:
+                    phase = image_data
 
-            # process phase image
-            phase = phase.astype('float64')
-            # normalize
-            phase -= imin['phase']
-            phase[phase < 0] = 0
-            phase /= (imax['phase'] - imin['phase'])
-            phase[phase > 1] = 1
+                # process phase image
+                phase = phase.astype('float64')
+                # normalize
+                phase -= imin['phase']
+                phase[phase < 0] = 0
+                phase /= (imax['phase'] - imin['phase'])
+                phase[phase > 1] = 1
 
-            if two_colors:
-                # dim phase
-                phase = phase * 0.75
+                if show_green or show_red:
+                    # dim phase if putting on fluorescence
+                    phase = phase * 0.75
 
-            # three color stack
-            phase = np.dstack((phase, phase, phase))
+                # three color stack
+                phase = np.dstack((phase, phase, phase))
+
+            # make green stack
+            if show_green:
+                if (t - 1) % fl_green_interval == 0:
+                    if len(image_data.shape) > 3:
+                        flgreen = image_data[fl_green_index].astype('float64') # pick red image
+                    else:
+                        flgreen = image_data
+
+                    # normalize
+                    flgreen -= imin['green']
+                    flgreen[flgreen < 0] = 0
+                    flgreen /= (imax['green'] - imin['green'])
+                    flgreen[flgreen > 1] = 1
+
+                    # three color stack
+                    flgreen = np.dstack((np.zeros_like(flgreen), flgreen, np.zeros_like(flgreen)))
+
+            # make red stack
+            if show_red
+                if (t - 1) % fl_red_interval == 0:
+                    if len(image_data.shape) > 3:
+                        flred = image_data[fl_red_index].astype('float64') # pick red image
+                    else:
+                        flred = image_data
+
+                    # normalize
+                    flred -= imin['red']
+                    flred[flred < 0] = 0
+                    flred /= (imax['red'] - imin['red'])
+                    flred[flred > 1] = 1
+
+                    # three color stack
+                    flred = np.dstack((flred, np.zeros_like(flred), np.zeros_like(flred)))
+
+            # combine images as appropriate
+            if show_phase and show_green and show red:
+                image = 1 - ((1 - flgreen) * (1 - flred) * (1 - phase))
+
+            elif show_phase and show_green:
+                image = 1 - ((1 - flgreen) * (1 - phase))
+
+            elif show_phase and show_red:
+                image = 1 - ((1 - flred) * (1 - phase))
+
+            elif show_green and show_red
+                image = 1 - ((1 - flgreen) * (1 - flred))
+
+            elif show_phase
+                # just send the phase image forward
+                image = phase
+
+            elif show_green:
+                image = fl_green
+
+            elif show_red:
+                image = fl_red
 
             """
             # test
@@ -343,45 +405,28 @@ if __name__ == "__main__":
             # test
             #"""
 
-            if two_colors:
-                # combine with fluorescent image
-                if (t - 1) % fl_interval == 0:
-                    fl488 = image_data[fl_plane_index].astype('float64') # pick red image
-                    # normalize
-                    fl488 -= imin['488']
-                    fl488[fl488 < 0] = 0
-                    fl488 /= (imax['488'] - imin['488'])
-                    fl488[fl488 > 1] = 1
-                    # print('fl shape', np.shape(fl488))
-                    # three color stack
-                    fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
+            if show_time_stamp:
+                # put in time stamp
+                seconds = float(t * p['seconds_per_time_index'])
+                mins = seconds / 60
+                hours = mins / 60
+                timedata = "%dhrs %02dmin" % (hours, mins % 60)
+                r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                                                   angle=180)).astype('float64')
+                r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
+                                                   (size_x - 10 - r_timestamp.shape[1], 10)),
+                                                   mode = 'constant')
+                r_timestamp /= 255.0
 
-                #image = 1 - ((1 - fl488) * (1 - phase))
-            else:
-                # just send the phase image forward
-                image = phase
+                # create label
+                if shift_time and t >= shift_time:
+                    r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
+                else:
+                    r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
-            # put in time stamp
-            seconds = float(t * p['seconds_per_time_index'])
-            mins = seconds / 60
-            hours = mins / 60
-            timedata = "%dhrs %02dmin" % (hours, mins % 60)
-            r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
-                                               angle=180)).astype('float64')
-            r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
-                                               (size_x - 10 - r_timestamp.shape[1], 10)),
-                                               mode = 'constant')
-            r_timestamp /= 255.0
-
-            # create label
-            if shift_time and t >= shift_time:
-                r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
-            else:
-                pass
-                r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
-
-            #image = 1 - ((1 - image) * (1 - r_timestamp))
+                image = 1 - ((1 - image) * (1 - r_timestamp))
 
             # shoot the image to the ffmpeg subprocess
             pipe.stdin.write((image * 65535).astype('uint16').tostring())
+
         pipe.stdin.close()
