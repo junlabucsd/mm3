@@ -63,7 +63,7 @@ def make_binning(x,y,bincount_min):
         histx, bins = np.histogram(x,bins='auto')
     else:
         histx, bins = np.histogram(x,bins='sturges')
-#    bins = np.linspace(x[0],x[-1],nbins)
+   # bins = np.linspace(x[0],x[-1],nbins)
     digitized = np.digitize(x,bins)
     x_binned=[]
     y_binned=[]
@@ -444,35 +444,35 @@ def plot_lineage_with_growth_rate(lineage, cells, fileoutspl, stitch=False, colo
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-#    ## autocorrelation function
-#    ax = ax_right_bot
-#    #r_gr=correlation_pearsonr(growth_rates,growth_rates)
-#    r_gr_fil=correlation_pearsonr(growth_rates_fil,growth_rates_fil)
-#
-#    idx = ((time - time[0]) <= acf_dtau_max*tau)
-#    X=time[idx] - time[0]
-#    Y=r_gr[idx]
-#    Y_fil=r_gr_fil[idx]
-#    M = len(X)
-#    npts=1000
-#    dn = max(1,np.int_(np.float_(M)/npts))
-#    X=X[::dn]
-#    Y=Y[::dn]
-#    ax.plot(X,Y,'-.', color=color, lw=lw)
-#    ax.plot(X,Y_fil,'-', color=color, lw=lw)
-#
-#    k0 = np.argmin(np.abs(X-tau))
-#    x0 = X[k0]
-#    y0 = Y[k0]
-#    ax.axvline(x=x0, lw=lw, linestyle='--', color=color)
-#    text = "$r_{{PE}}(\\tau) = {:.1f}$".format(y0)
-#    ax.annotate(text, xy=(x0,y0), xycoords='data', xytext=(1.,0.98), textcoords='axes fraction', fontsize='x-small', ha='right', va='top')
-#    ax.set_xlabel('time [min]', fontsize='x-small')
-#    ax.set_ylabel('ACF', fontsize='x-small')
-#    #ax.tick_params(length=2)
-#    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
-#    ax.spines['right'].set_visible(False)
-#    ax.spines['top'].set_visible(False)
+   # ## autocorrelation function
+   # ax = ax_right_bot
+   # #r_gr=correlation_pearsonr(growth_rates,growth_rates)
+   # r_gr_fil=correlation_pearsonr(growth_rates_fil,growth_rates_fil)
+   #
+   # idx = ((time - time[0]) <= acf_dtau_max*tau)
+   # X=time[idx] - time[0]
+   # Y=r_gr[idx]
+   # Y_fil=r_gr_fil[idx]
+   # M = len(X)
+   # npts=1000
+   # dn = max(1,np.int_(np.float_(M)/npts))
+   # X=X[::dn]
+   # Y=Y[::dn]
+   # ax.plot(X,Y,'-.', color=color, lw=lw)
+   # ax.plot(X,Y_fil,'-', color=color, lw=lw)
+   #
+   # k0 = np.argmin(np.abs(X-tau))
+   # x0 = X[k0]
+   # y0 = Y[k0]
+   # ax.axvline(x=x0, lw=lw, linestyle='--', color=color)
+   # text = "$r_{{PE}}(\\tau) = {:.1f}$".format(y0)
+   # ax.annotate(text, xy=(x0,y0), xycoords='data', xytext=(1.,0.98), textcoords='axes fraction', fontsize='x-small', ha='right', va='top')
+   # ax.set_xlabel('time [min]', fontsize='x-small')
+   # ax.set_ylabel('ACF', fontsize='x-small')
+   # #ax.tick_params(length=2)
+   # ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+   # ax.spines['right'].set_visible(False)
+   # ax.spines['top'].set_visible(False)
 
     fig.suptitle("FOV {:d}{:4s}peak = {:d}".format(fov,',',peak), fontsize='medium')
     rect = [0.,0.,1.,0.98]
@@ -1416,4 +1416,3 @@ if __name__ == "__main__":
 
             for lineage in selection:
                 plot_lineage_correlations(lineage, cells,fileoutspl, attrdict=params['plot_lineages_correlations']['attributes'], **params['plot_lineages_correlations']['args'])
-

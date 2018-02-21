@@ -329,16 +329,16 @@ def channel_locations(channel_file, filetype='specs'):
 
     # Using the channel masks
     if filetype == 'channel_masks':
-        # for key, values in channel_masks.iteritems():
+        for key, values in channel_masks.iteritems():
         # print('FOV {} has {} channels'.format(key, len(values)))
-        y = (np.ones(24)) + key - 1
-        x = values.keys()
-        plt.scatter(x, y)
+            y = (np.ones(len(values))) + key - 1
+            x = values.keys()
+            plt.scatter(x, y)
 
     # Using the specs file
     if filetype == 'specs':
         for key, values in specs.iteritems():
-            y = list((np.ones(24)) + key - 1)
+            y = list((np.ones(len(values))) + key - 1)
             x = values.keys()
 
             # green for analyze (==1)
