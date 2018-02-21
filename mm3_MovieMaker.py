@@ -16,6 +16,7 @@ import numpy as np
 from freetype import *
 import warnings
 
+from mm3_helpers import get_time
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
@@ -251,9 +252,14 @@ if __name__ == "__main__":
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
+        size_x, size_y = image.shape[-1], image.shape[-2] # does not work for stacked tiff
+        size_x = (size_x / 2) * 2
+        size_y = (size_y / 2) * 2
+        image = image[:, :size_y, :size_x]
+
         if two_colors or image.shape[0] < 10:
             image = image[phase_plane_index] # get phase plane
-        size_x, size_y = image.shape[1], image.shape[0] # does not work for stacked tiff
+        #size_x, size_y = image.shape[1], image.shape[0] # does not work for stacked tiff
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -284,8 +290,9 @@ if __name__ == "__main__":
         pipe = sp.Popen(command, stdin=sp.PIPE)
 
         # display a frame and send it to write
-        for t, img in enumerate(images, start=1):
+        for ti, img in enumerate(images, start=1):
             # skip images not specified by param file.
+            t = get_time(img)
             if (t < p['image_start']) or (t > p['image_end']):
                 continue
 
@@ -349,7 +356,7 @@ if __name__ == "__main__":
                     # three color stack
                     fl488 = np.dstack((np.zeros_like(fl488), fl488, np.zeros_like(fl488)))
 
-                image = 1 - ((1 - fl488) * (1 - phase))
+                #image = 1 - ((1 - fl488) * (1 - phase))
             else:
                 # just send the phase image forward
                 image = phase
@@ -370,9 +377,10 @@ if __name__ == "__main__":
             if shift_time and t >= shift_time:
                 r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
             else:
+                pass
                 r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
 
-            image = 1 - ((1 - image) * (1 - r_timestamp))
+            #image = 1 - ((1 - image) * (1 - r_timestamp))
 
             # shoot the image to the ffmpeg subprocess
             pipe.stdin.write((image * 65535).astype('uint16').tostring())
