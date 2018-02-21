@@ -81,16 +81,16 @@ if __name__ == "__main__":
     for fov_id in fov_id_list:
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
             # test
-            print ('Peak no',peak_id)
-            print ('Cells_of_peak')
-            print (Cells_of_peak)
+            # print ('Peak no',peak_id)
+            # print ('Cells_of_peak')
+            # print (Cells_of_peak)
             if (len(Cells_of_peak) == 0):
                 continue
 
             mm3.foci_analysis(fov_id, peak_id, Cells_of_peak)
 
             # test
-            sys.exit()
+            # sys.exit()
 
     # Output data to both dictionary and the .mat format used by the GUI
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:

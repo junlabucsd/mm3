@@ -2215,7 +2215,7 @@ def foci_analysis(fov_id, peak_id, Cells):
                                color='sub_{}'.format(params['foci_plane']))
 
     # determine absolute time index
-    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
+    time_table_path = os.path.join(params['ana'],'time_table.pkl')
     with open(time_table_path,'r') as fin:
         time_table = pickle.load(fin)
     times_all = []
@@ -2228,6 +2228,8 @@ def foci_analysis(fov_id, peak_id, Cells):
     tN = times_all[-1] # last time index
 
     for cell_id, cell in Cells.items():
+
+        information('Extracting foci information for %s.' % (cell_id))
 
         # declare lists holding information about foci.
         disp_l = []
@@ -2277,8 +2279,7 @@ def foci_analysis(fov_id, peak_id, Cells):
         information('Extracting foci information for %s cells.' % (cell_id))
 
         # test
-        sys.exit()
-        # test
+        # sys.exit()
 
     return
 
@@ -2411,11 +2412,12 @@ def foci_lap(img, img_foci, cell, t):
                 disp_w = np.append(disp_w, disp_x)
                 foci_h = np.append(foci_h, np.sum(gfit_area))
         else:
-            print ('Blob not in bounding box.')
+            if params['debug_foci']:
+                print ('Blob not in bounding box.')
 
     # draw foci on image for quality control
     if params['debug_foci']:
-        outputdir = os.path.join('debug','foci')
+        outputdir = os.path.join(params['ana_dir'], 'debug_foci')
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
 

@@ -328,7 +328,7 @@ def preload_images(specs, fov_id_list):
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
     # hardcoded parameters
-    do_crosscorrs = False
+    do_crosscorrs = True
     interactive = True
     nproc = 6
     specfile = None
