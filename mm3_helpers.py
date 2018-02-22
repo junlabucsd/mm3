@@ -77,18 +77,6 @@ def warning(*objs):
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
-def julian_day_number():
-    """
-    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
-    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
-    https://en.wikipedia.org/wiki/Julian_day
-    """
-    dt=datetime.datetime.now()
-    tt=dt.timetuple()
-    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
-
-    return jdn
-
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
@@ -112,7 +100,18 @@ def init_mm3_helpers(param_file_path):
 
     return params
 
-# loads and image stack from TIFF or HDF5 using mm3 conventions
+def julian_day_number():
+    """
+    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
+    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
+    https://en.wikipedia.org/wiki/Julian_day
+    """
+    dt=datetime.datetime.now()
+    tt=dt.timetuple()
+    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
+
+    return jdn
+
 def get_plane(filepath):
     pattern = '(c\d+).tif'
     res = re.search(pattern,filepath)
@@ -129,6 +128,7 @@ def get_time(filepath):
     else:
         return None
 
+# loads and image stack from TIFF or HDF5 using mm3 conventions
 def load_stack(fov_id, peak_id, color='c1'):
     '''
     Loads an image stack.
@@ -191,7 +191,7 @@ def load_stack(fov_id, peak_id, color='c1'):
 
     return img_stack
 
-### Functions for dealing with raw TIFF images
+### functions for dealing with raw TIFF images
 
 # get params is the major function which processes raw TIFF images
 def get_tif_params(image_filename, find_channels=True):
@@ -2529,50 +2529,3 @@ def moments(data):
     # width_y = np.sqrt(abs((np.arange(row.size)-x)**2*row).sum()/row.sum())
     height = data.max()
     return height, x, y, width
-
-### functions about converting dates and times
-# def days_to_hmsm(days):
-#     hours = days * 24.
-#     hours, hour = math.modf(hours)
-#     mins = hours * 60.
-#     mins, min = math.modf(mins)
-#     secs = mins * 60.
-#     secs, sec = math.modf(secs)
-#     micro = round(secs * 1.e6)
-#     return int(hour), int(min), int(sec), int(micro)
-#
-# def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-#     days = sec + (micro / 1.e6)
-#     days = min + (days / 60.)
-#     days = hour + (days / 60.)
-#     return days / 24.
-#
-# def date_to_jd(year,month,day):
-#     if month == 1 or month == 2:
-#         yearp = year - 1
-#         monthp = month + 12
-#     else:
-#         yearp = year
-#         monthp = month
-#     # this checks where we are in relation to October 15, 1582, the beginning
-#     # of the Gregorian calendar.
-#     if ((year < 1582) or
-#         (year == 1582 and month < 10) or
-#         (year == 1582 and month == 10 and day < 15)):
-#         # before start of Gregorian calendar
-#         B = 0
-#     else:
-#         # after start of Gregorian calendar
-#         A = math.trunc(yearp / 100.)
-#         B = 2 - A + math.trunc(A / 4.)
-#     if yearp < 0:
-#         C = math.trunc((365.25 * yearp) - 0.75)
-#     else:
-#         C = math.trunc(365.25 * yearp)
-#     D = math.trunc(30.6001 * (monthp + 1))
-#     jd = B + C + D + day + 1720994.5
-#     return jd
-#
-# def datetime_to_jd(date):
-#     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
-#     return date_to_jd(date.year, date.month, days)

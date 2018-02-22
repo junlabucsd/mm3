@@ -162,16 +162,27 @@ if __name__ == "__main__":
     fontface = Face(fontfile)
 
     # put in a timepoint to indicate the timing of a shift (colors the text)
-    shift_time = 50
+    shift_time = None
 
-    # Fluorescent image parameters (multi color movies)
-    multi_color = True # set to true if you want to do two color movies.
+    # color management
+    show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    fl_green_index = 2 # index of the fluorescent plane
+    show_green = True
+    fl_green_index = 2 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
-    fl_red_index = 1 # index of the fluorescent plane
+
+    show_red = True
+    fl_red_index = 1 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+
+    # min and max pixel intensity for scaling the data
+    imin = {}
+    imax = {}
+    imin['phase'], imax['phase'] = 500, 4000
+    auto_phase_levels = False # set to true to find automatically
+    imin['green'], imax['green'] = 150, 250
+    imin['red'], imax['red'] = 125, 160
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -240,18 +251,9 @@ if __name__ == "__main__":
             raise ValueError("No images found to export for FOV %d." % fov)
         information("Found %d files to export." % len(images))
 
-        # get min max pixel intensity for scaling the data
-        imin = {}
-        imax = {}
-
-        if not multi_color:
+        if not auto_phase_levels:
             # automatically scale images
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
-        else:
-            # it is hardcoded.
-            imin['phase'], imax['phase'] = 500, 4000
-            imin['green'], imax['green'] = 150, 250
-            imin['red'], imax['red'] = 125, 160
 
         # use first image to set size of frame
         image = tiff.imread(images[0])
@@ -311,8 +313,8 @@ if __name__ == "__main__":
             # three color stack
             phase = np.dstack((phase, phase, phase))
 
-            if multi_color:
-                # combine with fluorescent image
+            # make green stack
+            if fl_green_index ~= -1:
                 if (t - 1) % fl_green_interval == 0:
                     flgreen = image_data[fl_green_index].astype('float64') # pick red image
                     # normalize
@@ -323,6 +325,8 @@ if __name__ == "__main__":
                     # three color stack
                     flgreen = np.dstack((np.zeros_like(flgreen), flgreen, np.zeros_like(flgreen)))
 
+            # make red stack
+            if fl_red_index ~= -1:
                 if (t - 1) % fl_red_interval == 0:
                     flred = image_data[fl_red_index].astype('float64') # pick red image
                     # normalize
