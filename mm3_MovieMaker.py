@@ -170,21 +170,21 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = True
-    fl_green_index = 2 # index of green channel.
+    show_green = False
+    fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = True
-    fl_red_index = 1 # index of red fluorsecent channel.
+    show_red = False
+    fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
+    auto_phase_levels = False # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 500, 4000
-    auto_phase_levels = False # set to true to find automatically
-    imin['green'], imax['green'] = 150, 250
-    imin['red'], imax['red'] = 125, 160
+    imin['phase'], imax['phase'] = 227, 4273
+    imin['green'], imax['green'] = 150, 200
+    imin['red'], imax['red'] = 150, 250
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -258,8 +258,8 @@ if __name__ == "__main__":
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
 
         # use first image to set size of frame
-        image = tiff.imread(images[0])
-        size_x, size_y = image.shape[-1], image.shape[-2] # does not work for stacked tiff
+        image = tiff.imread(images[0]) # pull out an image
+        size_x, size_y = image.shape[-1], image.shape[-2]
         size_x = (size_x / 2) * 2 # fixes bug if images don't have even dimensions with ffmpeg
         size_y = (size_y / 2) * 2
         image = image[:, :size_y, :size_x]
@@ -293,7 +293,7 @@ if __name__ == "__main__":
         pipe = sp.Popen(command, stdin=sp.PIPE)
 
         # display a frame and send it to write
-        for ti, img in enumerate(images, start=1):
+        for img in images:
             # skip images not specified by param file.
             t = get_time(img)
             if (t < p['image_start']) or (t > p['image_end']):
@@ -301,9 +301,9 @@ if __name__ == "__main__":
 
             image_data = tiff.imread(img) # get the image
 
-            # make phase color
+            # make phase stack
             if show_phase:
-                if len(image_data.shape) > 3:
+                if len(image_data.shape) > 2:
                     phase = image_data[phase_plane_index] # get phase plane
                 else:
                     phase = image_data
@@ -326,7 +326,7 @@ if __name__ == "__main__":
             # make green stack
             if show_green:
                 if (t - 1) % fl_green_interval == 0:
-                    if len(image_data.shape) > 3:
+                    if len(image_data.shape) > 2:
                         flgreen = image_data[fl_green_index].astype('float64') # pick red image
                     else:
                         flgreen = image_data
@@ -341,9 +341,9 @@ if __name__ == "__main__":
                     flgreen = np.dstack((np.zeros_like(flgreen), flgreen, np.zeros_like(flgreen)))
 
             # make red stack
-            if show_red
+            if show_red:
                 if (t - 1) % fl_red_interval == 0:
-                    if len(image_data.shape) > 3:
+                    if len(image_data.shape) > 2:
                         flred = image_data[fl_red_index].astype('float64') # pick red image
                     else:
                         flred = image_data
@@ -358,7 +358,7 @@ if __name__ == "__main__":
                     flred = np.dstack((flred, np.zeros_like(flred), np.zeros_like(flred)))
 
             # combine images as appropriate
-            if show_phase and show_green and show red:
+            if show_phase and show_green and show_red:
                 image = 1 - ((1 - flgreen) * (1 - flred) * (1 - phase))
 
             elif show_phase and show_green:
@@ -367,18 +367,18 @@ if __name__ == "__main__":
             elif show_phase and show_red:
                 image = 1 - ((1 - flred) * (1 - phase))
 
-            elif show_green and show_red
+            elif show_green and show_red:
                 image = 1 - ((1 - flgreen) * (1 - flred))
 
-            elif show_phase
+            elif show_phase:
                 # just send the phase image forward
                 image = phase
 
             elif show_green:
-                image = fl_green
+                image = flgreen
 
             elif show_red:
-                image = fl_red
+                image = flred
 
             """
             # test
