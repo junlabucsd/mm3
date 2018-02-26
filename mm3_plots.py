@@ -462,9 +462,13 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
+<<<<<<< HEAD
     binmin = 3 # minimum bin size to display
+=======
+    binmin = 1 # minimum bin size to display
+>>>>>>> shift25
     bingrid = (50, 10) # how many bins to have in the x and y directions
-    moving_window = 10 # window to calculate moving stat
+    moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
     # bin_extent in within which bounds should bins go. (left, right, bottom, top)
@@ -473,9 +477,15 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 5),
+<<<<<<< HEAD
                       (x_extents[0], x_extents[1], 0, 1.5),
                       (x_extents[0], x_extents[1], 0, 10),
                       (x_extents[0], x_extents[1], 0, 90),
+=======
+                      (x_extents[0], x_extents[1], 0, 1.2),
+                      (x_extents[0], x_extents[1], 0, 10),
+                      (x_extents[0], x_extents[1], 0, 80),
+>>>>>>> shift25
                       (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -504,15 +514,22 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
+<<<<<<< HEAD
     ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
     ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
     ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
+=======
+    ax[5].legend(['%s frame binned average' % moving_window], fontsize=14, loc='lower right')
+    ax[4].set_xlabel('Frame [min/2]', size=16)
+    ax[5].set_xlabel('Frame [min/2]', size=16)
+>>>>>>> shift25
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.925, hspace=0.25)
-    fig.suptitle('Cell Parameters Over Time', size=24)
+    # plt.subplots_adjust(top=0.925, hspace=0.25, bottom=0.5)
+    plt.tight_layout
+    fig.suptitle('Cell Parameters Over Time', size=20)
 
-    sns.despine()
+    # sns.despine()
 
     return fig, ax
 
@@ -565,14 +582,14 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
         ax[i].set_ylabel(ylabels[i], size=16)
 
     ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('%s [min]' % time_mark, size=16)
-    ax[5].set_xlabel('%s [min]' % time_mark, size=16)
+    ax[4].set_xlabel('Frame [min/2]', size=16)
+    ax[5].set_xlabel('Frame [min/2]', size=16)
 
     # Make title, need a little extra space
     plt.subplots_adjust(top=0.9, hspace=0.25)
     fig.suptitle('Cell Parameters Over Time', size=24)
 
-    sns.despine()
+    # sns.despine()
 
     return fig, ax
 
@@ -591,7 +608,7 @@ def plot_traces(Cells, trace_limit=1000):
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
     ### Traces #################################################################################
-    fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
+    fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(10, 10))
     ax = axes.flat # same as axes.ravel()
 
     if trace_limit:
@@ -601,12 +618,18 @@ def plot_traces(Cells, trace_limit=1000):
     for cell_id, Cell in Cells.iteritems():
 
         ax[0].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
-        ax[1].semilogy(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
+        ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
 
-    ax[0].set_title('Cell Length vs Time', size=24)
-    ax[1].set_xlabel('Time [min]', size=16)
+    ax[0].set_title('Cell Length vs Time', size=18)
     ax[0].set_ylabel('Length [um]', size=16)
-    ax[1].set_ylabel('Log(Length [um])', size=16)
+    ax[0].set_ylim([0, 12])
+
+    ax[1].set_xlabel('Frame [min/2]', size=16)
+    ax[1].set_ylabel('Length [um] (log scale)', size=16)
+    ax[1].set_yscale('symlog')
+    ax[1].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
+    ax[1].set_yticks([2, 4, 8])
+    ax[1].set_ylim([2, 12])
 
     plt.subplots_adjust(top=0.925, hspace=0.1)
 
@@ -780,10 +803,17 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
+<<<<<<< HEAD
         ax[i].set_yticks([2, 4, 8, 12])
         ax[i].set_ylim([2, 12])
 
     ax[-1].set_xlabel('Time point [2 min]', size=16)
+=======
+        ax[i].set_yticks([2, 4, 8])
+        ax[i].set_ylim([2, 12])
+
+    ax[-1].set_xlabel('Frame [min/2]', size=16)
+>>>>>>> shift25
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
@@ -791,6 +821,71 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
 
     sns.despine()
     # plt.subplots_adjust(hspace=0.5)
+
+    return fig, ax
+
+def saw_tooth_ring_plot(Cells):
+    '''Plot a cell lineage with profile information.
+
+    Parameters
+    ----------
+    Cells : dict of Cell objects
+        All the cells should come from a single peak.
+
+    '''
+
+    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(15, 4), squeeze=False)
+    ax = axes.flat[0]
+
+    # this is to map mothers to daugthers with lines
+    last_div_time = None
+    last_length = None
+
+    # turn it into a list so it retains time order
+    lin = [(cell_id, cell) for cell_id, cell in Cells.iteritems()]
+    # sort cells by birth time for the hell of it.
+    lin = sorted(lin, key=lambda x: x[1].birth_time)
+
+    color_norm = mpl.colors.Normalize(vmin=10, vmax=100)
+
+    for cell_id, cell in lin:
+        ### plot cell length and division lines
+        ax.plot(np.array(cell.times_w_div), cell.lengths_w_div,
+                color='blue', lw=2, alpha=1)
+
+        # draw a connecting lines betwee mother and daughter
+        if cell.birth_time == last_div_time:
+            ax.plot([last_div_time, cell.birth_time],
+                           [last_length, cell.sb],
+                           color='blue', lw=2, alpha=1)
+
+        # record the last division time and length for next time
+        last_div_time = cell.division_time
+
+        # save the last length to check for division
+        last_length = cell.sd
+
+        ### plot ring
+        # Use scatter plot heat map
+        for i, t in enumerate(cell.times):
+            ring_x = np.ones(len(cell.fl_profiles[i])) * t
+            ring_y = np.arange(0, len(cell.fl_profiles[i])) * 0.065 #params['pxl2um']
+            ring_z = cell.fl_profiles[i]
+
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Reds', marker='s', s=10,
+                       norm=color_norm)
+
+    # axis and figure formatting options
+    ax.set_xlabel('Frame [min/2]', size=16)
+    ax.set_xlim([30, 250])
+    ax.set_ylabel('Length [um]', size=16)
+    ax.set_ylim([0, 10])
+
+    # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
+    # plt.tight_layout()
+
+    sns.despine()
 
     return fig, ax
 

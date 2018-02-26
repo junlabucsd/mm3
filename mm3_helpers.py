@@ -29,8 +29,13 @@ from skimage.feature import match_template # used to align images
 from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
+<<<<<<< HEAD
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line
+=======
+from skimage.measure import regionprops # used for creating
+from skimage.measure import profile_line # used for ring an nucleoid analysis
+>>>>>>> shift25
 
 # Parralelization modules
 import multiprocessing
@@ -2171,6 +2176,7 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
+<<<<<<< HEAD
     # determine absolute time index
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
     with open(time_table_path, 'r') as fin:
@@ -2181,6 +2187,13 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     times_all = np.unique(times_all)
     times_all = np.sort(times_all)
     times_all = np.array(times_all, np.int_)
+=======
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+>>>>>>> shift25
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
@@ -2221,16 +2234,11 @@ def foci_analysis(fov_id, peak_id, Cells):
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci_plane']))
 
-    # determine absolute time index
-    time_table_path = os.path.join(params['ana'],'time_table.pkl')
-    with open(time_table_path,'r') as fin:
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
         time_table = pickle.load(fin)
-    times_all = []
-    for fov in time_table:
-        times_all = np.append(times_all, time_table[fov].keys())
-    times_all = np.unique(times_all)
-    times_all = np.sort(times_all)
-    times_all = np.array(times_all,np.int_)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
@@ -2528,3 +2536,189 @@ def moments(data):
     # width_y = np.sqrt(abs((np.arange(row.size)-x)**2*row).sum()/row.sum())
     height = data.max()
     return height, x, y, width
+
+# returns a 1D gaussian function
+def gaussian1d(x, height, mean, sigma):
+    '''
+    x : data
+    height : height
+    mean : center
+    sigma : RMS width
+    '''
+    return height * np.exp(-(x-mean)**2 / (2*sigma**2))
+
+# analyze ring fluroescence.
+def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
+    '''Add information to the Cell objects about the location of the Z ring. Sums the fluorescent channel along the long axis of the cell. This can be plotted directly to give a good idea about the development of the ring. Also fits a gaussian to the profile.
+
+    Parameters
+    ----------
+    fov_id : int
+        FOV number of the lineage to analyze.
+    peak_id : int
+        Peak number of the lineage to analyze.
+    Cells : dict of Cell objects (from a Lineages dictionary)
+        Cells should be prefiltered to match fov_id and peak_id.
+    ring_plane : str
+        The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
+
+    Usage
+    -----
+    for fov_id, peaks in Lineages.iteritems():
+        for peak_id, Cells in peaks.iteritems():
+            mm3.ring_analysis(fov_id, peak_id, Cells, ring_plane='sub_c2')
+    '''
+
+    peak_width_guess = 2
+
+    # Load data
+    ring_stack = load_stack(fov_id, peak_id, color=ring_plane)
+    seg_stack = load_stack(fov_id, peak_id, color='seg')
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+
+        # initialize ring data arrays for cell
+        Cell.ring_locs = []
+        Cell.ring_heights = []
+        Cell.ring_widths = []
+        Cell.ring_medians = []
+        Cell.ring_profiles = []
+
+        # loop through each time point for this cell
+        for n, t in enumerate(Cell.times):
+            # Make mask of fluorescent channel using segmented image
+            ring_image_masked = np.copy(ring_stack[t-t0])
+            ring_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # Sum along long axis, use the profile_line function from skimage
+            # Use orientation of cell as calculated from the ellipsoid fit,
+            # the known length of the cell from the feret diameter,
+            # and a width that is greater than the cell width.
+
+            # find endpoints of line
+            centroid = Cell.centroids[n]
+            orientation = Cell.orientations[n]
+            length = Cell.lengths[n]
+            width = Cell.widths[n] * 1.25
+
+            # give 2 pixel buffer to each end to capture area outside cell.
+            p1 = (centroid[0] - np.sin(orientation) * (length+4)/2,
+                  centroid[1] - np.cos(orientation) * (length+4)/2)
+            p2 = (centroid[0] + np.sin(orientation) * (length+4)/2,
+                  centroid[1] + np.cos(orientation) * (length+4)/2)
+
+            # ensure old pole is always first point
+            if p1[0] > p2[0]:
+                p1, p2 = p2, p1 # python is cool
+
+            profile = profile_line(ring_image_masked, p1, p2, linewidth=width,
+                                   order=1, mode='constant', cval=0)
+            profile_indicies = np.arange(len(profile))
+
+            # subtract median from profile, using non-zero values for median
+            profile_median = np.median(profile[np.nonzero(profile)])
+            profile_sub = profile - profile_median
+            profile_sub[profile_sub < 0] = 0
+
+            # find peak position simply using maximum.
+            peak_index = np.argmax(profile)
+            peak_height = profile[peak_index]
+            peak_height_sub = profile_sub[peak_index]
+
+            try:
+                # Fit gaussian
+                p_guess = [peak_height_sub, peak_index, peak_width_guess]
+                popt, pcov = curve_fit(gaussian1d, profile_indicies, profile_sub,
+                                       p0=p_guess)
+
+                peak_width = popt[2]
+            except:
+                information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
+                peak_width = np.float('NaN')
+
+            # Add data to cells
+            Cell.ring_locs.append(peak_index - 3) # minus 3 because we added 2 before and line_profile adds 1.
+            Cell.ring_heights.append(peak_height)
+            Cell.ring_widths.append(peak_width)
+            Cell.ring_medians.append(profile_median)
+            Cell.ring_profiles.append(profile) # append whole profile
+
+    return
+
+def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
+    '''Calculate profile of plane along cell and add information to Cell object. Sums the fluorescent channel along the long axis of the cell.
+
+    Parameters
+    ----------
+    fov_id : int
+        FOV number of the lineage to analyze.
+    peak_id : int
+        Peak number of the lineage to analyze.
+    Cells : dict of Cell objects (from a Lineages dictionary)
+        Cells should be prefiltered to match fov_id and peak_id.
+    profile_plane : str
+        The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
+
+    Usage
+    -----
+
+    '''
+
+    # Load data
+    fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
+    seg_stack = load_stack(fov_id, peak_id, color='seg')
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+
+        # initialize ring data arrays for cell
+        Cell.fl_profiles = []
+
+        # loop through each time point for this cell
+        for n, t in enumerate(Cell.times):
+            # Make mask of fluorescent channel using segmented image
+            image_masked = np.copy(fl_stack[t-t0])
+            image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # Sum along long axis, use the profile_line function from skimage
+            # Use orientation of cell as calculated from the ellipsoid fit,
+            # the known length of the cell from the feret diameter,
+            # and a width that is greater than the cell width.
+
+            # find endpoints of line
+            centroid = Cell.centroids[n]
+            orientation = Cell.orientations[n]
+            length = Cell.lengths[n]
+            width = Cell.widths[n] * 1.25
+
+            # give 2 pixel buffer to each end to capture area outside cell.
+            p1 = (centroid[0] - np.sin(orientation) * (length+4)/2,
+                  centroid[1] - np.cos(orientation) * (length+4)/2)
+            p2 = (centroid[0] + np.sin(orientation) * (length+4)/2,
+                  centroid[1] + np.cos(orientation) * (length+4)/2)
+
+            # ensure old pole is always first point
+            if p1[0] > p2[0]:
+                p1, p2 = p2, p1 # python is cool
+
+            profile = profile_line(image_masked, p1, p2, linewidth=width,
+                                   order=1, mode='constant', cval=0)
+
+            Cell.fl_profiles.append(profile) # append whole profile
+
+    return
