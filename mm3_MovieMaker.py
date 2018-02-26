@@ -164,17 +164,17 @@ if __name__ == "__main__":
 
     # put in a timepoint to indicate the timing of a shift (colors the text)
     show_time_stamp = True
-    shift_time = 90 # will change color of timestamp upon shift. Make None is no shift.
+    shift_time = None # will change color of timestamp upon shift. Make None is no shift.
 
     # color management
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = True
+    show_green = False
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = True
+    show_red = False
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
