@@ -29,13 +29,8 @@ from skimage.feature import match_template # used to align images
 from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
-<<<<<<< HEAD
 from skimage.measure import regionprops # used for creating lineages
-from skimage.measure import profile_line
-=======
-from skimage.measure import regionprops # used for creating
 from skimage.measure import profile_line # used for ring an nucleoid analysis
->>>>>>> shift25
 
 # Parralelization modules
 import multiprocessing
@@ -2176,24 +2171,11 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
-<<<<<<< HEAD
-    # determine absolute time index
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = []
-    for fov in time_table:
-        times_all = np.append(times_all, time_table[fov].keys())
-    times_all = np.unique(times_all)
-    times_all = np.sort(times_all)
-    times_all = np.array(times_all, np.int_)
-=======
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
     with open(time_table_path, 'r') as fin:
         time_table = pickle.load(fin)
     times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
->>>>>>> shift25
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 

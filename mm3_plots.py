@@ -462,11 +462,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-<<<<<<< HEAD
     binmin = 3 # minimum bin size to display
-=======
-    binmin = 1 # minimum bin size to display
->>>>>>> shift25
     bingrid = (50, 10) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
@@ -477,15 +473,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 5),
-<<<<<<< HEAD
                       (x_extents[0], x_extents[1], 0, 1.5),
                       (x_extents[0], x_extents[1], 0, 10),
                       (x_extents[0], x_extents[1], 0, 90),
-=======
-                      (x_extents[0], x_extents[1], 0, 1.2),
-                      (x_extents[0], x_extents[1], 0, 10),
-                      (x_extents[0], x_extents[1], 0, 80),
->>>>>>> shift25
                       (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -514,15 +504,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
-<<<<<<< HEAD
     ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
     ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
     ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
-=======
-    ax[5].legend(['%s frame binned average' % moving_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('Frame [min/2]', size=16)
-    ax[5].set_xlabel('Frame [min/2]', size=16)
->>>>>>> shift25
 
     # Make title, need a little extra space
     # plt.subplots_adjust(top=0.925, hspace=0.25, bottom=0.5)
@@ -803,17 +787,10 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-<<<<<<< HEAD
         ax[i].set_yticks([2, 4, 8, 12])
         ax[i].set_ylim([2, 12])
 
     ax[-1].set_xlabel('Time point [2 min]', size=16)
-=======
-        ax[i].set_yticks([2, 4, 8])
-        ax[i].set_ylim([2, 12])
-
-    ax[-1].set_xlabel('Frame [min/2]', size=16)
->>>>>>> shift25
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
