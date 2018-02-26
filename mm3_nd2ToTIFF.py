@@ -140,13 +140,13 @@ if __name__ == "__main__":
         with pims_nd2.ND2_Reader(nd2_file) as nd2f:
             try:
                 starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
-                information('starttime got from nd2 metadata')
+                information('Starttime got from nd2 metadata.')
             except ValueError:
                 # problem with the date
                 jdn = julian_day_number()
                 nd2f._lim_metadata_desc.dTimeStart = jdn
                 starttime = nd2f.metadata['time_start_jdn'] # starttime is jd
-                information('starttime found from lim')
+                information('Starttime found from lim.')
 
             # get the color names out. Kinda roundabout way.
             planes = [nd2f.metadata[md]['name'] for md in nd2f.metadata if md[0:6] == u'plane_' and not md == u'plane_count']
