@@ -92,7 +92,7 @@ if __name__ == "__main__":
     mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     # load cell data dict
-    with open(os.path.join(p['cell_dir'], 'binom_all_cells.pkl'), 'r') as cell_file:
+    with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'r') as cell_file:
         Complete_Cells = pickle.load(cell_file)
 
     # create dictionary which organizes cells by fov and peak_id
@@ -104,11 +104,11 @@ if __name__ == "__main__":
             mm3.information('Processing FOV {}.'.format(fov_id))
             for peak_id, Cells in Cells_by_peak[fov_id].items():
                 mm3.information('Processing peak {}.'.format(peak_id))
-                mm3.find_cell_intensities_new(fov_id, peak_id, Cells)
+                mm3.find_cell_intensities(fov_id, peak_id, Cells)
 
     # save the data out again
     # Just the complete cells, those with mother and daugther
-    with open(os.path.join(p['cell_dir'],'binom_all_cells_fl.pkl'), 'wb') as cell_file:
+    with open(os.path.join(p['cell_dir'],'complete_cells_fl.pkl'), 'wb') as cell_file:
         pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     mm3.information('Finished.')

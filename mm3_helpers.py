@@ -2160,49 +2160,7 @@ def find_mother_cells(Cells):
 
 ### functions for additional cell centric analysis
 
-# finds total and average intenstiy timepoint in cells
-def find_cell_intensities(fov_id, peak_id, Cells):
-    '''
-    Finds fluorescenct information for cells. All the cell in Cells
-    should be from one fov/peak. See the function
-    organize_cells_by_channel()
-
-    '''
-    # Load fluorescent images and segmented images for this channel
-    fl_stack = load_stack(fov_id, peak_id, color='c2')
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
-
-    # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
-    t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
-
-    # Loop through cells
-    for Cell in Cells.values():
-        # give this cell two lists to hold new information
-        Cell.fl_tots = [] # total fluorescence per time point
-        Cell.fl_avgs = [] # avg fluorescence per time point
-
-        # and the time points that make up this cell's life
-        for n, t in enumerate(Cell.times):
-            # create fluorescent image only for this cell and timepoint.
-            fl_image_masked = np.copy(fl_stack[t-t0])
-            fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
-
-            # append total fluorescent image
-            Cell.fl_tots.append(np.sum(fl_image_masked))
-
-            # and the average fluorescence
-            Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
-
-    # The cell objects in the original dictionary will be updated,
-    # no need to return anything specifically.
-    return
-
-def find_cell_intensities_new(fov_id, peak_id, Cells):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
     '''
     Finds fluorescenct information for cells. All the cell in Cells
     should be from one fov/peak. See the function
@@ -2231,7 +2189,9 @@ def find_cell_intensities_new(fov_id, peak_id, Cells):
         # give this cell two lists to hold new information
         Cell.fl_tots = [] # total fluorescence per time point
         Cell.fl_avgs = [] # avg fluorescence per time point
-        Cell.mid_fl = [] # avg fluorescence of midline
+
+        if midline:
+            Cell.mid_fl = [] # avg fluorescence of midline
 
         # and the time points that make up this cell's life
         for n, t in enumerate(Cell.times):
@@ -2245,16 +2205,17 @@ def find_cell_intensities_new(fov_id, peak_id, Cells):
             # and the average fluorescence
             Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
 
-            # add the midline average by first appying morphology transform
-            bin_mask = np.copy(seg_stack[t-t0])
-            bin_mask[bin_mask != Cell.labels[n]] = 0
-            med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
-            # med_mask[med_dist < np.floor(cap_radius/2)] = 0
-            # print(img_fluo[med_mask])
-            if (np.shape(fl_image_masked[med_mask])[0] > 0):
-                Cell.mid_fl.append(np.nanmean(fl_image_masked[med_mask]))
-            else:
-                Cell.mid_fl.append(0)
+            if midline:
+                # add the midline average by first appying morphology transform
+                bin_mask = np.copy(seg_stack[t-t0])
+                bin_mask[bin_mask != Cell.labels[n]] = 0
+                med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
+                # med_mask[med_dist < np.floor(cap_radius/2)] = 0
+                # print(img_fluo[med_mask])
+                if (np.shape(fl_image_masked[med_mask])[0] > 0):
+                    Cell.mid_fl.append(np.nanmean(fl_image_masked[med_mask]))
+                else:
+                    Cell.mid_fl.append(0)
 
     # The cell objects in the original dictionary will be updated,
     # no need to return anything specifically.
