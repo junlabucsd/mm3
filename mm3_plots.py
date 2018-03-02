@@ -158,6 +158,23 @@ def organize_cells_by_channel(Cells, specs):
     for cell_id, Cell in Cells.items():
         Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
 
+    # remove peaks and that do not contain cells
+    remove_fovs = []
+    for fov_id, peaks in Cells_by_peak.iteritems():
+        remove_peaks = []
+        for peak_id in peaks.keys():
+            if not peaks[peak_id]:
+                remove_peaks.append(peak_id)
+
+        for peak_id in remove_peaks:
+            peaks.pop(peak_id)
+
+        if not Cells_by_peak[fov_id]:
+            remove_fovs.append(fov_id)
+
+    for fov_id in remove_fovs:
+        Cells_by_peak.pop(fov_id)
+
     return Cells_by_peak
 
 def filter_by_stat(Cells, center_stat='mean', std_distance=3):
@@ -462,7 +479,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 3 # minimum bin size to display
+    binmin = 1 # minimum bin size to display
     bingrid = (50, 10) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
@@ -475,7 +492,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         bin_extents = [(x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1.5),
                       (x_extents[0], x_extents[1], 0, 10),
-                      (x_extents[0], x_extents[1], 0, 90),
+                      (x_extents[0], x_extents[1], 0, 100),
                       (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -824,7 +841,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=10, vmax=100)
+    color_norm = mpl.colors.Normalize(vmin=10, vmax=200)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -846,21 +863,21 @@ def saw_tooth_ring_plot(Cells):
         ### plot ring
         # Use scatter plot heat map
         for i, t in enumerate(cell.times):
-            ring_x = np.ones(len(cell.fl_profiles[i])) * t
-            ring_y = np.arange(0, len(cell.fl_profiles[i])) * 0.065 #params['pxl2um']
-            ring_z = cell.fl_profiles[i]
+            ring_x = np.ones(len(cell.ring_profiles[i])) * t
+            ring_y = np.arange(0, len(cell.ring_profiles[i])) * 0.065 #params['pxl2um']
+            ring_z = cell.ring_profiles[i]
 
-            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Reds', marker='s', s=10,
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=10,
                        norm=color_norm)
 
     # axis and figure formatting options
     ax.set_xlabel('Frame [min/2]', size=16)
-    ax.set_xlim([30, 250])
+    ax.set_xlim([250, 400])
     ax.set_ylabel('Length [um]', size=16)
     ax.set_ylim([0, 10])
 
     # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
-    # plt.tight_layout()
+    plt.tight_layout()
 
     sns.despine()
 
