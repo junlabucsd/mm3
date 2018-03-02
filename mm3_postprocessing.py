@@ -437,6 +437,26 @@ if __name__ == "__main__":
                 except TypeError:
                     pass
 
+            # compute cell volumes
+            try:
+                upp = float(params['um_per_pixel'])
+            except KeyError:
+                print "Could not read the um_per_pixel parameter. Default to upp=1."
+                upp = 1.
+            for key in data:
+                cell = data[key]
+                w = np.array(cell.widths, dtype=np.float_)*upp
+                L = np.array(cell.lengths, dtype=np.float_)*upp
+                cell.volumes = np.pi/4. * w**2*L - np.pi/12. * w**3 # cylinder with hemispherical caps of length L and width w
+
+            # compute fluorescence per volume
+            for key in data:
+                cell = data[key]
+                try:
+                    cell.fl_pervolume = np.array(cell.fl_tots, dtype=np.float_) / cell.volumes
+                except AttributeError:
+                    pass
+
 ################################################
 # write dictionary
 ################################################
