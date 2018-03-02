@@ -165,6 +165,7 @@ if __name__ == "__main__":
     # put in a timepoint to indicate the timing of a shift (colors the text)
     show_time_stamp = True
     shift_time = None # will change color of timestamp upon shift. Make None is no shift.
+>>>>>>> shift23
 
     # color management
     show_phase = True

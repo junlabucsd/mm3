@@ -15,11 +15,11 @@ except:
     import pickle
 import numpy as np
 import matplotlib as mpl
+# mpl.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 # global settings mpl
-mpl.use('Agg')
 plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI

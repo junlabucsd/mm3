@@ -22,7 +22,7 @@ import h5py # working with HDF5 files
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
-from scipy.optimize import curve_fit # fitting elongation rate
+from scipy.optimize import curve_fit # fitting ring profile
 from scipy.optimize import leastsq # fitting 2d gaussian
 from scipy import ndimage as ndi # labeling and distance transform
 from skimage import segmentation # used in make_masks and segmentation
@@ -30,7 +30,7 @@ from skimage.feature import match_template # used to align images
 from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
-from skimage.measure import regionprops # used for creating
+from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 
 # Parralelization modules
@@ -2169,7 +2169,7 @@ def find_cell_intensities(fov_id, peak_id, Cells):
 
     '''
     # Load fluorescent images and segmented images for this channel
-    fl_stack = load_stack(fov_id, peak_id, color='c1')
+    fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
     # Load time table to determine first image index.
@@ -2197,6 +2197,64 @@ def find_cell_intensities(fov_id, peak_id, Cells):
 
             # and the average fluorescence
             Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+
+    # The cell objects in the original dictionary will be updated,
+    # no need to return anything specifically.
+    return
+
+def find_cell_intensities_new(fov_id, peak_id, Cells):
+    '''
+    Finds fluorescenct information for cells. All the cell in Cells
+    should be from one fov/peak. See the function
+    organize_cells_by_channel()
+
+    '''
+    # Load fluorescent images and segmented images for this channel
+    fl_stack = load_stack(fov_id, peak_id, color='c2')
+    seg_stack = load_stack(fov_id, peak_id, color='seg')
+
+    # determine absolute time index
+    time_table_path = os.path.join(params['ana_dir'],'time_table.pkl')
+    with open(time_table_path,'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = []
+    for fov in time_table:
+        times_all = np.append(times_all, time_table[fov].keys())
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+    t0 = times_all[0] # first time index
+    tN = times_all[-1] # last time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+        # give this cell two lists to hold new information
+        Cell.fl_tots = [] # total fluorescence per time point
+        Cell.fl_avgs = [] # avg fluorescence per time point
+        Cell.mid_fl = [] # avg fluorescence of midline
+
+        # and the time points that make up this cell's life
+        for n, t in enumerate(Cell.times):
+            # create fluorescent image only for this cell and timepoint.
+            fl_image_masked = np.copy(fl_stack[t-t0])
+            fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # append total flourescent image
+            Cell.fl_tots.append(np.sum(fl_image_masked))
+
+            # and the average fluorescence
+            Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+
+            # add the midline average by first appying morphology transform
+            bin_mask = np.copy(seg_stack[t-t0])
+            bin_mask[bin_mask != Cell.labels[n]] = 0
+            med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
+            # med_mask[med_dist < np.floor(cap_radius/2)] = 0
+            # print(img_fluo[med_mask])
+            if (np.shape(fl_image_masked[med_mask])[0] > 0):
+                Cell.mid_fl.append(np.nanmean(fl_image_masked[med_mask]))
+            else:
+                Cell.mid_fl.append(0)
 
     # The cell objects in the original dictionary will be updated,
     # no need to return anything specifically.
@@ -2490,7 +2548,7 @@ def fitgaussian(data):
     if params are not provided, they are calculated from the moments
     params should be (height, x, y, width_x, width_y)"""
     gparams = moments(data) # create guess parameters.
-    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -data)
+    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) - data)
     p, success = leastsq(errorfunction, gparams)
     return p
 

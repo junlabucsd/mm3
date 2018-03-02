@@ -158,6 +158,23 @@ def organize_cells_by_channel(Cells, specs):
     for cell_id, Cell in Cells.items():
         Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
 
+    # remove peaks and that do not contain cells
+    remove_fovs = []
+    for fov_id, peaks in Cells_by_peak.iteritems():
+        remove_peaks = []
+        for peak_id in peaks.keys():
+            if not peaks[peak_id]:
+                remove_peaks.append(peak_id)
+
+        for peak_id in remove_peaks:
+            peaks.pop(peak_id)
+
+        if not Cells_by_peak[fov_id]:
+            remove_fovs.append(fov_id)
+
+    for fov_id in remove_fovs:
+        Cells_by_peak.pop(fov_id)
+
     return Cells_by_peak
 
 def filter_by_stat(Cells, center_stat='mean', std_distance=3):
@@ -458,7 +475,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[10,5*len(columns)/3], squeeze=False)
+                            figsize=[12,5*len(columns)/2.5], squeeze=False)
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
@@ -473,9 +490,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     if bin_extents == None:
         bin_extents = [(x_extents[0], x_extents[1], 0, 5),
-                      (x_extents[0], x_extents[1], 0, 1.2),
+                      (x_extents[0], x_extents[1], 0, 1.5),
                       (x_extents[0], x_extents[1], 0, 10),
-                      (x_extents[0], x_extents[1], 0, 80),
+                      (x_extents[0], x_extents[1], 0, 100),
                       (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
@@ -499,14 +516,14 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
 
         # formatting
-        ax[i].set_title(titles[i], size=18)
-        ax[i].set_ylabel(ylabels[i], size=16)
+        ax[i].set_title(titles[i], size=20)
+        ax[i].set_ylabel(ylabels[i], size=18)
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
-    ax[5].legend(['%s frame binned average' % moving_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('Frame [min/2]', size=16)
-    ax[5].set_xlabel('Frame [min/2]', size=16)
+    ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
+    ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
+    ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
 
     # Make title, need a little extra space
     # plt.subplots_adjust(top=0.925, hspace=0.25, bottom=0.5)
@@ -787,10 +804,10 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-        ax[i].set_yticks([2, 4, 8])
+        ax[i].set_yticks([2, 4, 8, 12])
         ax[i].set_ylim([2, 12])
 
-    ax[-1].set_xlabel('Frame [min/2]', size=16)
+    ax[-1].set_xlabel('Time point [2 min]', size=16)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
@@ -824,7 +841,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=10, vmax=100)
+    color_norm = mpl.colors.Normalize(vmin=10, vmax=200)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -846,21 +863,21 @@ def saw_tooth_ring_plot(Cells):
         ### plot ring
         # Use scatter plot heat map
         for i, t in enumerate(cell.times):
-            ring_x = np.ones(len(cell.fl_profiles[i])) * t
-            ring_y = np.arange(0, len(cell.fl_profiles[i])) * 0.065 #params['pxl2um']
-            ring_z = cell.fl_profiles[i]
+            ring_x = np.ones(len(cell.ring_profiles[i])) * t
+            ring_y = np.arange(0, len(cell.ring_profiles[i])) * 0.065 #params['pxl2um']
+            ring_z = cell.ring_profiles[i]
 
-            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Reds', marker='s', s=10,
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=10,
                        norm=color_norm)
 
     # axis and figure formatting options
     ax.set_xlabel('Frame [min/2]', size=16)
-    ax.set_xlim([30, 250])
+    ax.set_xlim([250, 400])
     ax.set_ylabel('Length [um]', size=16)
     ax.set_ylim([0, 10])
 
     # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
-    # plt.tight_layout()
+    plt.tight_layout()
 
     sns.despine()
 
