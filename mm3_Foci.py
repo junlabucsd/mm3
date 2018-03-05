@@ -36,7 +36,7 @@ if __name__ == "__main__":
     '''
     # switches which may be overwritten
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
-    cell_filename = 'complete_cells.pkl'
+    cell_filename = 'continuous_lineages.pkl'
     cell_file_path = None
 
     # get switches and parameters

@@ -841,7 +841,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=10, vmax=200)
+    color_norm = mpl.colors.Normalize(vmin=50, vmax=300)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -864,17 +864,18 @@ def saw_tooth_ring_plot(Cells):
         # Use scatter plot heat map
         for i, t in enumerate(cell.times):
             ring_x = np.ones(len(cell.ring_profiles[i])) * t
-            ring_y = np.arange(0, len(cell.ring_profiles[i])) * 0.065 #params['pxl2um']
+            # the minus three is to account for the shift in the profile when calculated
+            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.11 #params['pxl2um']
             ring_z = cell.ring_profiles[i]
 
-            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=10,
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=40,
                        norm=color_norm)
 
     # axis and figure formatting options
     ax.set_xlabel('Frame [min/2]', size=16)
-    ax.set_xlim([250, 400])
+    ax.set_xlim([30, 130])
     ax.set_ylabel('Length [um]', size=16)
-    ax.set_ylim([0, 10])
+    ax.set_ylim([0, 8])
 
     # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
     plt.tight_layout()

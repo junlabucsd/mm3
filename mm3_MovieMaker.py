@@ -165,27 +165,26 @@ if __name__ == "__main__":
     # put in a timepoint to indicate the timing of a shift (colors the text)
     show_time_stamp = True
     shift_time = None # will change color of timestamp upon shift. Make None is no shift.
->>>>>>> shift23
 
     # color management
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = False
+    show_green = True
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
+    show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
-    fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_red_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
     auto_phase_levels = False # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 227, 4273
-    imin['green'], imax['green'] = 150, 200
-    imin['red'], imax['red'] = 150, 250
+    imin['phase'], imax['phase'] = 230, 2500
+    imin['green'], imax['green'] = 150, 300
+    imin['red'], imax['red'] = 110, 130
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
