@@ -180,12 +180,12 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 1 # index of the phase plane
 
-    show_green = True
+    show_green = False
     fl_green_index = 0 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
-    fl_red_index = 2 # index of red fluorsecent channel.
+    show_red = True
+    fl_red_index = 0 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
@@ -194,7 +194,7 @@ if __name__ == "__main__":
     imax = {}
     imin['phase'], imax['phase'] = 300, 7000
     imin['green'], imax['green'] = 100, 450
-    imin['red'], imax['red'] = 150, 250
+    imin['red'], imax['red'] = 100, 450
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
