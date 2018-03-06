@@ -162,9 +162,19 @@ if __name__ == "__main__":
             sys.exit("You need to install some fonts and specify the correct path to the .ttf file!")
     fontface = Face(fontfile)
 
-    # put in a timepoint to indicate the timing of a shift (colors the text)
+    # set seconds_per_time_index parameter in param file
     show_time_stamp = True
-    shift_time = None # will change color of timestamp upon shift. Make None is no shift.
+
+    # label properties
+    show_label = True
+    label1_text = 'Label 1'
+    # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
+    shift_time = None
+    label2_text = 'Label 2'
+
+    # scalebar properties
+    show_scalebar = True
+    scalebar_length_um = 10
 
     # color management
     show_phase = True
@@ -174,7 +184,7 @@ if __name__ == "__main__":
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
+    show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
@@ -182,9 +192,9 @@ if __name__ == "__main__":
     auto_phase_levels = False # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 227, 4273
-    imin['green'], imax['green'] = 150, 200
-    imin['red'], imax['red'] = 150, 250
+    imin['phase'], imax['phase'] = 300, 7000
+    imin['green'], imax['green'] = 100, 450
+    imin['red'], imax['red'] = 100, 450
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -380,51 +390,65 @@ if __name__ == "__main__":
             elif show_red:
                 image = flred
 
-            """
-            # test
-            import matplotlib.pyplot as plt
-            fl488 = image_data[fl_plane_index].astype('float64') # pick red image
-            hist,edges = np.histogram(np.ravel(fl488),bins='auto')
-            #for e0,e1,h in zip(edges[:-1],edges[1:],hist):
-            #    print ("{:<20.6g}{:<20.6g}{:<20.6g}".format(e0,e1,h))
-            fig = plt.figure()
-            idx = hist > 0.
-            ax1=fig.add_subplot(2,1,1)
-            ax1.plot(edges[:-1][idx],hist[idx],'b-')
-            ax1.set_xlabel("I")
-            ax1.set_ylabel("pdf")
-            ax2=fig.add_subplot(2,1,2)
-            myimg = ax2.imshow(fl488)
-            ax2.axis('off')
-            plt.colorbar(myimg, ax=ax2)
-            fig.tight_layout()
-            fdir = "debug"
-            fileout = os.path.join(fdir,"fov{:03d}_time{:04d}.pdf".format(fov,t))
-            fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
-            plt.close('all')
-            # test
-            #"""
-
             if show_time_stamp:
                 # put in time stamp
                 seconds = float(t * p['seconds_per_time_index'])
                 mins = seconds / 60
                 hours = mins / 60
                 timedata = "%dhrs %02dmin" % (hours, mins % 60)
-                r_timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                timestamp = np.fliplr(make_label(timedata, fontface, size=48,
                                                    angle=180)).astype('float64')
-                r_timestamp = np.pad(r_timestamp, ((size_y - 10 - r_timestamp.shape[0], 10),
-                                                   (size_x - 10 - r_timestamp.shape[1], 10)),
+                timestamp = np.pad(timestamp, ((size_y - 10 - timestamp.shape[0], 10),
+                                                   (size_x - 10 - timestamp.shape[1], 10)),
                                                    mode = 'constant')
-                r_timestamp /= 255.0
+                timestamp /= 255.0
 
                 # create label
-                if shift_time and t >= shift_time:
-                    r_timestamp = np.dstack((r_timestamp, r_timestamp, np.zeros_like(r_timestamp)))
-                else:
-                    r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp))
+                timestamp = np.dstack((timestamp, timestamp, timestamp))
 
-                image = 1 - ((1 - image) * (1 - r_timestamp))
+                image = 1 - ((1 - image) * (1 - timestamp))
+
+            if show_label:
+                label1 = np.fliplr(make_label(label1_text, fontface, size=48,
+                                              angle=180)).astype('float64')
+                label1 = np.pad(label1, ((10, size_y - 10 - label1.shape[0]),
+                                         (10, size_x - 10 - label1.shape[1])),
+                                         mode='constant')
+                label1 /= 255.0
+                label1 = np.dstack((label1, label1, label1))
+
+                if shift_time:
+                    label2 = np.fliplr(make_label(label2_text, fontface, size=48,
+                                                  angle=180)).astype('float64')
+                    label2 = np.pad(label2, ((10, size_y - 10 - label2.shape[0]),
+                                             (10, size_x - 10 - label2.shape[1])),
+                                                    mode='constant')
+                    label2 /= 255.0
+                    label2 = np.dstack((label2, label2, label2))
+
+            if t >= shift_time:
+                image = 1 - ((1 - image) * (1 - label2))
+            else:
+                image = 1 - ((1 - image) * (1 - label1))
+
+            if show_scalebar:
+                scalebar_height = 30
+                scalebar_length = np.around(scalebar_length_um / p['pxl2um']).astype(int)
+                scalebar = np.zeros((size_y, size_x), dtype='float64')
+                scalebar[size_y - 10 - scalebar_height:size_y - 10,
+                         10:10 + scalebar_length] = 1
+
+                # scalebar legend
+                scale_text = '{} um'.format(scalebar_length_um)
+                scale_legend = np.fliplr(make_label(scale_text, fontface, size=48,
+                                                    angle=180)).astype('float64')
+                scale_legend = np.pad(scale_legend, ((size_y - 10 - scale_legend.shape[0], 10),
+                    (20 + scalebar_length, size_x - 20 - scalebar_length - scale_legend.shape[1])),
+                                      mode='constant')
+                scale_legend /= 255.0
+                scalebar = np.add(scalebar, scale_legend) # put em together
+                scalebar = np.dstack((scalebar, scalebar, scalebar))
+                image = 1 - ((1 - image) * (1 - scalebar))
 
             # shoot the image to the ffmpeg subprocess
             pipe.stdin.write((image * 65535).astype('uint16').tostring())
