@@ -167,10 +167,10 @@ if __name__ == "__main__":
 
     # label properties
     show_label = True
-    label1_text = 'YES medium'
+    label1_text = 'Label 1'
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
-    shift_time = 109
-    label2_text = 'YES medium + 25mM HU'
+    shift_time = None
+    label2_text = 'Label 2'
 
     # scalebar properties
     show_scalebar = True
@@ -178,14 +178,14 @@ if __name__ == "__main__":
 
     # color management
     show_phase = True
-    phase_plane_index = 1 # index of the phase plane
+    phase_plane_index = 0 # index of the phase plane
 
     show_green = False
-    fl_green_index = 0 # index of green channel.
+    fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     show_red = True
-    fl_red_index = 0 # index of red fluorsecent channel.
+    fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
@@ -433,7 +433,6 @@ if __name__ == "__main__":
 
             if show_scalebar:
                 scalebar_height = 30
-                # 10um length
                 scalebar_length = np.around(scalebar_length_um / p['pxl2um']).astype(int)
                 scalebar = np.zeros((size_y, size_x), dtype='float64')
                 scalebar[size_y - 10 - scalebar_height:size_y - 10,
