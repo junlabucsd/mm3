@@ -57,15 +57,15 @@ clc;
 % close all;
 
 %-------------start pre-prosessing-----------
-handles.dir_name = '../../analysis/';
-handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
-handles.px_to_mu = 0.065;
-handles.IW_thr = 3945; % threshold of intensity weighting
+handles.dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_photo/';
+handles.cell_data = load([handles.dir_name 'cell_data/continuous_lineages_foci.mat']);
+handles.px_to_mu = 0.11;
+handles.IW_thr = 3000; % threshold of intensity weighting
 handles.n_oc = 2; %number of overlapping cell cycle (default value)
 
-handles.xlim_max = 310;
+handles.xlim_max = 150;
 handles.ylim_max = 7;
-handles.time_int = 3;
+handles.time_int = 2;
 %%%
 
 if exist([handles.dir_name 'picked/']) == 0
