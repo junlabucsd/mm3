@@ -280,16 +280,13 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
             if last_daughter.birth_time > t2:
                 # print(fov, peak, 'Made it')
 
-                # now retrieve only those cells within the two times in dictionary format
+                # now retrieve only those cells within the two times
+                # use the function to easily return in dictionary format
                 Cells_cont = find_cells_born_after(Cells, born_after=t1)
                 Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
-                # append the mother of the first cell in filtered list,
-                # this should be the same as first_cell above
-                cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
-                cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
-                first_in_line = cells_cont_sorted[0][1]
-                Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
+                # append the first cell which was filtered out in the above step
+                Cells_cont[first_cell.id] = first_cell
 
                 # and add it to the big dictionary
                 Continuous_Lineages[fov][peak] = Cells_cont
