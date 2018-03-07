@@ -258,36 +258,41 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
             if not cells_sorted:
                 continue
 
-            # check if first cell has a birth time below a cutoff
+            # look through list to find the cell born immediately before t1
+            # and divides after t1, but not after t2
+            for i, cell_data in enumerate(cells_sorted):
+                cell_id, cell = cell_data
+                if cell.birth_time < t1 and t1 <= cell.division_time < t2:
+                    first_cell_index = i
+                    break
+
+            # filter cell_sorted or skip if you got to the end of the list
+            if i == len(cells_sorted) - 1:
+                continue
+            else:
+                cells_sorted = cells_sorted[i:]
+
+            # get the first cell and it's last contiguous daughter
             first_cell = cells_sorted[0][1]
-            if first_cell.birth_time < t1:
-                # find the last daugher cell
-                last_daughter = find_last_daughter(first_cell, Cells)
+            last_daughter = find_last_daughter(first_cell, Cells)
 
-                # check to make sure it makes the second cut off
-                if last_daughter.birth_time > t2:
-                    # print(fov, peak, 'Made it')
+            # check to the daughter makes the second cut off
+            if last_daughter.birth_time > t2:
+                # print(fov, peak, 'Made it')
 
-                    # now filter it to only those cells within the two times
-                    Cells_cont = find_cells_born_after(Cells, born_after=t1)
-                    Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
+                # now retrieve only those cells within the two times in dictionary format
+                Cells_cont = find_cells_born_after(Cells, born_after=t1)
+                Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
-                    # append the mother of the first cell in filtered list
-                    cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
-                    cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
+                # append the mother of the first cell in filtered list,
+                # this should be the same as first_cell above
+                cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
+                cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
+                first_in_line = cells_cont_sorted[0][1]
+                Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
 
-                    first_in_line = cells_cont_sorted[0][1]
-                    Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
-
-                    # this is to add one more cell after
-                    # last_in_line = cells_cont_sorted[-1][1]
-                    # Cells_cont[last_in_line.daughters[0]] = Cells[last_in_line.daughters[0]]
-
-                    # and add it to the big dictionary
-                    Continuous_Lineages[fov][peak] = Cells_cont
-        # else:
-        #     continue
-
+                # and add it to the big dictionary
+                Continuous_Lineages[fov][peak] = Cells_cont
 
         # remove keys that do not have any lineages
         if not Continuous_Lineages[fov]:
