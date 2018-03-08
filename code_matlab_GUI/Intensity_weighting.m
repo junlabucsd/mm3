@@ -2,7 +2,7 @@ clear all; clc;
 % close all;
 
 %% load data
-cell_data = load('/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_photo/cell_data/continuous_lineages_foci.mat');
+cell_data = load('/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_andor/cell_data/continuous_lineages_foci.mat');
 
 px_to_mu = 0.11;
 t_int = 2.0;
@@ -55,7 +55,7 @@ end
 
 
 %% plot
-close all;
+% close all;
 % load('../../analysis/IW_foci_20171026.mat');
 
 foci_counter = length(Foci_all(:,1));

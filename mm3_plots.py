@@ -482,7 +482,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # binning parameters, should be arguments
     binmin = 1 # minimum bin size to display
-    bingrid = (50, 10) # how many bins to have in the x and y directions
+    bingrid = (25, 10) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
@@ -843,7 +843,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=50, vmax=300)
+    color_norm = mpl.colors.Normalize(vmin=50, vmax=200)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -867,7 +867,7 @@ def saw_tooth_ring_plot(Cells):
         for i, t in enumerate(cell.times):
             ring_x = np.ones(len(cell.ring_profiles[i])) * t
             # the minus three is to account for the shift in the profile when calculated
-            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.11 #params['pxl2um']
+            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.065 #params['pxl2um']
             ring_z = cell.ring_profiles[i]
 
             ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=40,
@@ -994,10 +994,10 @@ def plot_distributions(Cells_df):
 
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    xlabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
     hist_options = {'histtype' : 'step', 'lw' : 2, 'color' : 'b'}
     kde_options = {'lw' : 2, 'linestyle' : '--', 'color' : 'b'}
 
@@ -1022,7 +1022,7 @@ def plot_distributions(Cells_df):
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(data, ax=ax[i], bins=50,
+            sns.distplot(data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_title(titles[i], size=18)
@@ -1073,12 +1073,12 @@ def plot_rescaled_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = (np.array(range(0, int(data.max())+1, 1)) + 0.5) / data_mean
+            bin_edges = (np.array(range(0, int(data.max())+1, 2)) + 1) / data_mean
             sns.distplot(plot_data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(plot_data, ax=ax[i], bins=50,
+            sns.distplot(plot_data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_xlabel(xlabels[i], size=16)
