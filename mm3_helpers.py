@@ -1798,8 +1798,8 @@ class Cell():
         self.widths = [width_tmp]
 
         # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
-        self.volumes = (length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 + \
-                       (4/3) * np.pi * (width_tmp/2)**3
+        self.volumes = [(length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                       (4/3) * np.pi * (width_tmp/2)**3]
 
         # angle of the fit elipsoid and centroid location
         self.orientations = [region.orientation]
@@ -1835,6 +1835,8 @@ class Cell():
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
+        self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                            (4/3) * np.pi * (width_tmp/2)**3)
 
         self.orientations.append(region.orientation)
         self.centroids.append(region.centroid)
@@ -2195,7 +2197,6 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
     times_all = np.sort(times_all)
     times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
 
     # Loop through cells
     for Cell in Cells.values():
@@ -2220,7 +2221,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
             Cell.fl_vol_avgs.append(np.sum(fl_image_masked)) / Cell.volumes[n]
 
             if midline:
-                # add the midline average by first appying morphology transform
+                # add the midline average by first applying morphology transform
                 bin_mask = np.copy(seg_stack[t-t0])
                 bin_mask[bin_mask != Cell.labels[n]] = 0
                 med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
