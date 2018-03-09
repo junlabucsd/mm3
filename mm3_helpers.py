@@ -1792,10 +1792,14 @@ class Cell():
         self.bboxes = [region.bbox]
         self.areas = [region.area]
 
-        #calculating cell length and width by using Feret Diamter
+        # calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
+
+        # calculate cell volume as cylinder plus hemispherical ends (sphere)
+        self.volumes = (length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                       (4/3) * np.pi * (width_tmp/2)**3
 
         # angle of the fit elipsoid and centroid location
         self.orientations = [region.orientation]
@@ -2162,11 +2166,11 @@ def find_mother_cells(Cells):
 
 def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
     '''
-    Finds fluorescenct information for cells. All the cell in Cells
+    Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
     organize_cells_by_channel()
-
     '''
+
     # Load fluorescent images and segmented images for this channel
     fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
