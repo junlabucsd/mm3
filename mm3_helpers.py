@@ -1792,13 +1792,13 @@ class Cell():
         self.bboxes = [region.bbox]
         self.areas = [region.area]
 
-        # calculating cell length and width by using Feret Diamter
+        # calculating cell length and width by using Feret Diamter. These values are in pixels
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
-        # calculate cell volume as cylinder plus hemispherical ends (sphere)
-        self.volumes = (length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+        # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
+        self.volumes = (length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 + \
                        (4/3) * np.pi * (width_tmp/2)**3
 
         # angle of the fit elipsoid and centroid location
@@ -1861,7 +1861,7 @@ class Cell():
         # force the division length to be the combined lengths of the daughters
         self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
 
-        # delta is here for convinience
+        # delta is here for convenience
         self.delta = self.sd - self.sb
 
         # generation time. Use more accurate times but round them to integer minutes
@@ -1871,6 +1871,13 @@ class Cell():
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
         self.widths_w_div = [w * params['pxl2um'] for w in self.widths] + [((daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']]
+
+        # volumes for all timepoints, in um^3
+        self.volumes_w_div = []
+        for i in range(len(self.lengths_w_div)):
+            self.volumes_w_div.append((self.lengths_w_div[i] - self.widths_w_div[i]) *
+                                       np.pi * (self.widths_w_div[i]/2)**2 +
+                                       (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
         # calculate elongation rate
         try:
