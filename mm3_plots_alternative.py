@@ -93,6 +93,12 @@ def correlation_pearsonr(x,y):
 
     return (z-x0*y0)/np.sqrt(vx*vy)
 
+def mad(data,axis=None):
+    """
+    return the Median Absolute Deviation.
+    """
+    return np.median(np.absolute(data-np.median(data,axis)),axis)
+
 def histogram(X,density=True):
     valmax = np.max(X)
     valmin = np.min(X)
@@ -103,7 +109,7 @@ def histogram(X,density=True):
     else:
         return np.histogram(X,bins='sturges',density=density)
 
-def make_binning(x,y,bincount_min):
+def make_binning(x,y,bincount_min, method=np.mean, emethod=np.std):
     """
     Given a graph (x,y), return a graph (x_binned, y_binned) which is a binned version
     of the input graph, along x. Standard deviations per bin for the y direction are also returned.
@@ -112,19 +118,11 @@ def make_binning(x,y,bincount_min):
     x = x[idx]
     y = y[idx]
 
-    valmax = np.max(x)
-    valmin = np.min(x)
-    iqrval = iqr(x)
-    nbins_fd = (valmax-valmin)*np.float_(len(x))**(1./3)/(2.*iqrval)
-    if (nbins_fd < 1.0e6):
-        histx, bins = np.histogram(x,bins='auto')
-    else:
-        histx, bins = np.histogram(x,bins='sturges')
-#    bins = np.linspace(x[0],x[-1],nbins)
+    histx, bins = histogram(x)
     digitized = np.digitize(x,bins)
     x_binned=[]
     y_binned=[]
-    std_binned=[]
+    error_binned=[]
     for i in range(1,len(bins)):
         ypts = y[digitized == i]
 
@@ -132,13 +130,13 @@ def make_binning(x,y,bincount_min):
             continue
 
         x_binned.append(float(0.5*(bins[i-1] + bins[i])))
-        y_binned.append(float(np.mean(ypts)))
-        std_binned.append(float(np.sqrt(np.var(ypts))))
+        y_binned.append(float(method(ypts)))
+        error_binned.append(float(emethod(ypts)))
 
     res = {}
-    res['x'] = x_binned
-    res['y'] = y_binned
-    res['err'] = std_binned
+    res['x'] = np.array(x_binned)
+    res['y'] = np.array(y_binned)
+    res['err'] = np.array(error_binned)
     return res
 
 def get_derivative(X,Y,p=3,deg=1, fits=False):
@@ -1678,6 +1676,92 @@ def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='b
 
     return
 
+def plot_scatter_attrXY(cells, attrX, attrY, fileout, attrdict, color='darkblue', scatter_max_pts=1000, bin_min=10, bin_method='median', lw=0.5, ms=2, xticks_max=None, yticks_max=None, xformat='{x:.2g}', yformat='{x:.2g}'):
+    fig = plt.figure(num='none',facecolor='w', figsize=(4,3))
+    ax = fig.gca()
+
+    # build data
+    XX = []
+    YY = []
+    for key,cell in cells.items():
+        try:
+            xx = np.ravel(np.array([getattr(cell,attrX)], dtype=np.float_))
+            yy = np.ravel(np.array([getattr(cell,attrY)], dtype=np.float_))
+
+            # keep finite
+            idx = np.isfinite(xx) & np.isfinite(yy)
+            xx = xx[idx]
+            yy = yy[idx]
+
+            # rescale
+            try:
+                scalex = float(attrdict[attrX]['scale'])
+                xx = xx * scalex
+            except (KeyError, TypeError):
+                pass
+            try:
+                scaley = float(attrdict[attrY]['scale'])
+                yy = yy * scaley
+            except (KeyError, TypeError):
+                pass
+
+            if (len(xx) > 0) and (len(yy) > 0):
+                XX.append(xx)
+                YY.append(yy)
+        except KeyError:
+            # error in getattr(cell,attrA) statement
+            continue
+
+    # plot scatter
+    npts=len(XX)
+    permut=np.random.permutation(np.arange(npts))[:scatter_max_pts] # limit number of points in the plot
+    for i in permut:
+        ax.plot(XX[i], YY[i], '-o', color=color, lw=lw, ms=ms, alpha=0.5)
+
+    # plot binned curve
+    X = np.concatenate(XX)
+    Y = np.concatenate(YY)
+    if (bin_method == 'median'):
+        method=np.median
+        emethod=mad
+    else:
+        method=np.mean
+        emethod=np.std
+    res=make_binning(X,Y,bincount_min=bin_min,method=method,emethod=emethod)
+    Xb = res['x']
+    Yb = res['y']
+    err = res['err']
+    ax.plot(Xb,Yb,'-', lw=3*lw, color='k')
+    ax.plot(Xb,Yb+err,'--', lw=lw, color='k')
+    ax.plot(Xb,Yb-err,'--', lw=lw, color='k')
+
+    # axes decoration
+    try:
+        ax.set_xlabel(attrdict[attrX]['label'], fontsize='medium')
+        ax.set_ylabel(attrdict[attrY]['label'], fontsize='medium')
+    except KeyError:
+        ax.set_xlabel(attrX, fontsize='medium')
+        ax.set_ylabel(attrY, fontsize='medium')
+    if not (xticks_max is None):
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=xticks_max-1))
+    if not (yticks_max is None):
+        ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=yticks_max-1))
+    ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter(xformat))
+    ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter(yformat))
+    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+    ax.tick_params(axis='x', which='both', bottom='on', top='off')
+    ax.tick_params(axis='y', which='both', left='on', right='off')
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    rect = [0.,0.,1.,0.98]
+    fig.tight_layout(rect=rect)
+    print "{:<20s}{:<s}".format('fileout',fileout)
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    return
+
 ############################################################################
 # main
 ############################################################################
@@ -1688,6 +1772,7 @@ if __name__ == "__main__":
     parser.add_argument('--distributions',  action='store_true', help='Plot the distributions of cell variables.')
     parser.add_argument('--crosscorrelations',  action='store_true', help='Plot the cross-correlation of cell variables.')
     parser.add_argument('--autocorrelations',  action='store_true', help='Plot the autocorrelation of cell variables.')
+    parser.add_argument('--scatter',  action='store_true', help='Plot the scatter plots specified in the Yaml file.')
     parser.add_argument('-l', '--lineagesfile',  type=file, help='Pickle file containing the list of lineages.')
     namespace = parser.parse_args(sys.argv[1:])
     paramfile = namespace.paramfile.name
@@ -1697,6 +1782,7 @@ if __name__ == "__main__":
     plot_dist = namespace.distributions
     plot_crosscorr = namespace.crosscorrelations
     plot_autocorr = namespace.autocorrelations
+    plot_scatter = namespace.scatter
 
     tdir = os.path.dirname(namespace.pklfile.name)
     print "{:<20s}{:<s}".format('data dir', tdir)
@@ -1740,6 +1826,25 @@ if __name__ == "__main__":
         except:
             print "Error with autocorrelations plotting."
 
+# scatter plots
+    if plot_scatter:
+        mm3.information ('Plotting scatter plots.')
+        scattdir = os.path.join(plotdir,'scatter')
+        if not os.path.isdir(scattdir):
+            os.makedirs(scattdir)
+        try:
+            attrdict = params['plot_scatter']['attributes']
+            filedict = params['plot_scatter']['plots']
+        except KeyError:
+            sys.exit("Missing options for scatter plots!")
+
+        for filename in filedict.keys():
+            fileout = os.path.join(scattdir,filename)
+            #def plot_scatter(cells, attrX, attrY, fileout, attrdict, color='darkblue', scatter_max_pts=1000, bin_min=10, bin_method='median', lw=0.5, ms=2, xticks_max=8, yticks_max=8, xformat='{x:.2g}', yformat='{x:.2g}')
+        #plot_scatter(cells, attrX=attrX, attrY=attrY, fileout=fileout, attrdict=attrdict, **params['plot_scatter']['args'])
+            plot_scatter_attrXY(cells, fileout=fileout, attrdict=attrdict, **params['plot_scatter']['plots'][filename])
+#        except:
+#            print "Error with autocorrelations plotting."
 # lineages
     if namespace.lineagesfile != None:
         mm3.information ('Plotting lineages.')

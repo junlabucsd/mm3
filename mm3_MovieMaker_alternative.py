@@ -25,6 +25,7 @@ with warnings.catch_warnings():
 
 import mm3_helpers
 from mm3_helpers import get_fov, get_time, information
+from mm3_utils import print_time, make_label
 
 # yaml formats
 npfloat_representer = lambda dumper,value: dumper.represent_float(float(value))
@@ -33,85 +34,6 @@ float_representer = lambda dumper,value: dumper.represent_scalar(u'tag:yaml.org,
 yaml.add_representer(float,float_representer)
 yaml.add_representer(np.float_,npfloat_representer)
 yaml.add_representer(np.ndarray,nparray_representer)
-
-################################################
-# functions
-################################################
-def print_time():
-    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-
-def make_label(text, face, size=12, angle=0):
-    '''Uses freetype to make a time label.
-
-    Parameters:
-    -----------
-    text : string
-        Text to be displayed
-    filename : string
-        Path to a font
-    size : int
-        Font size in 1/64th points
-    angle : float
-        Text angle in degrees
-    '''
-    face.set_char_size( size*64 )
-    angle = (angle/180.0)*np.pi
-    matrix = FT_Matrix( (int)( np.cos( angle ) * 0x10000 ),
-                         (int)(-np.sin( angle ) * 0x10000 ),
-                         (int)( np.sin( angle ) * 0x10000 ),
-                         (int)( np.cos( angle ) * 0x10000 ))
-    flags = FT_LOAD_RENDER
-    pen = FT_Vector(0,0)
-    FT_Set_Transform( face._FT_Face, byref(matrix), byref(pen) )
-    previous = 0
-    xmin, xmax = 0, 0
-    ymin, ymax = 0, 0
-    for c in text:
-        face.load_char(c, flags)
-        kerning = face.get_kerning(previous, c)
-        previous = c
-        bitmap = face.glyph.bitmap
-        pitch  = face.glyph.bitmap.pitch
-        width  = face.glyph.bitmap.width
-        rows   = face.glyph.bitmap.rows
-        top    = face.glyph.bitmap_top
-        left   = face.glyph.bitmap_left
-        pen.x += kerning.x
-        x0 = (pen.x >> 6) + left
-        x1 = x0 + width
-        y0 = (pen.y >> 6) - (rows - top)
-        y1 = y0 + rows
-        xmin, xmax = min(xmin, x0),  max(xmax, x1)
-        ymin, ymax = min(ymin, y0), max(ymax, y1)
-        pen.x += face.glyph.advance.x
-        pen.y += face.glyph.advance.y
-
-    L = np.zeros((ymax-ymin, xmax-xmin),dtype=np.ubyte)
-    previous = 0
-    pen.x, pen.y = 0, 0
-    for c in text:
-        face.load_char(c, flags)
-        kerning = face.get_kerning(previous, c)
-        previous = c
-        bitmap = face.glyph.bitmap
-        pitch  = face.glyph.bitmap.pitch
-        width  = face.glyph.bitmap.width
-        rows   = face.glyph.bitmap.rows
-        top    = face.glyph.bitmap_top
-        left   = face.glyph.bitmap_left
-        pen.x += kerning.x
-        x = (pen.x >> 6) - xmin + left
-        y = (pen.y >> 6) - ymin - (rows - top)
-        data = []
-        for j in range(rows):
-            data.extend(bitmap.buffer[j*pitch:j*pitch+width])
-        if len(data):
-            Z = np.array(data,dtype=np.ubyte).reshape(rows, width)
-            L[y:y+rows,x:x+width] |= Z[::-1,::1]
-        pen.x += face.glyph.advance.x
-        pen.y += face.glyph.advance.y
-
-    return L
 
 ################################################
 # main
@@ -166,6 +88,12 @@ if __name__ == "__main__":
         sys.exit('wrong image format/dimensions!')
     img = np.moveaxis(img, 0, 2)
     size_y_ref, size_x_ref = img.shape[:2]
+    # make sure the output image has dimensions multiple of 2
+    # in addition, ffmpeg will issue a warning of 'data is not aligned' if dimensions
+    # are not multiple of 8, 16 or 32
+    # so let's choose 8 as basis instead.
+    size_y_ref = (size_y_ref / 8) * 8
+    size_x_ref = (size_x_ref / 8) * 8
 
 ################################################
 # make movie
@@ -221,6 +149,10 @@ if __name__ == "__main__":
         if (len(img.shape) != 3):
             sys.exit('wrong image format/dimesions!')
         img = np.moveaxis(img, 0, 2)
+        size_y, size_x = img.shape[:2]
+        if not (size_y == size_y_ref and size_x == size_x_ref):
+            img = img[:size_y_ref, :size_x_ref]
+        size_y, size_x = img.shape[:2]
         nchannels = img.shape[2]
         stack=[]
         masks={}
@@ -239,13 +171,14 @@ if __name__ == "__main__":
             # rescale dynamic range
             try:
                 pmin = np.uint16(params['channels'][i]['min'])
-            except KeyError:
+            except (KeyError,TypeError):
                 pmin = np.min(img_tp)
             try:
                 pmax = np.uint16(params['channels'][i]['max'])
-            except KeyError:
+            except (KeyError,TypeError):
                 pmax = np.max(img_tp)
-            img_tp = (np.array(img_tp, dtype=np.float_) - pmin)/(pmax-pmin)
+            img_tp = (np.array(img_tp, dtype=np.float_) - pmin)/float(pmax-pmin)
+            idx = img_tp > 1
             img_tp [img_tp < 0] = 0.
             img_tp [img_tp > 1] = 1.
 
@@ -256,11 +189,13 @@ if __name__ == "__main__":
                 color = [255,255,255]
 
             #img_tp = (1. - img_tp)
-            img_tp *= 2**8
+            norm = float(2**8 - 1)
+            img_tp *= norm
             #rgba = np.dstack([img_tp*color[0]/255., img_tp*color[1]/255., img_tp*color[2]/255., np.ones(img_tp.shape)*255.])
             #rgba = np.array(rgba,dtype=np.uint8)
             #stack.append(rgba)
-            rgb = np.dstack([img_tp*color[0]/255., img_tp*color[1]/255., img_tp*color[2]/255.])
+            #rgb = np.dstack([img_tp*color[0]/255., img_tp*color[1]/255., img_tp*color[2]/255.])
+            rgb = np.dstack([img_tp*color[0]/norm, img_tp*color[1]/norm, img_tp*color[2]/norm])
             rgb = np.array(rgb,dtype=np.uint8)
             stack.append(rgb)
 
@@ -314,11 +249,14 @@ if __name__ == "__main__":
         img[mask] = r_timestamp[mask]
 
         # decomment for debug
-        #img = Image.fromarray(img, mode='RGB')
-        #img.save('test.png')
-        #break
+#        img = Image.fromarray(img, mode='RGB')
+#        img.save('test.png')
+#        break
 
         # write the image to the ffmpeg subprocess
         # comment for debug
         pipe.stdin.write(img.tostring())
 
+    # end of loop
+    # comment for debug
+    pipe.terminate()
