@@ -1908,6 +1908,8 @@ class Cell():
         self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
         self.widths = [width.astype(convert_to) for width in self.widths]
         self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
+        self.volumes = [vol.astype(convert_to) for vol in self.volumes]
+        self.volumes_w_div = [vol.astype(convert_to) for vol in self.volumes_w_div]
         # note the float16 is hardcoded here
         self.orientations = [np.float16(orientation) for orientation in self.orientations]
         self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
@@ -2199,7 +2201,8 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
     for Cell in Cells.values():
         # give this cell two lists to hold new information
         Cell.fl_tots = [] # total fluorescence per time point
-        Cell.fl_avgs = [] # avg fluorescence per time point
+        Cell.fl_area_avgs = [] # avg fluorescence per unit area by timepoint
+        Cell.fl_vol_avgs = [] # avg fluorescence per unit volume by timepoint
 
         if midline:
             Cell.mid_fl = [] # avg fluorescence of midline
@@ -2212,9 +2215,9 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
 
             # append total flourescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
-
             # and the average fluorescence
-            Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+            Cell.fl_vol_avgs.append(np.sum(fl_image_masked)) / Cell.volumes[n]
 
             if midline:
                 # add the midline average by first appying morphology transform
