@@ -1,9 +1,11 @@
 # mm3
-### Version 3.13
+### Version 3.15
 
 Please refer to the docs subfolder for information and usage.
 
 ## Version History
+
+3.15 2018.03.12
 
 3.14 2018.02.26 Additional plotting capabilities.
 

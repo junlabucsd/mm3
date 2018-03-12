@@ -79,6 +79,9 @@ if __name__ == "__main__":
 
     # for each set of cells in one fov/peak, find the foci
     for fov_id in fov_id_list:
+        if not fov_id in Cells_by_peak:
+            continue
+
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
             # test
             # print ('Peak no',peak_id)

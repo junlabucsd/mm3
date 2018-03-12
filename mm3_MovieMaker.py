@@ -164,6 +164,7 @@ if __name__ == "__main__":
 
     # set seconds_per_time_index parameter in param file
     show_time_stamp = True
+<<<<<<< HEAD
 
     # label properties
     show_label = True
@@ -175,26 +176,35 @@ if __name__ == "__main__":
     # scalebar properties
     show_scalebar = True
     scalebar_length_um = 10
+=======
+    shift_time = None # will change color of timestamp upon shift. Make None is no shift.
+>>>>>>> shift26
 
     # color management
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = False
+    show_green = True
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
-    fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_red_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
     auto_phase_levels = False # set to true to find automatically
     imin = {}
     imax = {}
+<<<<<<< HEAD
     imin['phase'], imax['phase'] = 300, 7000
     imin['green'], imax['green'] = 100, 450
     imin['red'], imax['red'] = 100, 450
+=======
+    imin['phase'], imax['phase'] = 230, 2500
+    imin['green'], imax['green'] = 150, 300
+    imin['red'], imax['red'] = 110, 130
+>>>>>>> shift26
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""

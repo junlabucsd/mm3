@@ -2308,8 +2308,6 @@ def foci_analysis(fov_id, peak_id, Cells):
         #
         # tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
 
-        information('Extracting foci information for %s cells.' % (cell_id))
-
         # test
         # sys.exit()
 

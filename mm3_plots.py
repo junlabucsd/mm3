@@ -258,36 +258,38 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
             if not cells_sorted:
                 continue
 
-            # check if first cell has a birth time below a cutoff
+            # look through list to find the cell born immediately before t1
+            # and divides after t1, but not after t2
+            for i, cell_data in enumerate(cells_sorted):
+                cell_id, cell = cell_data
+                if cell.birth_time < t1 and t1 <= cell.division_time < t2:
+                    first_cell_index = i
+                    break
+
+            # filter cell_sorted or skip if you got to the end of the list
+            if i == len(cells_sorted) - 1:
+                continue
+            else:
+                cells_sorted = cells_sorted[i:]
+
+            # get the first cell and it's last contiguous daughter
             first_cell = cells_sorted[0][1]
-            if first_cell.birth_time < t1:
-                # find the last daugher cell
-                last_daughter = find_last_daughter(first_cell, Cells)
+            last_daughter = find_last_daughter(first_cell, Cells)
 
-                # check to make sure it makes the second cut off
-                if last_daughter.birth_time > t2:
-                    # print(fov, peak, 'Made it')
+            # check to the daughter makes the second cut off
+            if last_daughter.birth_time > t2:
+                # print(fov, peak, 'Made it')
 
-                    # now filter it to only those cells within the two times
-                    Cells_cont = find_cells_born_after(Cells, born_after=t1)
-                    Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
+                # now retrieve only those cells within the two times
+                # use the function to easily return in dictionary format
+                Cells_cont = find_cells_born_after(Cells, born_after=t1)
+                Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
-                    # append the mother of the first cell in filtered list
-                    cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
-                    cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
+                # append the first cell which was filtered out in the above step
+                Cells_cont[first_cell.id] = first_cell
 
-                    first_in_line = cells_cont_sorted[0][1]
-                    Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
-
-                    # this is to add one more cell after
-                    # last_in_line = cells_cont_sorted[-1][1]
-                    # Cells_cont[last_in_line.daughters[0]] = Cells[last_in_line.daughters[0]]
-
-                    # and add it to the big dictionary
-                    Continuous_Lineages[fov][peak] = Cells_cont
-        # else:
-        #     continue
-
+                # and add it to the big dictionary
+                Continuous_Lineages[fov][peak] = Cells_cont
 
         # remove keys that do not have any lineages
         if not Continuous_Lineages[fov]:
@@ -864,7 +866,8 @@ def saw_tooth_ring_plot(Cells):
         # Use scatter plot heat map
         for i, t in enumerate(cell.times):
             ring_x = np.ones(len(cell.ring_profiles[i])) * t
-            ring_y = np.arange(0, len(cell.ring_profiles[i])) * 0.065 #params['pxl2um']
+            # the minus three is to account for the shift in the profile when calculated
+            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.065 #params['pxl2um']
             ring_z = cell.ring_profiles[i]
 
             ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=10,
@@ -991,10 +994,10 @@ def plot_distributions(Cells_df):
 
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    xlabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
     hist_options = {'histtype' : 'step', 'lw' : 2, 'color' : 'b'}
     kde_options = {'lw' : 2, 'linestyle' : '--', 'color' : 'b'}
 
