@@ -133,7 +133,7 @@ if __name__ == "__main__":
         information("Found %d files to analyze in experiment directory." % len(nd2files))
 
     for nd2_file in nd2files:
-        file_prefix = os.path.splitext(nd2_file)[0]
+        file_prefix = os.path.split(os.path.splitext(nd2_file)[0])[1]
         information('Extracting %s ...' % file_prefix)
 
         # load the nd2. the nd2f file object has lots of information thanks to pims

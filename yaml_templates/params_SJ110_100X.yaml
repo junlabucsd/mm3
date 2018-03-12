@@ -23,7 +23,8 @@ output: 'TIFF' # 'HDF5'
 phase_plane: 'c1'
 
 # conversion factor from pixels to microns
-# use 0.065 for 100X, use 0.108 for 60X
+# use 0.065 for 100X, use 0.108 for 60X (Andor Neo)
+# use 0.11 for 100X (Photometrics Prime 95B)
 pxl2um: 0.065
 
 # image_orientation: set to 'up' if growth pushes cells up

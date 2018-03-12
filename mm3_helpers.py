@@ -22,7 +22,7 @@ import h5py # working with HDF5 files
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
-from scipy.optimize import curve_fit # fitting elongation rate
+from scipy.optimize import curve_fit # fitting ring profile
 from scipy.optimize import leastsq # fitting 2d gaussian
 from scipy import ndimage as ndi # labeling and distance transform
 from skimage import segmentation # used in make_masks and segmentation
@@ -31,6 +31,7 @@ from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
+from skimage.measure import profile_line # used for ring an nucleoid analysis
 
 # Parralelization modules
 import multiprocessing
@@ -77,18 +78,6 @@ def warning(*objs):
 def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
-def julian_day_number():
-    """
-    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
-    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
-    https://en.wikipedia.org/wiki/Julian_day
-    """
-    dt=datetime.datetime.now()
-    tt=dt.timetuple()
-    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
-
-    return jdn
-
 # load the parameters file into a global dictionary for this module
 def init_mm3_helpers(param_file_path):
     # load all the parameters into a global dictionary
@@ -112,7 +101,18 @@ def init_mm3_helpers(param_file_path):
 
     return params
 
-# loads and image stack from TIFF or HDF5 using mm3 conventions
+def julian_day_number():
+    """
+    Need this to solve a bug in pims_nd2.nd2reader.ND2_Reader instance initialization.
+    The bug is in /usr/local/lib/python2.7/site-packages/pims_nd2/ND2SDK.py in function `jdn_to_datetime_local`, when the year number in the metadata (self._lim_metadata_desc) is not in the correct range. This causes a problem when calling self.metadata.
+    https://en.wikipedia.org/wiki/Julian_day
+    """
+    dt=datetime.datetime.now()
+    tt=dt.timetuple()
+    jdn=(1461.*(tt.tm_year + 4800. + (tt.tm_mon - 14.)/12))/4. + (367.*(tt.tm_mon - 2. - 12.*((tt.tm_mon -14.)/12)))/12. - (3.*((tt.tm_year + 4900. + (tt.tm_mon - 14.)/12.)/100.))/4. + tt.tm_mday - 32075
+
+    return jdn
+
 def get_plane(filepath):
     pattern = '(c\d+).tif'
     res = re.search(pattern,filepath)
@@ -137,6 +137,7 @@ def get_time(filepath):
     else:
         return None
 
+# loads and image stack from TIFF or HDF5 using mm3 conventions
 def load_stack(fov_id, peak_id, color='c1'):
     '''
     Loads an image stack.
@@ -199,7 +200,7 @@ def load_stack(fov_id, peak_id, color='c1'):
 
     return img_stack
 
-### Functions for dealing with raw TIFF images
+### functions for dealing with raw TIFF images
 
 # get params is the major function which processes raw TIFF images
 def get_tif_params(image_filename, find_channels=True):
@@ -1799,10 +1800,14 @@ class Cell():
         self.bboxes = [region.bbox]
         self.areas = [region.area]
 
-        #calculating cell length and width by using Feret Diamter
+        # calculating cell length and width by using Feret Diamter. These values are in pixels
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
+
+        # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
+        self.volumes = [(length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                       (4/3) * np.pi * (width_tmp/2)**3]
 
         # angle of the fit elipsoid and centroid location
         self.orientations = [region.orientation]
@@ -1838,6 +1843,8 @@ class Cell():
         length_tmp, width_tmp = feretdiameter(region)
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
+        self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                            (4/3) * np.pi * (width_tmp/2)**3)
 
         self.orientations.append(region.orientation)
         self.centroids.append(region.centroid)
@@ -1864,7 +1871,7 @@ class Cell():
         # force the division length to be the combined lengths of the daughters
         self.sd = (daughter1.lengths[0] + daughter2.lengths[0]) * params['pxl2um']
 
-        # delta is here for convinience
+        # delta is here for convenience
         self.delta = self.sd - self.sb
 
         # generation time. Use more accurate times but round them to integer minutes
@@ -1874,6 +1881,13 @@ class Cell():
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
         self.widths_w_div = [w * params['pxl2um'] for w in self.widths] + [((daughter1.widths[0] + daughter2.widths[0])/2) * params['pxl2um']]
+
+        # volumes for all timepoints, in um^3
+        self.volumes_w_div = []
+        for i in range(len(self.lengths_w_div)):
+            self.volumes_w_div.append((self.lengths_w_div[i] - self.widths_w_div[i]) *
+                                       np.pi * (self.widths_w_div[i]/2)**2 +
+                                       (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
         # calculate elongation rate
         try:
@@ -1904,6 +1918,8 @@ class Cell():
         self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
         self.widths = [width.astype(convert_to) for width in self.widths]
         self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
+        self.volumes = [vol.astype(convert_to) for vol in self.volumes]
+        self.volumes_w_div = [vol.astype(convert_to) for vol in self.volumes_w_div]
         # note the float16 is hardcoded here
         self.orientations = [np.float16(orientation) for orientation in self.orientations]
         self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
@@ -2167,20 +2183,19 @@ def find_mother_cells(Cells):
 
 ### functions for additional cell centric analysis
 
-# finds total and average intenstiy timepoint in cells
-def find_cell_intensities(fov_id, peak_id, Cells):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
     '''
-    Finds fluorescenct information for cells. All the cell in Cells
+    Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
     organize_cells_by_channel()
-
     '''
+
     # Load fluorescent images and segmented images for this channel
-    fl_stack = load_stack(fov_id, peak_id, color='c1')
+    fl_stack = load_stack(fov_id, peak_id, color='c2')
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
     # determine absolute time index
-    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
+    time_table_path = os.path.join(params['ana_dir'],'time_table.pkl')
     with open(time_table_path,'r') as fin:
         time_table = pickle.load(fin)
     times_all = []
@@ -2190,14 +2205,16 @@ def find_cell_intensities(fov_id, peak_id, Cells):
     times_all = np.sort(times_all)
     times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
-
 
     # Loop through cells
     for Cell in Cells.values():
         # give this cell two lists to hold new information
         Cell.fl_tots = [] # total fluorescence per time point
-        Cell.fl_avgs = [] # avg fluorescence per time point
+        Cell.fl_area_avgs = [] # avg fluorescence per unit area by timepoint
+        Cell.fl_vol_avgs = [] # avg fluorescence per unit volume by timepoint
+
+        if midline:
+            Cell.mid_fl = [] # avg fluorescence of midline
 
         # and the time points that make up this cell's life
         for n, t in enumerate(Cell.times):
@@ -2205,11 +2222,23 @@ def find_cell_intensities(fov_id, peak_id, Cells):
             fl_image_masked = np.copy(fl_stack[t-t0])
             fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
 
-            # append total fluorescent image
+            # append total flourescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
-
             # and the average fluorescence
-            Cell.fl_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+            Cell.fl_vol_avgs.append(np.sum(fl_image_masked)) / Cell.volumes[n]
+
+            if midline:
+                # add the midline average by first applying morphology transform
+                bin_mask = np.copy(seg_stack[t-t0])
+                bin_mask[bin_mask != Cell.labels[n]] = 0
+                med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
+                # med_mask[med_dist < np.floor(cap_radius/2)] = 0
+                # print(img_fluo[med_mask])
+                if (np.shape(fl_image_masked[med_mask])[0] > 0):
+                    Cell.mid_fl.append(np.nanmean(fl_image_masked[med_mask]))
+                else:
+                    Cell.mid_fl.append(0)
 
     # The cell objects in the original dictionary will be updated,
     # no need to return anything specifically.
@@ -2230,20 +2259,17 @@ def foci_analysis(fov_id, peak_id, Cells):
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci_plane']))
 
-    # determine absolute time index
-    time_table_path = os.path.join(params['analysis_directory'],'time_table.pkl')
-    with open(time_table_path,'r') as fin:
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
         time_table = pickle.load(fin)
-    times_all = []
-    for fov in time_table:
-        times_all = np.append(times_all, time_table[fov].keys())
-    times_all = np.unique(times_all)
-    times_all = np.sort(times_all)
-    times_all = np.array(times_all,np.int_)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
     for cell_id, cell in Cells.items():
+
+        information('Extracting foci information for %s.' % (cell_id))
 
         # declare lists holding information about foci.
         disp_l = []
@@ -2290,11 +2316,8 @@ def foci_analysis(fov_id, peak_id, Cells):
         #
         # tiff.imsave(foci_filepath, foci_stack, compress=3) # save it
 
-        information('Extracting foci information for %s cells.' % (cell_id))
-
         # test
-        sys.exit()
-        # test
+        # sys.exit()
 
     return
 
@@ -2427,11 +2450,12 @@ def foci_lap(img, img_foci, cell, t):
                 disp_w = np.append(disp_w, disp_x)
                 foci_h = np.append(foci_h, np.sum(gfit_area))
         else:
-            print ('Blob not in bounding box.')
+            if params['debug_foci']:
+                print ('Blob not in bounding box.')
 
     # draw foci on image for quality control
     if params['debug_foci']:
-        outputdir = os.path.join('debug','foci')
+        outputdir = os.path.join(params['ana_dir'], 'debug_foci')
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
 
@@ -2506,7 +2530,7 @@ def fitgaussian(data):
     if params are not provided, they are calculated from the moments
     params should be (height, x, y, width_x, width_y)"""
     gparams = moments(data) # create guess parameters.
-    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) -data)
+    errorfunction = lambda p: np.ravel(gaussian(*p)(*np.indices(data.shape)) - data)
     p, success = leastsq(errorfunction, gparams)
     return p
 
@@ -2536,49 +2560,188 @@ def moments(data):
     height = data.max()
     return height, x, y, width
 
-### functions about converting dates and times
-# def days_to_hmsm(days):
-#     hours = days * 24.
-#     hours, hour = math.modf(hours)
-#     mins = hours * 60.
-#     mins, min = math.modf(mins)
-#     secs = mins * 60.
-#     secs, sec = math.modf(secs)
-#     micro = round(secs * 1.e6)
-#     return int(hour), int(min), int(sec), int(micro)
-#
-# def hmsm_to_days(hour=0, min=0, sec=0, micro=0):
-#     days = sec + (micro / 1.e6)
-#     days = min + (days / 60.)
-#     days = hour + (days / 60.)
-#     return days / 24.
-#
-# def date_to_jd(year,month,day):
-#     if month == 1 or month == 2:
-#         yearp = year - 1
-#         monthp = month + 12
-#     else:
-#         yearp = year
-#         monthp = month
-#     # this checks where we are in relation to October 15, 1582, the beginning
-#     # of the Gregorian calendar.
-#     if ((year < 1582) or
-#         (year == 1582 and month < 10) or
-#         (year == 1582 and month == 10 and day < 15)):
-#         # before start of Gregorian calendar
-#         B = 0
-#     else:
-#         # after start of Gregorian calendar
-#         A = math.trunc(yearp / 100.)
-#         B = 2 - A + math.trunc(A / 4.)
-#     if yearp < 0:
-#         C = math.trunc((365.25 * yearp) - 0.75)
-#     else:
-#         C = math.trunc(365.25 * yearp)
-#     D = math.trunc(30.6001 * (monthp + 1))
-#     jd = B + C + D + day + 1720994.5
-#     return jd
-#
-# def datetime_to_jd(date):
-#     days = date.day + hmsm_to_days(date.hour,date.minute,date.second,date.microsecond)
-#     return date_to_jd(date.year, date.month, days)
+# returns a 1D gaussian function
+def gaussian1d(x, height, mean, sigma):
+    '''
+    x : data
+    height : height
+    mean : center
+    sigma : RMS width
+    '''
+    return height * np.exp(-(x-mean)**2 / (2*sigma**2))
+
+# analyze ring fluroescence.
+def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
+    '''Add information to the Cell objects about the location of the Z ring. Sums the fluorescent channel along the long axis of the cell. This can be plotted directly to give a good idea about the development of the ring. Also fits a gaussian to the profile.
+
+    Parameters
+    ----------
+    fov_id : int
+        FOV number of the lineage to analyze.
+    peak_id : int
+        Peak number of the lineage to analyze.
+    Cells : dict of Cell objects (from a Lineages dictionary)
+        Cells should be prefiltered to match fov_id and peak_id.
+    ring_plane : str
+        The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
+
+    Usage
+    -----
+    for fov_id, peaks in Lineages.iteritems():
+        for peak_id, Cells in peaks.iteritems():
+            mm3.ring_analysis(fov_id, peak_id, Cells, ring_plane='sub_c2')
+    '''
+
+    peak_width_guess = 2
+
+    # Load data
+    ring_stack = load_stack(fov_id, peak_id, color=ring_plane)
+    seg_stack = load_stack(fov_id, peak_id, color='seg')
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+
+        # initialize ring data arrays for cell
+        Cell.ring_locs = []
+        Cell.ring_heights = []
+        Cell.ring_widths = []
+        Cell.ring_medians = []
+        Cell.ring_profiles = []
+
+        # loop through each time point for this cell
+        for n, t in enumerate(Cell.times):
+            # Make mask of fluorescent channel using segmented image
+            ring_image_masked = np.copy(ring_stack[t-t0])
+            ring_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # Sum along long axis, use the profile_line function from skimage
+            # Use orientation of cell as calculated from the ellipsoid fit,
+            # the known length of the cell from the feret diameter,
+            # and a width that is greater than the cell width.
+
+            # find endpoints of line
+            centroid = Cell.centroids[n]
+            orientation = Cell.orientations[n]
+            length = Cell.lengths[n]
+            width = Cell.widths[n] * 1.25
+
+            # give 2 pixel buffer to each end to capture area outside cell.
+            p1 = (centroid[0] - np.sin(orientation) * (length+4)/2,
+                  centroid[1] - np.cos(orientation) * (length+4)/2)
+            p2 = (centroid[0] + np.sin(orientation) * (length+4)/2,
+                  centroid[1] + np.cos(orientation) * (length+4)/2)
+
+            # ensure old pole is always first point
+            if p1[0] > p2[0]:
+                p1, p2 = p2, p1 # python is cool
+
+            profile = profile_line(ring_image_masked, p1, p2, linewidth=width,
+                                   order=1, mode='constant', cval=0)
+            profile_indicies = np.arange(len(profile))
+
+            # subtract median from profile, using non-zero values for median
+            profile_median = np.median(profile[np.nonzero(profile)])
+            profile_sub = profile - profile_median
+            profile_sub[profile_sub < 0] = 0
+
+            # find peak position simply using maximum.
+            peak_index = np.argmax(profile)
+            peak_height = profile[peak_index]
+            peak_height_sub = profile_sub[peak_index]
+
+            try:
+                # Fit gaussian
+                p_guess = [peak_height_sub, peak_index, peak_width_guess]
+                popt, pcov = curve_fit(gaussian1d, profile_indicies, profile_sub,
+                                       p0=p_guess)
+
+                peak_width = popt[2]
+            except:
+                information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
+                peak_width = np.float('NaN')
+
+            # Add data to cells
+            Cell.ring_locs.append(peak_index - 3) # minus 3 because we added 2 before and line_profile adds 1.
+            Cell.ring_heights.append(peak_height)
+            Cell.ring_widths.append(peak_width)
+            Cell.ring_medians.append(profile_median)
+            Cell.ring_profiles.append(profile) # append whole profile
+
+    return
+
+def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
+    '''Calculate profile of plane along cell and add information to Cell object. Sums the fluorescent channel along the long axis of the cell.
+
+    Parameters
+    ----------
+    fov_id : int
+        FOV number of the lineage to analyze.
+    peak_id : int
+        Peak number of the lineage to analyze.
+    Cells : dict of Cell objects (from a Lineages dictionary)
+        Cells should be prefiltered to match fov_id and peak_id.
+    profile_plane : str
+        The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
+
+    Usage
+    -----
+
+    '''
+
+    # Load data
+    fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
+    seg_stack = load_stack(fov_id, peak_id, color='seg')
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+
+        # initialize ring data arrays for cell
+        Cell.fl_profiles = []
+
+        # loop through each time point for this cell
+        for n, t in enumerate(Cell.times):
+            # Make mask of fluorescent channel using segmented image
+            image_masked = np.copy(fl_stack[t-t0])
+            image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # Sum along long axis, use the profile_line function from skimage
+            # Use orientation of cell as calculated from the ellipsoid fit,
+            # the known length of the cell from the feret diameter,
+            # and a width that is greater than the cell width.
+
+            # find endpoints of line
+            centroid = Cell.centroids[n]
+            orientation = Cell.orientations[n]
+            length = Cell.lengths[n]
+            width = Cell.widths[n] * 1.25
+
+            # give 2 pixel buffer to each end to capture area outside cell.
+            p1 = (centroid[0] - np.sin(orientation) * (length+4)/2,
+                  centroid[1] - np.cos(orientation) * (length+4)/2)
+            p2 = (centroid[0] + np.sin(orientation) * (length+4)/2,
+                  centroid[1] + np.cos(orientation) * (length+4)/2)
+
+            # ensure old pole is always first point
+            if p1[0] > p2[0]:
+                p1, p2 = p2, p1 # python is cool
+
+            profile = profile_line(image_masked, p1, p2, linewidth=width,
+                                   order=1, mode='constant', cval=0)
+
+            Cell.fl_profiles.append(profile) # append whole profile
+
+    return

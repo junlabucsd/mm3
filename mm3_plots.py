@@ -158,6 +158,23 @@ def organize_cells_by_channel(Cells, specs):
     for cell_id, Cell in Cells.items():
         Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
 
+    # remove peaks and that do not contain cells
+    remove_fovs = []
+    for fov_id, peaks in Cells_by_peak.iteritems():
+        remove_peaks = []
+        for peak_id in peaks.keys():
+            if not peaks[peak_id]:
+                remove_peaks.append(peak_id)
+
+        for peak_id in remove_peaks:
+            peaks.pop(peak_id)
+
+        if not Cells_by_peak[fov_id]:
+            remove_fovs.append(fov_id)
+
+    for fov_id in remove_fovs:
+        Cells_by_peak.pop(fov_id)
+
     return Cells_by_peak
 
 def filter_by_stat(Cells, center_stat='mean', std_distance=3):
@@ -241,36 +258,38 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
             if not cells_sorted:
                 continue
 
-            # check if first cell has a birth time below a cutoff
+            # look through list to find the cell born immediately before t1
+            # and divides after t1, but not after t2
+            for i, cell_data in enumerate(cells_sorted):
+                cell_id, cell = cell_data
+                if cell.birth_time < t1 and t1 <= cell.division_time < t2:
+                    first_cell_index = i
+                    break
+
+            # filter cell_sorted or skip if you got to the end of the list
+            if i == len(cells_sorted) - 1:
+                continue
+            else:
+                cells_sorted = cells_sorted[i:]
+
+            # get the first cell and it's last contiguous daughter
             first_cell = cells_sorted[0][1]
-            if first_cell.birth_time < t1:
-                # find the last daugher cell
-                last_daughter = find_last_daughter(first_cell, Cells)
+            last_daughter = find_last_daughter(first_cell, Cells)
 
-                # check to make sure it makes the second cut off
-                if last_daughter.birth_time > t2:
-                    # print(fov, peak, 'Made it')
+            # check to the daughter makes the second cut off
+            if last_daughter.birth_time > t2:
+                # print(fov, peak, 'Made it')
 
-                    # now filter it to only those cells within the two times
-                    Cells_cont = find_cells_born_after(Cells, born_after=t1)
-                    Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
+                # now retrieve only those cells within the two times
+                # use the function to easily return in dictionary format
+                Cells_cont = find_cells_born_after(Cells, born_after=t1)
+                Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
-                    # append the mother of the first cell in filtered list
-                    cells_cont_sorted = [(cell_id, cell) for cell_id, cell in Cells_cont.iteritems()]
-                    cells_cont_sorted = sorted(cells_cont_sorted, key=lambda x: x[1].birth_time)
+                # append the first cell which was filtered out in the above step
+                Cells_cont[first_cell.id] = first_cell
 
-                    first_in_line = cells_cont_sorted[0][1]
-                    Cells_cont[first_in_line.parent] = Cells[first_in_line.parent]
-
-                    # this is to add one more cell after
-                    # last_in_line = cells_cont_sorted[-1][1]
-                    # Cells_cont[last_in_line.daughters[0]] = Cells[last_in_line.daughters[0]]
-
-                    # and add it to the big dictionary
-                    Continuous_Lineages[fov][peak] = Cells_cont
-        # else:
-        #     continue
-
+                # and add it to the big dictionary
+                Continuous_Lineages[fov][peak] = Cells_cont
 
         # remove keys that do not have any lineages
         if not Continuous_Lineages[fov]:
@@ -312,6 +331,55 @@ def stats_table(Cells_df):
     cell_stats = cell_stats.rename(index={'50%': 'median'})
 
     return cell_stats
+
+def channel_locations(channel_file, filetype='specs'):
+    '''Plot the location of the channels across FOVs
+
+    Parameters
+    ----------
+    channel_dict : dict
+        Either channels_masks or specs dictionary.
+    filetype : str, either 'specs' or 'channel_masks'
+        What type of file is provided, which effects the plot output.
+
+    '''
+
+    fig = plt.figure(figsize=(10,10))
+
+    # Using the channel masks
+    if filetype == 'channel_masks':
+        for key, values in channel_file.iteritems():
+        # print('FOV {} has {} channels'.format(key, len(values)))
+            y = (np.ones(len(values))) + key - 1
+            x = values.keys()
+            plt.scatter(x, y)
+
+    # Using the specs file
+    if filetype == 'specs':
+        for key, values in channel_file.iteritems():
+            y = list((np.ones(len(values))) + key - 1)
+            x = values.keys()
+
+            # green for analyze (==1)
+            greenx = [x[i] for i, v in enumerate(values.values()) if v == 1]
+            greeny = [y[i] for i, v in enumerate(values.values()) if v == 1]
+            plt.scatter(greenx, greeny, color='g')
+
+            # blue for empty (==0)
+            bluex = [x[i] for i, v in enumerate(values.values()) if v == 0]
+            bluey = [y[i] for i, v in enumerate(values.values()) if v == 0]
+            plt.scatter(bluex, bluey, color='b')
+
+            # red for ignore (==-1)
+            redx = [x[i] for i, v in enumerate(values.values()) if v == -1]
+            redy = [y[i] for i, v in enumerate(values.values()) if v == -1]
+            plt.scatter(redx, redy, color='r')
+
+    plt.title('Channel locations across FOVs', fontsize=24)
+    plt.xlabel('Peak Position', fontsize=20)
+    plt.ylabel('FOV', fontsize=20)
+
+    return fig
 
 ### Plotting functions #############################################################################
 def violin_fovs(Cells_df):
@@ -409,13 +477,13 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[10,5*len(columns)/3], squeeze=False)
+                            figsize=[12,5*len(columns)/2.5], squeeze=False)
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 5 # minimum bin size to display
-    bingrid = (50, 10) # how many bins to have in the x and y directions
-    moving_window = 10 # window to calculate moving stat
+    binmin = 1 # minimum bin size to display
+    bingrid = (25, 10) # how many bins to have in the x and y directions
+    moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
     # bin_extent in within which bounds should bins go. (left, right, bottom, top)
@@ -423,11 +491,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
-        bin_extents = [(x_extents[0], x_extents[1], 0, 6),
-                      (x_extents[0], x_extents[1], 0, 2),
-                      (x_extents[0], x_extents[1], 0, 12),
+        bin_extents = [(x_extents[0], x_extents[1], 0, 5),
+                      (x_extents[0], x_extents[1], 0, 1.5),
+                      (x_extents[0], x_extents[1], 0, 10),
                       (x_extents[0], x_extents[1], 0, 100),
-                      (x_extents[0], x_extents[1], 0, 6),
+                      (x_extents[0], x_extents[1], 0, 5),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
@@ -450,20 +518,21 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
 
         # formatting
-        ax[i].set_title(titles[i], size=18)
-        ax[i].set_ylabel(ylabels[i], size=16)
+        ax[i].set_title(titles[i], size=20)
+        ax[i].set_ylabel(ylabels[i], size=18)
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
     ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('%s [min]' % time_mark, size=16)
-    ax[5].set_xlabel('%s [min]' % time_mark, size=16)
+    ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
+    ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.925, hspace=0.25)
-    fig.suptitle('Cell Parameters Over Time', size=24)
+    # plt.subplots_adjust(top=0.925, hspace=0.25, bottom=0.5)
+    plt.tight_layout
+    fig.suptitle('Cell Parameters Over Time', size=20)
 
-    sns.despine()
+    # sns.despine()
 
     return fig, ax
 
@@ -516,14 +585,14 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
         ax[i].set_ylabel(ylabels[i], size=16)
 
     ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('%s [min]' % time_mark, size=16)
-    ax[5].set_xlabel('%s [min]' % time_mark, size=16)
+    ax[4].set_xlabel('Frame [min/2]', size=16)
+    ax[5].set_xlabel('Frame [min/2]', size=16)
 
     # Make title, need a little extra space
     plt.subplots_adjust(top=0.9, hspace=0.25)
     fig.suptitle('Cell Parameters Over Time', size=24)
 
-    sns.despine()
+    # sns.despine()
 
     return fig, ax
 
@@ -542,7 +611,7 @@ def plot_traces(Cells, trace_limit=1000):
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
     ### Traces #################################################################################
-    fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(16, 16))
+    fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(10, 10))
     ax = axes.flat # same as axes.ravel()
 
     if trace_limit:
@@ -552,12 +621,18 @@ def plot_traces(Cells, trace_limit=1000):
     for cell_id, Cell in Cells.iteritems():
 
         ax[0].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
-        ax[1].semilogy(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
+        ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
 
-    ax[0].set_title('Cell Length vs Time', size=24)
-    ax[1].set_xlabel('Time [min]', size=16)
+    ax[0].set_title('Cell Length vs Time', size=18)
     ax[0].set_ylabel('Length [um]', size=16)
-    ax[1].set_ylabel('Log(Length [um])', size=16)
+    ax[0].set_ylim([0, 12])
+
+    ax[1].set_xlabel('Frame [min/2]', size=16)
+    ax[1].set_ylabel('Length [um] (log scale)', size=16)
+    ax[1].set_yscale('symlog')
+    ax[1].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
+    ax[1].set_yticks([2, 4, 8])
+    ax[1].set_ylim([2, 12])
 
     plt.subplots_adjust(top=0.925, hspace=0.1)
 
@@ -731,10 +806,10 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-        ax[i].set_yticks([2, 3, 4, 6])
-        ax[i].set_ylim([1.75, 6.5])
+        ax[i].set_yticks([2, 4, 8, 12])
+        ax[i].set_ylim([2, 12])
 
-    ax[-1].set_xlabel('Time [min]', size=16)
+    ax[-1].set_xlabel('Time point [2 min]', size=16)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
@@ -742,6 +817,72 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
 
     sns.despine()
     # plt.subplots_adjust(hspace=0.5)
+
+    return fig, ax
+
+def saw_tooth_ring_plot(Cells):
+    '''Plot a cell lineage with profile information.
+
+    Parameters
+    ----------
+    Cells : dict of Cell objects
+        All the cells should come from a single peak.
+
+    '''
+
+    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(15, 4), squeeze=False)
+    ax = axes.flat[0]
+
+    # this is to map mothers to daugthers with lines
+    last_div_time = None
+    last_length = None
+
+    # turn it into a list so it retains time order
+    lin = [(cell_id, cell) for cell_id, cell in Cells.iteritems()]
+    # sort cells by birth time for the hell of it.
+    lin = sorted(lin, key=lambda x: x[1].birth_time)
+
+    color_norm = mpl.colors.Normalize(vmin=50, vmax=200)
+
+    for cell_id, cell in lin:
+        ### plot cell length and division lines
+        ax.plot(np.array(cell.times_w_div), cell.lengths_w_div,
+                color='blue', lw=2, alpha=1)
+
+        # draw a connecting lines betwee mother and daughter
+        if cell.birth_time == last_div_time:
+            ax.plot([last_div_time, cell.birth_time],
+                           [last_length, cell.sb],
+                           color='blue', lw=2, alpha=1)
+
+        # record the last division time and length for next time
+        last_div_time = cell.division_time
+
+        # save the last length to check for division
+        last_length = cell.sd
+
+        ### plot ring
+        # Use scatter plot heat map
+        for i, t in enumerate(cell.times):
+            ring_x = np.ones(len(cell.ring_profiles[i])) * t
+            # the minus three is to account for the shift in the profile when calculated
+            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.065 #params['pxl2um']
+            ring_z = cell.ring_profiles[i]
+
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=40,
+                       norm=color_norm)
+
+    # axis and figure formatting options
+    ax.set_xlabel('Frame [min/2]', size=16)
+    ax.set_xlim([30, 130])
+    ax.set_ylabel('Length [um]', size=16)
+    ax.set_ylim([0, 8])
+
+    # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
+    plt.tight_layout()
+
+    sns.despine()
 
     return fig, ax
 
@@ -853,10 +994,10 @@ def plot_distributions(Cells_df):
 
     sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    xlabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-              'Generation Time', 'Elongation Rate', 'Septum Position']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
     hist_options = {'histtype' : 'step', 'lw' : 2, 'color' : 'b'}
     kde_options = {'lw' : 2, 'linestyle' : '--', 'color' : 'b'}
 
@@ -881,7 +1022,7 @@ def plot_distributions(Cells_df):
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(data, ax=ax[i], bins=50,
+            sns.distplot(data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_title(titles[i], size=18)
@@ -932,12 +1073,12 @@ def plot_rescaled_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = (np.array(range(0, int(data.max())+1, 1)) + 0.5) / data_mean
+            bin_edges = (np.array(range(0, int(data.max())+1, 2)) + 1) / data_mean
             sns.distplot(plot_data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(plot_data, ax=ax[i], bins=50,
+            sns.distplot(plot_data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_xlabel(xlabels[i], size=16)

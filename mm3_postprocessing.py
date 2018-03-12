@@ -63,8 +63,8 @@ def filter_by_generation_index(data, labels):
     data_new = {}
     for key in data:
         cell = data[key]
-#        label = np.mean(np.array(cell.labels,dtype=np.float_))
-#        label = int(np.around(label))
+       # label = np.mean(np.array(cell.labels,dtype=np.float_))
+       # label = int(np.around(label))
         label = cell.birth_label
         if (label in labels):
             data_new[key] = data[key]
@@ -129,11 +129,11 @@ def filter_cells(cells, par=None):
     cellref = cells[keyref]
     cellattributes = vars(cellref).keys()
     obs_admissible = []
-#    print "Admissible keys:"
-#    for x in cellattributes:
-#        typ = type(x)
-#        if (typ == float) or (typ == int) or (typ == list):
-#            print "{:<4s}{:<s}".format("",key)
+   # print "Admissible keys:"
+   # for x in cellattributes:
+   #     typ = type(x)
+   #     if (typ == float) or (typ == int) or (typ == list):
+   #         print "{:<4s}{:<s}".format("",key)
 
     # start by selecting all cells
     idx = [True for key in cells.keys()]

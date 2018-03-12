@@ -4,11 +4,11 @@ warning off;
 
 %% load data
 
-dir_name = '../../analysis/picked/';
+dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_photo/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
-px_to_mu = 0.065;
-t_int = 1.0;
+px_to_mu = 0.11;
+t_int = 2.0;
 
 %% extract and calculate all cell data
 
@@ -85,7 +85,7 @@ for i=1:numel(fnames)
             D_period( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.termination_time);
             tau_cyc( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.initiation_time);
             
-            
+          
             mother_cell_counter = mother_cell_counter + 1;
 
         end
@@ -96,4 +96,4 @@ for i=1:numel(fnames)
     end
 end
 
-save('../../analysis/cell_cycle_stat_GUI.mat');
+% save('../../analysis/cell_cycle_stat_GUI.mat');

@@ -34,7 +34,7 @@ import mm3_helpers as mm3
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
     # hardcoded parameters
-    do_segmentation = True # make or load segmentation?
+    do_segmentation = False # make or load segmentation?
     do_lineages = True # should lineages be made after segmentation?
 
     # switches which may be overwritten
