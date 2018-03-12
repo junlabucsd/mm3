@@ -121,6 +121,14 @@ def get_plane(filepath):
     else:
         return None
 
+def get_fov(filepath):
+    pattern = 'xy(\d+)\w*.tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return int(res.group(1))
+    else:
+        return None
+
 def get_time(filepath):
     pattern = 't(\d+)xy\w+.tif'
     res = re.search(pattern,filepath)
