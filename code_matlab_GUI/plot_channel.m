@@ -78,19 +78,19 @@ for k = 1:L_channles
                     
                     if cell_temp.foci_h{1,p}(1,q)>=IW_thr
                         h3 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2);
-                        h3.Color = color_temp; set(h3,'LineWidth',1,'Markersize',2*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                        h3.Color = color_temp; set(h3,'LineWidth',1,'Markersize',8*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
                         
                         foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)-0.05+length_temp(1,p)/2]; 
                         i_1 = i_1+1;
 
                         h4 = plot(cell_temp.times(1,p),cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2);
-                        h4.Color = color_temp; set(h4,'LineWidth',1,'Markersize',2*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                        h4.Color = color_temp; set(h4,'LineWidth',1,'Markersize',8*(cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
 
                         foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+0.05+length_temp(1,p)/2]; 
                         i_1 = i_1+1;
                     else
                         h3 = plot(cell_temp.times(1,p), cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2);
-                        h3.Color = color_temp; set(h3,'LineWidth',1,'Markersize',2*(2*cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
+                        h3.Color = color_temp; set(h3,'LineWidth',1,'Markersize',8*(2*cell_temp.foci_h{1,p}(1,q)/IW_thr),'Marker','o','MarkerFaceColor',[1 1 1],'LineStyle','None');
 
                         foci_list(i_1,:) = [double(cell_temp.times(1,p)), cell_temp.disp_l{1,p}(1,q)+length_temp(1,p)/2]; 
                         i_1 = i_1+1;

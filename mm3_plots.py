@@ -482,7 +482,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # binning parameters, should be arguments
     binmin = 1 # minimum bin size to display
-    bingrid = (50, 10) # how many bins to have in the x and y directions
+    bingrid = (25, 10) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
@@ -843,7 +843,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=10, vmax=200)
+    color_norm = mpl.colors.Normalize(vmin=50, vmax=200)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -870,14 +870,14 @@ def saw_tooth_ring_plot(Cells):
             ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.065 #params['pxl2um']
             ring_z = cell.ring_profiles[i]
 
-            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=10,
+            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=40,
                        norm=color_norm)
 
     # axis and figure formatting options
     ax.set_xlabel('Frame [min/2]', size=16)
-    ax.set_xlim([250, 400])
+    ax.set_xlim([30, 130])
     ax.set_ylabel('Length [um]', size=16)
-    ax.set_ylim([0, 10])
+    ax.set_ylim([0, 8])
 
     # plt.subplots_adjust(bottom=0.2) #, hspace=0.25)
     plt.tight_layout()
@@ -1022,7 +1022,7 @@ def plot_distributions(Cells_df):
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(data, ax=ax[i], bins=50,
+            sns.distplot(data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_title(titles[i], size=18)
@@ -1073,12 +1073,12 @@ def plot_rescaled_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = (np.array(range(0, int(data.max())+1, 1)) + 0.5) / data_mean
+            bin_edges = (np.array(range(0, int(data.max())+1, 2)) + 1) / data_mean
             sns.distplot(plot_data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(plot_data, ax=ax[i], bins=50,
+            sns.distplot(plot_data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         ax[i].set_xlabel(xlabels[i], size=16)
