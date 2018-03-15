@@ -2,12 +2,26 @@ import os,sys,glob
 import numpy as np
 import time
 from freetype import *
+import scipy.stats as sstats
 
 ##############################################################################
 # general functions
 ##############################################################################
 def print_time():
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+##############################################################################
+# signal processing
+##############################################################################
+def histogram(X,density=True):
+    valmax = np.max(X)
+    valmin = np.min(X)
+    iqrval = iqr(X)
+    nbins_fd = (valmax-valmin)*np.float_(len(X))**(1./3)/(2.*iqrval)
+    if (nbins_fd < 1.0e4):
+        return np.histogram(X,bins='auto',density=density)
+    else:
+        return np.histogram(X,bins='sturges',density=density)
 
 ##############################################################################
 # Movie Maker
@@ -84,4 +98,40 @@ def make_label(text, face, size=12, angle=0):
         pen.y += face.glyph.advance.y
 
     return L
+
+def array_bin(array, p=0):
+    """
+    Smooth the input image by averaging
+    squares of size 2p+1.
+    """
+
+    # no binning
+    if (p == 0):
+        return array
+
+    # start binning
+    array_new = np.empty(array.shape, dtype=array.dtype)
+
+    nrow, ncol = array.shape[:2]
+    for r in range(nrow):
+        for c in range(ncol):
+            r0 = max(0,r-p)
+            r1 = min(nrow-1,r+p)
+            c0 = max(0,c-p)
+            c1 = min(ncol-1,c+p)
+            array_new[r,c] = np.mean(array[r0:r1+1, c0:c1+1])
+    # end binning
+    return array_new
+
+def get_background(data, delta=1.5):
+    """
+    Return background value for data.
+    """
+
+    median = np.median(data)
+    iqr = sstats.iqr(data)
+    bg = median+delta*iqr
+    return bg
+
+
 
