@@ -3,6 +3,9 @@ import numpy as np
 import time
 from freetype import *
 import scipy.stats as sstats
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.ticker
 
 ##############################################################################
 # general functions
@@ -16,7 +19,7 @@ def print_time():
 def histogram(X,density=True):
     valmax = np.max(X)
     valmin = np.min(X)
-    iqrval = iqr(X)
+    iqrval = sstats.iqr(X)
     nbins_fd = (valmax-valmin)*np.float_(len(X))**(1./3)/(2.*iqrval)
     if (nbins_fd < 1.0e4):
         return np.histogram(X,bins='auto',density=density)
@@ -133,5 +136,47 @@ def get_background(data, delta=1.5):
     bg = median+delta*iqr
     return bg
 
+def plot_histogram(data, fileout, nbinsx_max=8, color='darkblue', lw=0.5):
+    """
+    Plot the histogram of the input file
+    """
 
+    fig = plt.figure(num='none',facecolor='w', figsize=(4,3))
+    ax = fig.gca()
+
+    hist,edges=histogram(data,density=False)
+    left = edges[:-1]
+    idx = hist > 0
+
+    # add plot
+    #ax.bar(edges[:-1], hist, width=np.diff(edges), color=color, lw=0)
+    ax.plot(left[idx], hist[idx], '-', color=color, lw=lw)
+
+    # statistics
+    median = np.median(data)
+    iqr = sstats.iqr(data)
+    bg = get_background(data)
+    ax.axvline(x=median, linestyle='-', color='k', lw=lw, label="median = {:.0f}, IQR={:.0f}".format(median,iqr))
+    ax.axvline(x=bg, linestyle='--', color='k', lw=lw, label="background = {:.0f}".format(bg))
+
+    ax.legend(loc='best', fontsize='x-small')
+
+    ax.set_xlabel('pixel value', fontsize='medium')
+    ax.set_ylabel('histogram', fontsize='medium')
+    #ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=nbins_max))
+    #ax.yaxis.set_major_locator(matplotlib.ticker.MaxNLocator(nbins=nbins_max))
+    #ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+    #ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+    ax.tick_params(axis='both', labelsize='xx-small', pad=2)
+    ax.tick_params(axis='x', which='both', bottom='on', top='off')
+    ax.tick_params(axis='y', which='both', left='on', right='off')
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    rect = [0.,0.,1.,0.98]
+    fig.tight_layout(rect=rect)
+    print "{:<20s}{:<s}".format('fileout',fileout)
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    return
 
