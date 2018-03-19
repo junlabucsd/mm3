@@ -482,7 +482,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # binning parameters, should be arguments
     binmin = 1 # minimum bin size to display
-    bingrid = (25, 10) # how many bins to have in the x and y directions
+    bingrid = (15, 5) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
@@ -491,11 +491,11 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
 
     if bin_extents == None:
-        bin_extents = [(x_extents[0], x_extents[1], 0, 5),
+        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
                       (x_extents[0], x_extents[1], 0, 1.5),
-                      (x_extents[0], x_extents[1], 0, 10),
-                      (x_extents[0], x_extents[1], 0, 100),
-                      (x_extents[0], x_extents[1], 0, 5),
+                      (x_extents[0], x_extents[1], 0, 8),
+                      (x_extents[0], x_extents[1], 0, 140),
+                      (x_extents[0], x_extents[1], 0, 4),
                       (x_extents[0], x_extents[1], 0, 1)]
 
     # Now plot the filtered data
@@ -585,8 +585,8 @@ def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_windo
         ax[i].set_ylabel(ylabels[i], size=16)
 
     ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('Frame [min/2]', size=16)
-    ax[5].set_xlabel('Frame [min/2]', size=16)
+    ax[4].set_xlabel('Frame [min/5]', size=16)
+    ax[5].set_xlabel('Frame [min/5]', size=16)
 
     # Make title, need a little extra space
     plt.subplots_adjust(top=0.9, hspace=0.25)
@@ -625,14 +625,14 @@ def plot_traces(Cells, trace_limit=1000):
 
     ax[0].set_title('Cell Length vs Time', size=18)
     ax[0].set_ylabel('Length [um]', size=16)
-    ax[0].set_ylim([0, 12])
+    ax[0].set_ylim([0, 8])
 
-    ax[1].set_xlabel('Frame [min/2]', size=16)
+    ax[1].set_xlabel('Frame [min/5]', size=16)
     ax[1].set_ylabel('Length [um] (log scale)', size=16)
     ax[1].set_yscale('symlog')
     ax[1].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
     ax[1].set_yticks([2, 4, 8])
-    ax[1].set_ylim([2, 12])
+    ax[1].set_ylim([2, 8])
 
     plt.subplots_adjust(top=0.925, hspace=0.1)
 
@@ -806,10 +806,10 @@ def saw_tooth_plot_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
         ax[i].set_ylabel('Length [um]', size=16)
         ax[i].set_yscale('symlog')
         ax[i].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-        ax[i].set_yticks([2, 4, 8, 12])
-        ax[i].set_ylim([2, 12])
+        ax[i].set_yticks([1, 4, 8])
+        ax[i].set_ylim([1, 8])
 
-    ax[-1].set_xlabel('Time point [2 min]', size=16)
+    ax[-1].set_xlabel('Time point [5 min]', size=16)
 
     plt.tight_layout()
     # plt.subplots_adjust(top=0.875, bottom=0.1) #, hspace=0.25)
@@ -843,7 +843,7 @@ def saw_tooth_ring_plot(Cells):
     # sort cells by birth time for the hell of it.
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
-    color_norm = mpl.colors.Normalize(vmin=50, vmax=200)
+    color_norm = mpl.colors.Normalize(vmin=50, vmax=150)
 
     for cell_id, cell in lin:
         ### plot cell length and division lines
@@ -865,17 +865,20 @@ def saw_tooth_ring_plot(Cells):
         ### plot ring
         # Use scatter plot heat map
         for i, t in enumerate(cell.times):
-            ring_x = np.ones(len(cell.ring_profiles[i])) * t
-            # the minus three is to account for the shift in the profile when calculated
-            ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.065 #params['pxl2um']
-            ring_z = cell.ring_profiles[i]
+            if t % 2 == 1:
 
-            ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=40,
-                       norm=color_norm)
+                ring_x = np.ones(len(cell.ring_profiles[i])) * t
+                # the minus three is to account for the shift in the profile when calculated
+                # ring_y = (np.arange(0, len(cell.ring_profiles[i])) - 3) * 0.11 #params['pxl2um']
+                ring_y = (np.arange(0, len(cell.ring_profiles[i]))) * 0.11 #params['pxl2um']
+                ring_z = cell.ring_profiles[i]
+
+                ax.scatter(ring_x, ring_y, c=ring_z, cmap='Greens', marker='s', s=300,
+                           norm=color_norm)
 
     # axis and figure formatting options
-    ax.set_xlabel('Frame [min/2]', size=16)
-    ax.set_xlim([30, 130])
+    ax.set_xlabel('Frame [min/5]', size=16)
+    # ax.set_xlim([20, 60])
     ax.set_ylabel('Length [um]', size=16)
     ax.set_ylim([0, 8])
 
@@ -1017,7 +1020,7 @@ def plot_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = np.array(range(0, int(data.max())+1, 2)) + 0.5
+            bin_edges = np.array(range(0, int(data.max())+1, 5)) + 2.5
             sns.distplot(data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
