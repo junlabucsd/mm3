@@ -161,6 +161,7 @@ if __name__ == "__main__":
     except KeyError:
         pass
 
+    img_old=None
     for fimg in filelist:
         t = get_time(fimg)
         if not (params['t0'] is None) and (t < params['t0']):
@@ -185,6 +186,19 @@ if __name__ == "__main__":
             img = img[:size_y_ref, :size_x_ref]
         size_y, size_x = img.shape[:2]
         nchannels = img.shape[2]
+
+        # compare with old image and use previous data if some channel are empty
+        # happens when the sampling frequency of the fluorescence channel is smaller than the phase
+        # contrast one
+        if not (img_old is None):
+            for i in range(nchannels):
+                if (np.sum(img[:,:,i]) == 0):
+                    img[:,:,i] = img_old[:,:,i]
+                else:
+                    img_old[:,:,i]=img[:,:,i]
+        else:
+            # copy image
+            img_old=img
 
         # start ratiometric
         ## import parameters
@@ -399,15 +413,15 @@ if __name__ == "__main__":
         # add global ratio for ratiometric input
         if ('ratiometric' in params) and (not params['ratiometric'] is None):
             ratiotxt = "ratio = {:.2f}".format(ratiometric_ratio)
-            ratio_img = np.fliplr(make_label(ratiotxt, fontface, size=48,
-                                               angle=180)).astype('float64')
-            ratio_img = np.pad(ratio_img, ((size_y - 10 - ratio_img.shape[0], 10),
-                                           (10, size_x - 10 - ratio_img.shape[1])),
-                                           mode = 'constant')
-            mask = (ratio_img > 0)
-            ratio_img = np.dstack((ratio_img, ratio_img, ratio_img)).astype(np.uint8)
-            img[mask] = ratio_img[mask]
-
+            if np.isfinite(ratiometric_ratio):
+                ratio_img = np.fliplr(make_label(ratiotxt, fontface, size=48,
+                                                   angle=180)).astype('float64')
+                ratio_img = np.pad(ratio_img, ((size_y - 10 - ratio_img.shape[0], 10),
+                                               (10, size_x - 10 - ratio_img.shape[1])),
+                                               mode = 'constant')
+                mask = (ratio_img > 0)
+                ratio_img = np.dstack((ratio_img, ratio_img, ratio_img)).astype(np.uint8)
+                img[mask] = ratio_img[mask]
 
         # debug purpose
         if debug:
