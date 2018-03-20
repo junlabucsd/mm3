@@ -25,7 +25,7 @@ with warnings.catch_warnings():
 
 import mm3_helpers
 from mm3_helpers import get_fov, get_time, information
-from mm3_utils import print_time, make_label
+from mm3_utils import print_time, make_label, array_bin, get_background, plot_histogram
 
 # yaml formats
 npfloat_representer = lambda dumper,value: dumper.represent_float(float(value))
@@ -42,10 +42,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(prog="Making movie from .tif files.")
     parser.add_argument('-f', '--paramfile',  type=file, required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=int, required=True, help='Field of view with which make the movie.')
+    parser.add_argument('--debug',  action='store_true', required=False, help='Debug mode.')
+    parser.add_argument('--histograms',  type=int, nargs='+', required=False, help='Debug mode.')
     namespace = parser.parse_args(sys.argv[1:])
     paramfile = namespace.paramfile.name
     allparams = yaml.load(namespace.paramfile)
     fov = namespace.fov
+    debug=namespace.debug
+    if debug:
+        debugdir = 'debug'
+        if not os.path.isdir(debugdir):
+            os.makedirs(debugdir)
+
+    if not (namespace.histograms is None):
+        hist_list = namespace.histograms
+        histdir='histograms'
+        if not os.path.isdir(histdir):
+            os.makedirs(histdir)
+    else:
+        hist_list = []
 
     # first initialization of parameters
     params = allparams['movie']
@@ -78,6 +93,9 @@ if __name__ == "__main__":
 
         # do not go beyond first level
         break
+
+    if (len(filelist) == 0):
+        sys.exit("File list is empty!")
 
     # open one image to get dimensions
     fimg=filelist[0]
@@ -132,18 +150,32 @@ if __name__ == "__main__":
     information('Writing movie for FOV %d.' % fov)
 
     #print " ".join(command)
-    # comment following for debug
-    pipe = sp.Popen(command, stdin=sp.PIPE)
+    if not debug:
+        pipe = sp.Popen(command, stdin=sp.PIPE)
 
+    # data dictionary for histogram
+    hist_data = {}
+    try:
+        for i in hist_list:
+            hist_data[i]=[]
+    except KeyError:
+        pass
+
+    img_old=None
     for fimg in filelist:
-        #print fimg
         t = get_time(fimg)
         if not (params['t0'] is None) and (t < params['t0']):
             continue
         if not (params['tN'] is None) and (t > params['tN']):
             continue
 
-        img = tiff.imread(fimg) # read the image
+        if debug:
+            print "t = {:d}".format(t)
+
+        # read the image
+        img = tiff.imread(fimg)
+
+        # standardize dimension and ensure the axis order y,x,channel
         if (len(img.shape) == 2):
             img = np.array([img])
         if (len(img.shape) != 3):
@@ -154,31 +186,155 @@ if __name__ == "__main__":
             img = img[:size_y_ref, :size_x_ref]
         size_y, size_x = img.shape[:2]
         nchannels = img.shape[2]
+
+        # compare with old image and use previous data if some channel are empty
+        # happens when the sampling frequency of the fluorescence channel is smaller than the phase
+        # contrast one
+        if not (img_old is None):
+            for i in range(nchannels):
+                if (np.sum(img[:,:,i]) == 0):
+                    img[:,:,i] = img_old[:,:,i]
+                else:
+                    img_old[:,:,i]=img[:,:,i]
+        else:
+            # copy image
+            img_old=img
+
+        # start ratiometric
+        ## import parameters
+        if ('ratiometric' in params) and (not params['ratiometric'] is None):
+            try:
+                new_channel = bool(params['ratiometric']['new_channel'])
+            except (KeyError, TypeError):
+                new_channel=False
+
+            cnum=int(params['ratiometric']['channel_num'])
+            cden=int(params['ratiometric']['channel_den'])
+            cratio=int(params['ratiometric']['channel_new'])
+            try:
+                bg_sbtract=bool(params['ratiometric']['bg_subtract'])
+            except KeyError:
+                bg_sbtract=True
+            try:
+                bin_neighbors=int(params['ratiometric']['bin_neighbors'])
+            except (KeyError, TypeError):
+                bin_neighbors=0
+            try:
+                bg_diff=float(params['ratiometric']['bg_diff'])
+            except (KeyError, TypeError):
+                bg_diff=1.5
+            try:
+                xlo_num=float(params['ratiometric']['xlo_num'])
+            except (KeyError, TypeError):
+                xlo_num=0.
+            try:
+                xlo_den=float(params['ratiometric']['xlo_den'])
+            except (KeyError, TypeError):
+                xlo_den=0.
+
+            if not ( (cnum in range(nchannels)) and (cden in range(nchannels))):
+                raise ValueError("cnum and cden do not correspond to input channels")
+            if cratio < nchannels:
+                print "WARNING: overriding input channel {} for ratiometric one.".format(cratio)
+            elif cratio > nchannels:
+                raise ValueError("Ratiometric channel cannot be > # input channels")
+
+            img_num = np.array(img[:,:,cnum], dtype=np.float)
+            img_den = np.array(img[:,:,cden], dtype=np.float)
+
+            if not new_channel:
+                # just compute fluorescence ratio
+                bg_num = get_background(np.ravel(img_num),bg_diff)
+                bg_den = get_background(np.ravel(img_den),bg_diff)
+                img_num -= bg_num
+                img_den -= bg_den
+                img_num [img_num < 0] = 0.
+                img_den [img_den < 0] = 0.
+
+                ratiometric_ratio = np.sum(img_num)/np.sum(img_den)
+
+            else:
+                # process fluorescence images to build extra channel
+                ## get mask before applying operations on array
+                idx = (img_num > xlo_num) & (img_den > xlo_den)
+
+                ## binning
+                img_num = array_bin(img_num, p=bin_neighbors)
+                img_den = array_bin(img_den, p=bin_neighbors)
+
+                ## background subtraction
+                bg_num = get_background(np.ravel(img_num),bg_diff)
+                bg_den = get_background(np.ravel(img_den),bg_diff)
+                img_num -= bg_num
+                img_den -= bg_den
+                img_num [img_num < 0] = 0.
+                img_den [img_den < 0] = 0.
+
+
+                # debug purpose
+                if debug:
+                    for img_plot,suff in zip([img_num, img_den],["num", "den"]):
+                        img_plot=np.copy(img_plot)
+                        img_plot[~idx]=0.
+                        img_plot = (np.float_(img_plot) - np.min(img_plot)) / np.float_(np.max(img_plot)-np.min(img_plot))
+                        img_plot = np.uint8(img_plot*255)
+                        Image.fromarray(img_plot, mode='L').save(os.path.join(debugdir,'test_ratiometric_{}_t{:04d}.png'.format(suff,t)))
+
+                ## create new channel with ratio
+                img_ratio = np.zeros(img_num.shape, dtype=np.float)
+                idx = idx & (img_num > 0.) & (img_den > 0.)
+                img_ratio[idx] = (img_num[idx] / img_den[idx])
+
+                img_ratio = np.moveaxis(np.array([img_ratio]), 0, 2)
+                img = np.concatenate((img, img_ratio), axis=2)
+
+                # compute ratio
+                ratiometric_ratio = np.sum(img_num[idx])/np.sum(img_den[idx])
+
+            # end ratiometric
+
+        # start channel stack
         stack=[]
         masks={}
+        nchannels = img.shape[2]
         for i in range(nchannels):
+            if debug:
+                print "channel {:d}".format(i)
+
             img_tp = img[:,:,i]
-            mask =  None
-            # masking operations (used when building overlay)
+
+            # add to histogram if necessary
+            if i in hist_data:
+                hist_data[i] = np.concatenate((hist_data[i], np.ravel(img_tp)))
+
+            # determine image minmax
             try:
-                xlo = np.uint16(params['channels'][i]['xlo'])
-            except KeyError:
-                xlo = None
+                if params['channels'][i]['min'] == 'background':
+                    pmin = get_background(np.ravel(img_tp),1.5)
+                else:
+                    pmin = float(params['channels'][i]['min'])
+            except (KeyError,TypeError):
+                pmin = np.min(img_tp)
+            params['channels'][i]['min']=pmin
+
+            try:
+                pmax = float(params['channels'][i]['max'])
+            except (KeyError,TypeError):
+                pmax = np.max(img_tp)
+            params['channels'][i]['max']=pmax
+
+            # masking operations (used when building overlay)
+            mask =  None
+            try:
+                xlo = float(params['channels'][i]['xlo'])
+            except (KeyError, TypeError):
+                xlo = pmin
 
             mask = (img_tp > xlo) # get binary mask
             masks[i] = mask
 
             # rescale dynamic range
-            try:
-                pmin = np.uint16(params['channels'][i]['min'])
-            except (KeyError,TypeError):
-                pmin = np.min(img_tp)
-            try:
-                pmax = np.uint16(params['channels'][i]['max'])
-            except (KeyError,TypeError):
-                pmax = np.max(img_tp)
             img_tp = (np.array(img_tp, dtype=np.float_) - pmin)/float(pmax-pmin)
-            idx = img_tp > 1
             img_tp [img_tp < 0] = 0.
             img_tp [img_tp > 1] = 1.
 
@@ -201,20 +357,26 @@ if __name__ == "__main__":
 
         # construct final image
         bg = params['background']
-        img_bg = stack[bg]
+        try:
+            img_bg = stack[bg]
+        except IndexError:
+            sys.exit("Channel {:d} doesn't exist in input data and cannot be used for background.".format(bg))
 
-        # add overlays
+        # start overlays
         overlay = []
         try:
             overlay = params['overlay']
         except KeyError:
             pass
 
-        if not ( (overlay is None) or (overlay == []) ):
+        if (not (overlay is None) or (overlay == []) ):
             img = np.zeros(img_bg.shape, dtype=np.float_)
             tot_coeffs = np.zeros(img_bg.shape, dtype=np.float_)
             for i in overlay:
-                img_tp = stack[i]
+                try:
+                    img_tp = stack[i]
+                except IndexError:
+                    sys.exit("Channel {:d} doesn't exist in input data and cannot be overlaid".format(i))
                 w = params['channels'][i]['alpha']
                 mask = masks[i]
                 coeffs = np.ones(img_tp.shape,dtype=np.float_)
@@ -230,6 +392,7 @@ if __name__ == "__main__":
 
         else:
             img = img_bg
+        # end overlays
 
         # add time stamp
         size_y,size_x = img.shape[:2]
@@ -245,18 +408,35 @@ if __name__ == "__main__":
 
         mask = (r_timestamp > 0)
         r_timestamp = np.dstack((r_timestamp, r_timestamp, r_timestamp)).astype(np.uint8)
-        coeffs = np.zeros(img.shape,dtype=np.float_)
         img[mask] = r_timestamp[mask]
 
-        # decomment for debug
-#        img = Image.fromarray(img, mode='RGB')
-#        img.save('test.png')
-#        break
+        # add global ratio for ratiometric input
+        if ('ratiometric' in params) and (not params['ratiometric'] is None):
+            ratiotxt = "ratio = {:.2f}".format(ratiometric_ratio)
+            if np.isfinite(ratiometric_ratio):
+                ratio_img = np.fliplr(make_label(ratiotxt, fontface, size=48,
+                                                   angle=180)).astype('float64')
+                ratio_img = np.pad(ratio_img, ((size_y - 10 - ratio_img.shape[0], 10),
+                                               (10, size_x - 10 - ratio_img.shape[1])),
+                                               mode = 'constant')
+                mask = (ratio_img > 0)
+                ratio_img = np.dstack((ratio_img, ratio_img, ratio_img)).astype(np.uint8)
+                img[mask] = ratio_img[mask]
+
+        # debug purpose
+        if debug:
+            img = Image.fromarray(img, mode='RGB')
+            img.save(os.path.join(debugdir,'test_t{:04d}.png'.format(t)))
 
         # write the image to the ffmpeg subprocess
-        # comment for debug
-        pipe.stdin.write(img.tostring())
+        if not debug:
+            pipe.stdin.write(img.tostring())
 
     # end of loop
-    # comment for debug
-    pipe.terminate()
+    if not debug:
+        pipe.terminate()
+
+    # histograms
+    for i in hist_data.keys():
+        filehist = os.path.join(histdir,"histogram_c{:d}.pdf".format(i))
+        plot_histogram(hist_data[i], filehist)
