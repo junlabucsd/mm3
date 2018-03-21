@@ -2378,6 +2378,8 @@ def foci_lap(img, img_foci, cell, t):
     cell_fl_median = np.nanmedian(img_foci_masked)
     cell_fl_mean = np.nanmean(img_foci_masked)
 
+    img_foci_masked[img != region] = 0
+
     # subtract this value from the cell
     if False:
         img_foci = img_foci.astype('int32') - cell_fl_median.astype('int32')
@@ -2393,7 +2395,7 @@ def foci_lap(img, img_foci, cell, t):
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
     numsig = (maxsig - minsig + 1) # number of division to consider between min ang max sig
-    blobs = blob_log(img_foci, min_sigma=minsig, max_sigma=maxsig,
+    blobs = blob_log(img_foci_masked, min_sigma=minsig, max_sigma=maxsig,
                      overlap=over_lap, num_sigma=numsig, threshold=thresh)
 
     # these will hold information about foci position temporarily
