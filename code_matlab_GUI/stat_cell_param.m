@@ -4,7 +4,7 @@ warning off;
 
 %% load data
 
-dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_photo/picked/';
+dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_26/analysis_photo/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.11;
