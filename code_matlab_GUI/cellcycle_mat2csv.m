@@ -1,7 +1,7 @@
 % Export the array output data from FS stat_cell_param.m to .csv
 
 % directory from which to load and save data
-data_dir = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_26/analysis_photo/cell_data/';
+data_dir = '/Volumes/JunLabSSD_04/shift/ecoli/20180314_ecoli_29/analysis/cell_data/';
 
 % load output from stat_cell_param
 % load([data_dir 'cell_cycle_stat_GUI.mat']);
