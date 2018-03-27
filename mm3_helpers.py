@@ -2666,7 +2666,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
                 peak_width = popt[2]
             except:
-                information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
+                # information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
                 peak_width = np.float('NaN')
 
             # Add data to cells
