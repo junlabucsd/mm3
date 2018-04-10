@@ -105,18 +105,26 @@ new_cell_region_cutoff: 2
 # parameters for mm3_MovieMaker_alternative.py
 movie:
   t0:
-  tN:
+  tN: 200
   directory: 'movies'
   background: 2
-  overlay: [0,1]
+  overlay: [3]
   #overlay: leave empty if no overlay
+  ratiometric:
+          channel_num: 0
+          channel_den: 1
+          channel_new: 3
+          bg_subtract: True # if None the default is True
+          bg_diff: # Default is 1.5
+          bin_neighbors: 1 # default 0
   channels:
     2:
       rgb: [255,255,255] # rgb color choose [255,255,255] for phase contrast
-      min: 100 # use min, max to define dynamic range of image
-      max: 4000
+      min:  # use min, max to define dynamic range of image
+      max:
       alpha: 0.7 # alpha (only relevant if channel is in overlay list)
       #xlo: 100 # value from the original 16-bit grayscale image for masking in blending operation (alpha will be 0 for value below this threshold)
+      histogram: #plot or not the histogram for concatenated data (not implemented yet).
     0:
       rgb: [130,0,200]
       min: 100
@@ -127,6 +135,9 @@ movie:
       min: 100
       alpha: 0.30
       xlo: 250
+    3:
+      rgb: [255,255,0]
+      alpha: 0.30
   fps: 20
 
 # set a subdirectory name to contain movies for this experiment

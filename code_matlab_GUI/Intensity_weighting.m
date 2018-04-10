@@ -2,7 +2,7 @@ clear all; clc;
 % close all;
 
 %% load data
-cell_data = load('/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_andor/cell_data/continuous_lineages_foci.mat');
+cell_data = load('/Volumes/JunLabSSD_04/shift/ecoli/20180314_ecoli_29/analysis/cell_data/continuous_lineages_foci.mat');
 
 px_to_mu = 0.11;
 t_int = 2.0;

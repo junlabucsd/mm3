@@ -6,7 +6,7 @@ import sys
 import os
 import time
 import inspect
-import getopt
+import argparse
 import yaml
 import glob
 import re
@@ -45,47 +45,36 @@ import mm3_helpers as mm3
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
-    # hardcoded parameters
-    do_metadata = True
-    do_time_table = True
-    do_channel_masks = True
-    do_slicing = True
-    user_spec_fovs = []
-    t_end = None # only analyze images up until this t point. Put in None otherwise
-    nproc = 6 # number of threads for multiprocessing
 
-    # get switches and parameters
-    try:
-        unixoptions='f:o:j:'
-        gnuoptions=['paramfile=','fov=','nproc=']
-        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
-        # switches which may be overwritten
-        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
-    except getopt.GetoptError:
-        print('No arguments detected.')
-
-    # set parameters
-    for opt, arg in opts:
-        if opt in ['-f','--paramfile']:
-            param_file_path = arg # parameter file path
-        if opt in ['-o', '--fov']:
-            try:
-                [user_spec_fovs.append(int(val)) for val in arg.split(",")]
-            except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt in ['-j', '--nproc']:
-            try:
-                nproc = int(arg)
-            except ValueError:
-                mm3.warning("Could not convert \"{}\" to an integer".format(arg))
+    # set switches and parameters
+    parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
+                                     description='Identifies and slices out channels into individual TIFF stacks through time.')
+    parser.add_argument('-f', '--paramfile',  type=file,
+                        required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-o', '--fov',  type=str,
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+    parser.add_argument('-j', '--nproc',  type=int,
+                        required=False, help='Number of processors to use.')
+    namespace = parser.parse_args()
 
     # Load the project parameters file
-    # if the paramfile string has no length ie it has not been specified, ERROR
-    if len(param_file_path) == 0:
-        raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information('Loading experiment parameters.')
+    param_file_path = namespace.paramfile.name
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+
+    if namespace.fov:
+        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+    else:
+        user_spec_fovs = []
+
+    # number of threads for multiprocessing
+    if namespace.nproc:
+        nproc = namespace.nproc
+    else:
+        nproc = 6
+
+    # only analyze images up until this t point. Put in None otherwise
+    t_end = p['scripts']['compile']['t_end']
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -101,7 +90,7 @@ if __name__ == "__main__":
     analyzed_imgs = {} # for storing get_params pool results.
 
     ### process TIFFs for metadata #################################################################
-    if not do_metadata:
+    if not p['scripts']['compile']['do_metadata']:
         mm3.information("Loading image parameters dictionary.")
 
         with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'r') as tiff_metadata:
@@ -181,8 +170,9 @@ if __name__ == "__main__":
         mm3.information('Saved metadata from analyzed images.')
 
     ### Make table for jd time to FOV and time point
-    if not do_time_table:
+    if not p['scripts']['compile']['do_time_table']:
         mm3.information('Skipping time table creation.')
+
     else:
         # do it
         time_table = mm3.make_time_table(analyzed_imgs)
@@ -196,13 +186,13 @@ if __name__ == "__main__":
         mm3.information('Saved time table.')
 
     ### Make consensus channel masks and get other shared metadata #################################
-    if not do_channel_masks and do_slicing:
+    if not p['scripts']['compile']['do_channel_masks'] and p['scripts']['compile']['do_slicing']:
         mm3.information("Loading channel masks dictionary.")
 
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
 
-    elif do_channel_masks:
+    elif p['scripts']['compile']['do_channel_masks']:
         mm3.information("Calculating channel masks.")
 
         # only calculate channels masks from images before t_end in case it is specified
@@ -222,7 +212,7 @@ if __name__ == "__main__":
         mm3.information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
-    if do_slicing:
+    if p['scripts']['compile']['do_slicing']:
 
         mm3.information("Saving channel slices.")
 
