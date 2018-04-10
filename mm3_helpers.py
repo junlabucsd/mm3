@@ -2183,7 +2183,7 @@ def find_mother_cells(Cells):
 
 ### functions for additional cell centric analysis
 
-def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
@@ -2225,8 +2225,8 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
             # append total flourescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
             # and the average fluorescence
-            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
-            Cell.fl_vol_avgs.append(np.sum(fl_image_masked)) / Cell.volumes[n]
+            Cell.fl_area_avgs.append(np.sum(fl_image_masked / Cell.areas[n]))
+            Cell.fl_vol_avgs.append(np.sum(fl_image_masked) / Cell.volumes[n])
 
             if midline:
                 # add the midline average by first applying morphology transform
