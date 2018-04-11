@@ -2225,7 +2225,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
             # append total flourescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
             # and the average fluorescence
-            Cell.fl_area_avgs.append(np.sum(fl_image_masked / Cell.areas[n]))
+            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
             Cell.fl_vol_avgs.append(np.sum(fl_image_masked) / Cell.volumes[n])
 
             if midline:
