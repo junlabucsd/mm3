@@ -2678,6 +2678,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
     return
 
+# Calculate Y projection intensity of a fluorecent channel per cell
 def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     '''Calculate profile of plane along cell and add information to Cell object. Sums the fluorescent channel along the long axis of the cell.
 
