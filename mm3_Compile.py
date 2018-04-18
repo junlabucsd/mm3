@@ -45,6 +45,8 @@ import mm3_helpers as mm3
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
+    '''mm3_Compile.py locates and slices out mother machine channels into image stacks.
+    '''
 
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
@@ -59,7 +61,11 @@ if __name__ == "__main__":
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    param_file_path = namespace.paramfile.name
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
@@ -69,12 +75,10 @@ if __name__ == "__main__":
 
     # number of threads for multiprocessing
     if namespace.nproc:
-        nproc = namespace.nproc
-    else:
-        nproc = 6
+        p['num_analyzers'] = namespace.nproc
 
     # only analyze images up until this t point. Put in None otherwise
-    t_end = p['scripts']['compile']['t_end']
+    t_end = p['compile']['t_end']
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -90,7 +94,7 @@ if __name__ == "__main__":
     analyzed_imgs = {} # for storing get_params pool results.
 
     ### process TIFFs for metadata #################################################################
-    if not p['scripts']['compile']['do_metadata']:
+    if not p['compile']['do_metadata']:
         mm3.information("Loading image parameters dictionary.")
 
         with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'r') as tiff_metadata:
@@ -132,7 +136,7 @@ if __name__ == "__main__":
             mm3.warning('No TIFF files found')
 
         # initialize pool for analyzing image metadata
-        pool = Pool(nproc)
+        pool = Pool(p['num_analyzers'])
 
         # loop over images and get information
         for fn in found_files:
@@ -170,7 +174,7 @@ if __name__ == "__main__":
         mm3.information('Saved metadata from analyzed images.')
 
     ### Make table for jd time to FOV and time point
-    if not p['scripts']['compile']['do_time_table']:
+    if not p['compile']['do_time_table']:
         mm3.information('Skipping time table creation.')
 
     else:
@@ -186,13 +190,13 @@ if __name__ == "__main__":
         mm3.information('Saved time table.')
 
     ### Make consensus channel masks and get other shared metadata #################################
-    if not p['scripts']['compile']['do_channel_masks'] and p['scripts']['compile']['do_slicing']:
+    if not p['compile']['do_channel_masks'] and p['compile']['do_slicing']:
         mm3.information("Loading channel masks dictionary.")
 
         with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
             channel_masks = pickle.load(cmask_file)
 
-    elif p['scripts']['compile']['do_channel_masks']:
+    elif p['compile']['do_channel_masks']:
         mm3.information("Calculating channel masks.")
 
         # only calculate channels masks from images before t_end in case it is specified
@@ -212,7 +216,7 @@ if __name__ == "__main__":
         mm3.information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
-    if p['scripts']['compile']['do_slicing']:
+    if p['compile']['do_slicing']:
 
         mm3.information("Saving channel slices.")
 

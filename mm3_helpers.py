@@ -72,7 +72,7 @@ with warnings.catch_warnings():
 
 # print a warning
 def warning(*objs):
-    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
+    print(time.strftime("%H:%M:%S WARNING:", time.localtime()), *objs, file=sys.stderr)
 
 # print information
 def information(*objs):
@@ -1350,7 +1350,7 @@ def subtract_fluor(image_pair):
     '''
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
-    
+
     # check frame size of cropped channel and background, always keep crop channel size the same
     crop_size = np.shape(cropped_channel)[:2]
     empty_size = np.shape(empty_channel)[:2]
@@ -1358,7 +1358,7 @@ def subtract_fluor(image_pair):
         if crop_size[0] > empty_size[0] or crop_size[1] > empty_size[1]:
             pad_row_length = max(crop_size[0]  - empty_size[0], 0) # prevent negatives
             pad_column_length = max(crop_size[1]  - empty_size[1], 0)
-            empty_channel = np.pad(empty_channel, 
+            empty_channel = np.pad(empty_channel,
                 [[np.int(.5*pad_row_length), pad_row_length-np.int(.5*pad_row_length)],
                 [np.int(.5*pad_column_length),  pad_column_length-np.int(.5*pad_column_length)],
                 [0,0]], 'edge')
@@ -2338,7 +2338,7 @@ def foci_analysis(fov_id, peak_id, Cells):
     return
 
 def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
-    '''find foci in a cell, single instance to be called by the foci_analysis_pool for parallel processing. 
+    '''find foci in a cell, single instance to be called by the foci_analysis_pool for parallel processing.
     '''
     disp_l = []
     disp_w = []
@@ -2374,7 +2374,7 @@ def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
     cell.disp_w = disp_w
     cell.foci_h = foci_h
 # actual worker function for foci detection
-    
+
 def foci_analysis_pool(fov_id, peak_id, Cells):
     '''Find foci in cells using a fluorescent image channel.
     This function works on a single peak and all the cells therein.'''

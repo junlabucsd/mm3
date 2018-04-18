@@ -74,8 +74,8 @@ if __name__ == "__main__":
 
     # load specs file
     try:
-        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-            specs = pickle.load(specs_file)
+        with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
     except:
         mm3.warning('Could not load specs file.')
         raise ValueError
