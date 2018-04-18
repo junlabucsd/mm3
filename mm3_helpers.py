@@ -1350,6 +1350,22 @@ def subtract_fluor(image_pair):
     '''
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
+    
+    # check frame size of cropped channel and background, always keep crop channel size the same
+    crop_size = np.shape(cropped_channel)[:2]
+    empty_size = np.shape(empty_channel)[:2]
+    if crop_size != empty_size:
+        if crop_size[0] > empty_size[0] or crop_size[1] > empty_size[1]:
+            pad_row_length = max(crop_size[0]  - empty_size[0], 0) # prevent negatives
+            pad_column_length = max(crop_size[1]  - empty_size[1], 0)
+            empty_channel = np.pad(empty_channel, 
+                [[np.int(.5*pad_row_length), pad_row_length-np.int(.5*pad_row_length)],
+                [np.int(.5*pad_column_length),  pad_column_length-np.int(.5*pad_column_length)],
+                [0,0]], 'edge')
+            print('size adjusted 1')
+        empty_size = np.shape(empty_channel)[:2]
+        if crop_size[0] < empty_size[0] or crop_size[1] < empty_size[1]:
+            empty_channel = empty_channel[:crop_size[0], :crop_size[1],]
 
     ### Compute the difference between the empty and channel phase contrast images
     # subtract cropped cell image from empty channel.
@@ -1503,7 +1519,7 @@ def segment_image(image):
         return np.zeros_like(image)
 
     # the binary image for the watershed, which uses the unmodified OTSU threshold
-    threshholded_watershed = image > thresh
+    threshholded_watershed = threshholded
     threshholded_watershed = segmentation.clear_border(threshholded_watershed)
 
     # label using the random walker (diffusion watershed) algorithm
@@ -2320,6 +2336,72 @@ def foci_analysis(fov_id, peak_id, Cells):
         # sys.exit()
 
     return
+
+def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
+    '''find foci in a cell, single instance to be called by the foci_analysis_pool for parallel processing. 
+    '''
+    disp_l = []
+    disp_w = []
+    foci_h = []
+    # foci_stack = np.zeros((np.size(cell.times),
+    #                        image_data_seg[0,:,:].shape[0], image_data_seg[0,:,:].shape[1]))
+
+    # Go through each time point of this cell
+    for t in cell.times:
+        # retrieve this timepoint and images.
+        image_data_temp = image_data_FL[t-t0,:,:]
+        image_data_temp_seg = image_data_seg[t-t0,:,:]
+
+        # find foci as long as there is information in the fluorescent image
+        if np.sum(image_data_temp) != 0:
+            disp_l_tmp, disp_w_tmp, foci_h_tmp = foci_lap(image_data_temp_seg,
+                                                          image_data_temp, cell, t)
+
+            disp_l.append(disp_l_tmp)
+            disp_w.append(disp_w_tmp)
+            foci_h.append(foci_h_tmp)
+
+        # if there is no information, append an empty list.
+        # Should this be NaN?
+        else:
+            disp_l.append([])
+            disp_w.append([])
+            foci_h.append([])
+            # foci_stack[i] = image_data_temp_seg
+
+    # add information to the cell (will replace old data)
+    cell.disp_l = disp_l
+    cell.disp_w = disp_w
+    cell.foci_h = foci_h
+# actual worker function for foci detection
+    
+def foci_analysis_pool(fov_id, peak_id, Cells):
+    '''Find foci in cells using a fluorescent image channel.
+    This function works on a single peak and all the cells therein.'''
+
+    # make directory for foci debug
+    # foci_dir = os.path.join(params['ana_dir'], 'overlay/')
+    # if not os.path.exists(foci_dir):
+    #     os.makedirs(foci_dir)
+
+    # Import segmented and fluorescenct images
+    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_FL = load_stack(fov_id, peak_id,
+                               color='sub_{}'.format(params['foci_plane']))
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+    tN = times_all[-1] # last time index
+
+    # call foci_cell for each cell object
+    pool = Pool(processes=params['num_analyzers'])
+    [pool.apply_async(foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL)) for cell_id, cell in Cells.items()]
+    pool.close()
+    pool.join()
 
 # actual worker function for foci detection
 def foci_lap(img, img_foci, cell, t):
