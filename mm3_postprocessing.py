@@ -27,7 +27,7 @@ def mad(data,axis=None):
     """
     return np.median(np.absolute(data-np.median(data,axis)),axis)
 
-def get_cutoffs(X, method='mean', plo=1, phi=1):
+def get_cutoffs(X, method='mean', plo=1, phi=1): # to delete
     if len(X.shape) > 1:
         raise ValueError ("X must be a vector")
 
@@ -121,7 +121,7 @@ def select_lineages(lineages, min_gen):
             selection.append(lin)
     return selection
 
-def filter_cells(cells, par=None):
+def filter_cells_old(cells, par=None): #to delete
     # if no parameters passed, then return identical dictionary
     if (type(par) != dict) or (len(par) == 0):
         return cells
@@ -162,6 +162,53 @@ def filter_cells(cells, par=None):
         idx = idx & ~(X < xlo) & ~( X > xhi)
         par[obs]['xlo']=np.around(xlo,decimals=4)
         par[obs]['xhi']=np.around(xhi,decimals=4)
+        par[obs]['median']=np.median(X)
+        par[obs]['iqr']=iqr(X)
+        par[obs]['std']=np.std(X)
+        #print "{}: xlo = {:.4g}    xhi = {:.4g}\n".format(obs,xlo,xhi)
+
+    # return new dict
+    return {key: cells[key] for key in np.array(cells.keys())[idx]}
+
+def filter_cells(cells, par=None):
+    # if no parameters passed, then return identical dictionary
+    if (type(par) != dict) or (len(par) == 0):
+        return cells
+
+    # find list of admissible attributes
+    keyref = cells.keys()[0]
+    cellref = cells[keyref]
+    cellattributes = vars(cellref).keys()
+    obs_admissible = []
+   # print "Admissible keys:"
+   # for x in cellattributes:
+   #     typ = type(x)
+   #     if (typ == float) or (typ == int) or (typ == list):
+   #         print "{:<4s}{:<s}".format("",key)
+
+    # start by selecting all cells
+    idx = [True for key in cells.keys()]
+    for obs in par:
+        #print "Observable \'{}\'".format(obs)
+        if not obs in par:
+            print "Key \'{}\' not in admissible list of keys:".format(obs)
+            for y in obs_admissible:
+                print "{:<4s}{:<s}".format("",y)
+            continue
+
+        # make scalar array that will undergo selection
+        try:
+            ind = np.int_(par[obs]['ind'])
+            X=[vars(cells[key])[obs][ind] for key in cells.keys()]
+        except (TypeError, KeyError, ValueError):
+            ind =  None
+            X=[vars(cells[key])[obs] for key in cells.keys()]
+
+        # make filtering
+        X = np.array(X,dtype=np.float)
+        xlo = par[obs]['xlo']
+        xhi = par[obs]['xhi']
+        idx = idx & ~(X < xlo) & ~( X > xhi)
         par[obs]['median']=np.median(X)
         par[obs]['iqr']=iqr(X)
         par[obs]['std']=np.std(X)
