@@ -52,7 +52,7 @@ if __name__ == "__main__":
     do_slicing = True
     user_spec_fovs = []
     t_end = None # only analyze images up until this t point. Put in None otherwise
-    nproc = 6 # number of threads for multiprocessing
+    nproc = 3 # number of threads for multiprocessing
 
     # get switches and parameters
     try:

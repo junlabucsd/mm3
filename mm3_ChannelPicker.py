@@ -330,13 +330,13 @@ if __name__ == "__main__":
     # hardcoded parameters
     do_crosscorrs = True
     interactive = True
-    nproc = 6
+    nproc = 3
     specfile = None
 
     # get switches and parameters
     try:
         unixoptions="f:o:j:s:ci"
-        gnuoptions=["paramfile=","fov=","nproc=","specfile=","saved-cross-correlations","interactive"]
+        gnuoptions=["paramfile=","fov=","nproc=","specfile=","saved-cross-correlations","noninteractive"]
         opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
         # switches which may be overwritten
         user_spec_fovs = []
@@ -366,8 +366,8 @@ if __name__ == "__main__":
                     raise ValueError
             except ValueError:
                 mm3.warning("\"{}\" is not a regular file or does not exist".format(specfile))
-        if opt in ['-i','--interactive']:
-            interactive=True
+        if opt in ['-i','--noninteractive']:
+            interactive=False
         if opt in ['-c', '--saved-cross-correlations']:
             do_crosscorrs=False
 
@@ -503,6 +503,7 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
     else:
+        pass
         outputdir = os.path.join(ana_dir, "fovs")
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)

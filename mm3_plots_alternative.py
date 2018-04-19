@@ -11,6 +11,7 @@ from scipy.stats.stats import spearmanr
 from scipy.stats import iqr
 from scipy import signal
 from scipy.optimize import least_squares
+from copy import copy
 
 import mm3_helpers as mm3
 
@@ -1227,13 +1228,13 @@ def get_pearsonr_piecewise_vectors(lag, vectors):
         for j in range(Ni-lag):
             pairs.append([v[j],v[j+lag]])
 
-    pairs = np.array(pairs, dtype=np.float_)
+    pairs = np.array(pairs, dtype=np.float)
     r, pvalue = pearsonr(pairs[:,0], pairs[:,1])
     return r
 
-def plot_lineages_acf(lineages, cells, fileoutspl, fovs=None, attrdict=None, color='black', lw=0.5, ms=2, minnorm=100):
+def plot_lineages_acf(lineages, cells, fileout, attrY, fovs=None, attrdict=None, color='black', lw=0.5, ms=2, xticks_max=None, yticks_max=None, xformat='{x:.2g}', yformat='{x:.2g}'):
     """
-    plot autocorrelation curves (overlaid) for different cell attributes.
+    plot autocorrelation curves (overlaid) for different cell attribute Y using X as the X-values.
     """
     # preliminary check
     if (attrdict is None) or (type(attrdict) != dict) or (len(attrdict) == 0):
@@ -1254,129 +1255,146 @@ def plot_lineages_acf(lineages, cells, fileoutspl, fovs=None, attrdict=None, col
         peaks = fovs[fov]
         subselection = lineage_byfov_bypeak(lineages,cells, fov=fov, peaks=peaks)
         nlin = len(selection)
-        selection.append(subselection)
+        for sel in subselection:
+            selection.append(np.array(sel))
 
-    selection = np.concatenate(selection)
-
-    # some information
-    attributes = np.array(attrdict.keys())
-    nattr = len(attributes)
-    ncol = nattr
-    tau_mean = np.mean([cell.tau for cell in cells.values()])
+    selection = np.array(selection)
 
     # figure
     r = 4./3.
     axdim=3
-    figsize=nattr*r*axdim, axdim
+    figsize=r*axdim, axdim
     fig = plt.figure(num='none', facecolor='w', figsize=figsize)
-    gs = gridspec.GridSpec(1,nattr)
+    ax = fig.gca()
 
-    # plot per attrbute
-    for i, attr_y in enumerate(attributes): # row is y-axis
-        # get label data
-        try:
-            axis_labely = attrdict[attr_y]['label']
-        except KeyError:
-            axis_labely = attr_y
+    # determine if attrY is a scalar or a list
+    islist=False
+    cellref = cells[selection[0][0]]
+    y = getattr(cellref, attrY)
+    if (isinstance(y,list)) or (isinstance(y,np.ndarray)):
+        islist=True
 
-        # add plot
-        ax = fig.add_subplot(gs[0,i])
+    # get label data
+    if (islist):
+        axis_labelx = "time [min]"
+        tau_mean = np.mean([cell.tau for cell in cells.values()])
+    else:
+        axis_labelx = "generation"
+        tau_mean = 1.
+    try:
+        axis_labely = attrdict[attrY]['label']
+    except KeyError:
+        axis_labely = attrY
 
-        Ytot=[]
-        Xtot=[]
-        for lineage in selection:
-            # build data
-            XX = []
-            YY = []
-            for key in lineage:
-                cell = cells[key]
-                try:
-                    x = np.array(getattr(cell,'times_min'), dtype=np.float_)
-                    y = np.array(getattr(cell,attr_y), dtype=np.float_)
-                    idx = np.isfinite(x)
-                    if np.isfinite(x).all() and np.isfinite(y).all():
-                        XX.append(x)
-                        YY.append(y)
-                except ValueError:
-                    continue
-            X = np.concatenate(XX)
-            Y = np.concatenate(YY)
-
-            # rescale
+    # fill-in lineages vectors
+    Ytot=[]
+    Xtot=[]
+    for lineage in selection:
+        # build data
+        XX = []
+        YY = []
+        for ind,key in enumerate(lineage):
+            cell = cells[key]
             try:
-                scale = attrdict[attr_y]['scale']
-                Y = Y *scale
-            except KeyError:
-                pass
+                # get whether it is both float or array
+                if islist:
+                    x = np.array(getattr(cell,'times_min'), dtype=np.float)
+                    y = np.array(getattr(cell,attrY), dtype=np.float)
+                else:
+                    x = np.array([ind])
+                    y = np.array([getattr(cell,attrY)], dtype=np.float)
+                if (x.shape != y.shape):
+                    print "Dimensions of attributes don't match in linages_acf!"
+                    return
+                idx = np.isfinite(x) & np.isfinite(y)
+                x=x[idx]
+                y=y[idx]
+                if np.isfinite(x).all() and np.isfinite(y).all():
+                    XX.append(x)
+                    YY.append(y)
+            except ValueError:
+                continue
+        X = np.concatenate(XX)
+        Y = np.concatenate(YY)
+        if (len(X) == 0) or (len(Y) ==0):
+            print "No data found for attrX: {} and attrY: {}".format(attrX,attrY)
+            return
 
-            # shift time origin
-            x0 = X[0]
-            X-=x0 # start at lag = 0
-            Xtot.append(X)
-            Ytot.append(Y)
-
-        # computing the acf
-        kmax = np.argmax([len(x) for x in Xtot])
-        X = np.array(Xtot[kmax])
-        T=len(X)
-        X=X[:T/2]
-        T=len(X)
-        lags = np.arange(T)
-        Z = [get_pearsonr_piecewise_vectors(lag, Ytot) for lag in lags]
-        Z = np.array(Z, dtype=np.float_)
-        ax.plot(X,Z,'o-', color=color, ms=ms, lw=lw)
-        #ax.plot(X,np.sqrt(VAR[idx]),'-', color=color, ms=ms, lw=3*lw)
-        ax.axhline(y=0, color='k', linestyle='-', lw=lw)
-        ax.axvline(x=tau_mean, color='k', linestyle='--', lw=lw, label='$\\tau={:.0f}$'.format(tau_mean))
-        ktau = np.argmin(np.abs(X-tau_mean))
-        ax.axhline(y=Z[ktau], color='k', linestyle='-.', lw=lw, label='$r(\\tau)={:.2f}$'.format(Z[ktau]))
-
-
-        # fitting
-        #idx = (np.isfinite(Z)) & (X>0)
-        idx = (np.isfinite(Z)) & (Z > 0.)
-        Xfit = X[idx]
-        Zfit = Z[idx]
-
-        #"""
-        ## exponential
-        #ax.plot(Xfit,Zfit,'-g', lw=3*lw)
-        a = -1. / (np.sum(Zfit) * np.diff(Xfit)[0])
-        par0 = [a]
+        # rescale
         try:
-            par = fit_xy(Xfit,Zfit, par0, funcfit_f=exp_f)
-        except:
-            par = par0
-        xx=np.linspace(Xfit[0],Xfit[-1],1000)
-        zz = np.array([exp_f(par,x) for x in xx])
-        a = par[0]
-        #"""
-        """
-        ## line
-        Yfit = np.log(Zfit)
-        #ax.plot(Xfit,Zfit,'-g', lw=3*lw)
-        a,b = np.polyfit(Xfit, Yfit, deg=1)
-        xx=np.linspace(Xfit[0],Xfit[-1],1000)
-        yy=a*xx+b
-        zz=np.exp(yy)
-        #"""
+            scale = attrdict[attrY]['scale']
+            Y = Y *scale
+        except KeyError:
+            pass
 
-        ax.plot(xx,zz,'--r', lw=3*lw, label='$\\tau={:.0f}$'.format(-np.log(2.)/a))
+        # shift time origin to start of lineage
+        x0 = X[0]
+        X-=x0 # start at lag = 0
+        Xtot.append(X)
+        Ytot.append(Y)
+    # end loop on lineages
 
-        # adjust plot parameters
-        ax.tick_params(axis='x', which='both', bottom='on', top='off', labelsize='xx-small')
-        ax.tick_params(axis='y', which='both', left='on', right='off', labelsize='xx-small')
-        ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.0f}'))
-        ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
-        ax.spines['right'].set_visible(False)
-        ax.spines['top'].set_visible(False)
-        ax.set_xlabel('times [min]', fontsize='x-small')
-        ax.set_ylabel(axis_labely, fontsize='x-small')
-        ax.legend(loc='best', fontsize='x-small')
+    # computing the acf
+    kmax = np.argmax([len(x) for x in Xtot])
+    X = np.array(Xtot[kmax])
+    T=len(X)
+    X=X[:T/2]
+    T=len(X)
+    lags = np.arange(T)
+    Z = [get_pearsonr_piecewise_vectors(lag, Ytot) for lag in lags]
+    Z = np.array(Z, dtype=np.float_)
+    ax.plot(X,Z,'o-', color=color, ms=ms, lw=lw)
+    #ax.plot(X,np.sqrt(VAR[idx]),'-', color=color, ms=ms, lw=3*lw)
+    ax.axhline(y=0, color='k', linestyle='-', lw=lw)
+    ax.axvline(x=tau_mean, color='k', linestyle='--', lw=lw, label='$\\tau={:.0f}$'.format(tau_mean))
+    ktau = np.argmin(np.abs(X-tau_mean))
+    ax.axhline(y=Z[ktau], color='k', linestyle='-.', lw=lw, label='$r(\\tau)={:.2f}$'.format(Z[ktau]))
+
+    # fitting
+    #idx = (np.isfinite(Z)) & (X>0)
+    idx = (np.isfinite(Z)) & (Z > 0.)
+    Xfit = X[idx]
+    Zfit = Z[idx]
+
+    """
+    ## exponential
+    #ax.plot(Xfit,Zfit,'-g', lw=3*lw)
+    a = -1. / (np.sum(Zfit) * np.diff(Xfit)[0])
+    par0 = [a]
+    try:
+        par = fit_xy(Xfit,Zfit, par0, funcfit_f=exp_f)
+    except:
+        par = par0
+    xx=np.linspace(Xfit[0],Xfit[-1],1000)
+    zz = np.array([exp_f(par,x) for x in xx])
+    a = par[0]
+    #"""
+    """
+    ## line
+    Yfit = np.log(Zfit)
+    #ax.plot(Xfit,Zfit,'-g', lw=3*lw)
+    a,b = np.polyfit(Xfit, Yfit, deg=1)
+    xx=np.linspace(Xfit[0],Xfit[-1],1000)
+    yy=a*xx+b
+    zz=np.exp(yy)
+    #"""
+
+    #ax.plot(xx,zz,'--r', lw=3*lw, label='$\\tau={:.0f}$'.format(-np.log(2.)/a))
+
+    # adjust plot parameters
+    ax.tick_params(axis='x', which='both', bottom='on', top='off', labelsize='xx-small')
+    ax.tick_params(axis='y', which='both', left='on', right='off', labelsize='xx-small')
+    ax.xaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.0f}'))
+    ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter('{x:.2g}'))
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.set_xlabel(axis_labelx, fontsize='x-small')
+    ax.set_ylabel(axis_labely, fontsize='x-small')
+    ax.legend(loc='best', fontsize='x-small')
 
     rect = [0.,0.,1.,0.92]
-    gs.tight_layout(fig,rect=rect, w_pad=0.1, h_pad=0.1)
-    fileout = "{}.pdf".format(fileoutspl)
+    fig.tight_layout(rect=rect, w_pad=0.1, h_pad=0.1)
+    #fileout = "{}.pdf".format(fileoutspl)
     print "{:<20s}{:<s}".format('fileout',fileout)
     fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
     plt.close('all')
@@ -1424,7 +1442,7 @@ def plot_distributions(cells, attrdict, fileout, color='darkblue', nbins_max=8):
         hist,edges = histogram(X)
         left = edges[:-1]
         right = edges[1:]
-        idx = (hist != 0.)
+        idx = (hist > 0.)
 
         # add plot
         ax = fig.add_subplot(gs[0,col])
@@ -1432,7 +1450,7 @@ def plot_distributions(cells, attrdict, fileout, color='darkblue', nbins_max=8):
         ax.plot(left[idx], hist[idx], '-', color=color, lw=1)
 
         # annotations
-        text = "Mean = {:.4g}\nCV = {:<.0f}%".format(mean,cv*100.)
+        text = "Mean = {:.2g}    Median = {:.2g}\nCV = {:<.0f}%    IQR = {:.2g}".format(mean,np.median(X),cv*100.,iqr(X))
         ax.set_title(text, fontsize='small')
         #ax.annotate(text,xy=(0.05,0.98),xycoords='axes fraction',ha='left',va='top',color=thecolor, fontsize=fontsize)
         xticks = [mean-std,mean,mean+std]
@@ -1457,7 +1475,7 @@ def plot_distributions(cells, attrdict, fileout, color='darkblue', nbins_max=8):
 
     return
 
-def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2='black', nbins_max=8, method='pearsonr', scatter_max_pts=1000, ms=2, bincount_min=10):
+def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2='black', nbins_max=8, r_method='pearsonr', scatter_max_pts=1000, ms=2, bincount_min=10, bin_method='median'):
     if (type(attrdict) != dict) or (len(attrdict) == 0):
         print "List of observables empty!"
         return
@@ -1532,10 +1550,10 @@ def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2=
                 idx = np.random.permutation(np.arange(len(X)))[:scatter_max_pts]
                 ax.plot(X[idx],Y[idx],'.', ms=ms,color=color1,alpha=0.8)
 
-                if (method == 'pearsonr'):
+                if (r_method == 'pearsonr'):
                     us = 'PE'
                     corr,pvalue = pearsonr(X,Y)
-                elif (method == 'spearmanr'):
+                elif (r_method == 'spearmanr'):
                     us = 'SP'
                     corr,pvalue = spearmanr(X,Y)
                 else:
@@ -1544,7 +1562,14 @@ def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2=
 
                 ## make linear fit to binned data
                 ### define the binned data set
-                res = make_binning(X, Y, bincount_min)
+                if (bin_method == 'median'):
+                    method=np.median
+            #        emethod=mad
+                    emethod=iqr
+                else:
+                    method=np.mean
+                    emethod=np.std
+                res=make_binning(X,Y,bincount_min,method=method,emethod=emethod)
                 x_binned = res['x']
                 y_binned = res['y']
                 ax.plot(x_binned,y_binned, '-o', color=color2, ms=3*ms, lw=1, alpha=1.0)
@@ -1579,7 +1604,7 @@ def plot_cross_correlations(cells, attrdict, fileout, color1='darkblue', color2=
 
     return
 
-def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='black', nbins_max=8, method='pearsonr', scatter_max_pts=1000, ms=2, bincount_min=10):
+def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='black', nbins_max=8, r_method='pearsonr', scatter_max_pts=1000, ms=2, bincount_min=10, bin_method='median'):
     if (type(attrdict) != dict) or (len(attrdict) == 0):
         print "List of observables empty!"
         return
@@ -1631,10 +1656,10 @@ def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='b
         idx = np.random.permutation(np.arange(len(X)))[:scatter_max_pts]
         ax.plot(X[idx],Y[idx],'.', ms=ms,color=color1,alpha=0.8)
 
-        if (method == 'pearsonr'):
+        if (r_method == 'pearsonr'):
             us = 'PE'
             corr,pvalue = pearsonr(X,Y)
-        elif (method == 'spearmanr'):
+        elif (r_method == 'spearmanr'):
             us = 'SP'
             corr,pvalue = spearmanr(X,Y)
         else:
@@ -1643,7 +1668,14 @@ def plot_autocorrelations(cells, attrdict, fileout, color1='darkblue', color2='b
 
         ## make linear fit to binned data
         ### define the binned data set
-        res = make_binning(X, Y, bincount_min)
+        if (bin_method == 'median'):
+            method=np.median
+#        emethod=mad
+            emethod=iqr
+        else:
+            method=np.mean
+            emethod=np.std
+        res=make_binning(X,Y,bincount_min,method=method,emethod=emethod)
         x_binned = res['x']
         y_binned = res['y']
         ax.plot(x_binned,y_binned, '-o', color=color2, ms=3*ms, lw=1, alpha=1.0)
@@ -1723,7 +1755,8 @@ def plot_scatter_attrXY(cells, attrX, attrY, fileout, attrdict, color='darkblue'
     Y = np.concatenate(YY)
     if (bin_method == 'median'):
         method=np.median
-        emethod=mad
+#        emethod=mad
+        emethod=iqr
     else:
         method=np.mean
         emethod=np.std
@@ -1927,4 +1960,12 @@ if __name__ == "__main__":
 
             if 'fovs' in params['plot_lineages_acf']:
                 fovs = params['plot_lineages_acf']['fovs']
-                plot_lineages_acf(lineages,cells,fileoutspl,attrdict=params['plot_lineages_acf']['attributes'],fovs=fovs, **params['plot_lineages_acf']['args'])
+                try:
+                    attrdict = params['plot_lineages_acf']['attributes']
+                    filedict = params['plot_lineages_acf']['plots']
+                except KeyError:
+                    sys.exit("Missing options for lineages acf plots!")
+
+                for filename in filedict.keys():
+                    fileout = os.path.join(lindir,filename)
+                    plot_lineages_acf(lineages=lineages, cells=cells, fileout=fileout, attrdict=attrdict, fovs=copy(fovs), **params['plot_lineages_acf']['plots'][filename])
