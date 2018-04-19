@@ -6,6 +6,7 @@ import numpy as np
 import time
 import shutil
 import scipy.io as spio
+from scipy.stats import iqr
 
 import mm3_helpers
 
@@ -37,7 +38,8 @@ def get_cutoffs(X, method='mean', plo=1, phi=1):
         xhi = mu + phi*delta
     elif (method == 'median'):
         mu = np.median(X)
-        delta = mad(X)
+        #delta = mad(X)
+        delta = iqr(X)
         xlo = mu - plo*delta
         xhi = mu + phi*delta
     elif (method == 'median-min'):
@@ -154,12 +156,15 @@ def filter_cells(cells, par=None):
             X=[vars(cells[key])[obs] for key in cells.keys()]
 
         # make filtering
-        X = np.array(X,dtype=np.float_)
+        X = np.array(X,dtype=np.float)
         #xlo, xhi = get_cutoffs(X, method=par[obs]['method'], p=par[obs]['pcut'])
         xlo, xhi = get_cutoffs(X, **par[obs])
         idx = idx & ~(X < xlo) & ~( X > xhi)
         par[obs]['xlo']=np.around(xlo,decimals=4)
         par[obs]['xhi']=np.around(xhi,decimals=4)
+        par[obs]['median']=np.median(X)
+        par[obs]['iqr']=iqr(X)
+        par[obs]['std']=np.std(X)
         #print "{}: xlo = {:.4g}    xhi = {:.4g}\n".format(obs,xlo,xhi)
 
     # return new dict
@@ -233,7 +238,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=file, required=True, help='Yaml file containing parameters.')
     parser.add_argument('--trunc',  nargs=2, metavar='t', type=int, help='Make a truncated pkl file for debugging purpose.')
     parser.add_argument('--nofilters',  action='store_true', help='Disable the filters.')
-    parser.add_argument('--nocomputations',  action='store_true', help='Disable the computation of extra-quantities (some cells attributes may be overwritten).')
+    parser.add_argument('--nocomputations',  action='store_true', help='Disable the computation of extra-quantities.')
     parser.add_argument('-c', '--cellcycledir',  metavar='picked', type=str, help='Directory containing all Matlab files (lineages) with cell cycle information.')
     parser.add_argument('--complete_cc',  action='store_true', help='If passed, remove cells not mapped to cell cycle through a initiation --> division correspondence.')
     namespace = parser.parse_args(sys.argv[1:])
@@ -456,6 +461,15 @@ if __name__ == "__main__":
                     cell.fl_pervolume = np.array(cell.fl_tots, dtype=np.float_) / cell.volumes
                 except AttributeError:
                     pass
+
+            # compute mid-time
+            for key in data:
+                cell = data[key]
+                try:
+                    cell.tmid = 0.5*(cell.birth_time + cell.division_time)
+                except AttributeError:
+                    pass
+
 
 ################################################
 # write dictionary
