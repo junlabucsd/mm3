@@ -2795,7 +2795,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     for Cell in Cells.values():
 
         # initialize ring data arrays for cell
-        Cell.fl_profiles = []
+        fl_profiles = []
 
         # loop through each time point for this cell
         for n, t in enumerate(Cell.times):
@@ -2827,6 +2827,9 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
             profile = profile_line(image_masked, p1, p2, linewidth=width,
                                    order=1, mode='constant', cval=0)
 
-            Cell.fl_profiles.append(profile) # append whole profile
+            fl_profiles.append(profile)
+
+        # append whole profile, using plane name
+        setattr(Cell, 'fl_profiles_'+profile_plane, fl_profiles)
 
     return

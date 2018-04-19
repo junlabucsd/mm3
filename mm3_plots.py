@@ -20,7 +20,34 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.gridspec as gridspec
 import seaborn as sns
-sns.set(style="ticks", color_codes=True, font_scale=1.25)
+sns.set(style='ticks', color_codes=True)
+sns.set_palette('deep')
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams['font.family'] = 'Myriad Pro'
+
+SMALL_SIZE = 8
+MEDIUM_SIZE = 10
+BIGGER_SIZE = 14
+
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+# set axes and tick width
+plt.rc('axes', linewidth=0.5)
+mpl.rcParams['xtick.major.size'] = 2
+mpl.rcParams['xtick.major.width'] = 0.5
+mpl.rcParams['xtick.minor.size'] = 2
+mpl.rcParams['xtick.minor.width'] = 0.5
+mpl.rcParams['ytick.major.size'] = 2
+mpl.rcParams['ytick.major.width'] = 0.5
+mpl.rcParams['ytick.minor.size'] = 2
+mpl.rcParams['ytick.minor.width'] = 0.5
 
 import mm3_helpers as mm3
 
@@ -467,8 +494,6 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     Plots cell parameters over time using a hex scatter plot and a moving average
     '''
 
-    sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.00)
-
     # lists for plotting and formatting
     columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
     titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
@@ -477,12 +502,12 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
     # create figure, going to apply graphs to each axis sequentially
     fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[12,5*len(columns)/2.5], squeeze=False)
+                             figsize=[8,8], squeeze=False)
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 1 # minimum bin size to display
-    bingrid = (15, 5) # how many bins to have in the x and y directions
+    binmin = 5 # minimum bin size to display
+    bingrid = (20, 10) # how many bins to have in the x and y directions
     moving_window = 5 # window to calculate moving stat
 
     # bining parameters for each data type
@@ -518,21 +543,14 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
         ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
 
         # formatting
-        ax[i].set_title(titles[i], size=20)
-        ax[i].set_ylabel(ylabels[i], size=18)
+        ax[i].set_title(titles[i])
+        ax[i].set_ylabel(ylabels[i])
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
-    ax[5].legend(['%s minute binned average' % moving_window], fontsize=14, loc='lower right')
-    ax[4].set_xlabel('%s [frame]' % time_mark, size=18)
-    ax[5].set_xlabel('%s [frame]' % time_mark, size=18)
-
-    # Make title, need a little extra space
-    # plt.subplots_adjust(top=0.925, hspace=0.25, bottom=0.5)
-    plt.tight_layout
-    fig.suptitle('Cell Parameters Over Time', size=20)
-
-    # sns.despine()
+    ax[5].legend(['%s minute binned average' % moving_window], loc='lower right')
+    ax[4].set_xlabel('%s [frame]' % time_mark)
+    ax[5].set_xlabel('%s [frame]' % time_mark)
 
     return fig, ax
 

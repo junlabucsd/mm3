@@ -57,15 +57,15 @@ clc;
 % close all;
 
 %-------------start pre-prosessing-----------
-handles.dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180314_ecoli_29/analysis/';
-handles.cell_data = load([handles.dir_name 'cell_data/continuous_lineages_foci.mat']);
-handles.px_to_mu = 0.11;
-handles.IW_thr = 2500; % threshold of intensity weighting
+handles.dir_name = '../../analysis/';
+handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
+handles.px_to_mu = 0.065;
+handles.IW_thr = 4074; % threshold of intensity weighting
 handles.n_oc = 2; %number of overlapping cell cycle (default value)
 
-handles.xlim_max = 100;
-handles.ylim_max = 6;
-handles.time_int = 5;
+handles.xlim_max = 320;
+handles.ylim_max = 7;
+handles.time_int = 3;
 %%%
 
 if exist([handles.dir_name 'picked/']) == 0
@@ -130,6 +130,7 @@ handles.initiation_mass = [];
 handles.initiation_mass_n = [];
 handles.termination_mass = [];
 
+handles.cell_name_m_tmp = [];
 handles.cell_name_n_tmp = [];
 handles.cell_name_tmp = [];
 
@@ -188,7 +189,7 @@ guidata(hObject, handles);
 color_idx =  mod(handles.clicks,4);
 
 for i = 1:size(handles.foci_list, 1)
-    d_1(i) = ((a(1, 1)-handles.foci_list(i, 1))^2 + ((a(1, 2)-handles.foci_list(i,2))*10)^2)^0.5;
+    d_1(i) = ((a(1, 1)-handles.foci_list(i, 1))^2 + ((a(1, 2)-handles.foci_list(i,2))*12)^2)^0.5;
 end
 [R_1, j_1] = min(d_1);
 
@@ -198,6 +199,14 @@ if color_idx == 1
     handles.initiation_time = handles.foci_list(j_1, 1);
     handles.initiation_pos = handles.foci_list(j_1, 2);
     handles.initiation_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.initiation_time)) / (2^(handles.n_oc_curr-1)); %note that number of origins at initiation is updated to the current OC number;
+    
+    %saving the cell name in the mother generation
+    for i = 1:size(handles.division_list, 1)
+        if  handles.initiation_time >= handles.birth_list(i, 1) && handles.initiation_time < handles.division_list(i, 1) %if the initiation is right at division, then regard it as happening at the birth of new cell
+            cell_idx_m = i;
+        end
+    end
+    handles.cell_name_m_tmp = handles.cell_names{cell_idx_m,1};
     
     handles.initiation_time_n = handles.initiation_time;
     handles.initiation_mass_n = handles.initiation_mass;
@@ -254,8 +263,9 @@ elseif color_idx == 0
     cell_idx = find(handles.division_list == handles.division_time);
     
     handles.cell_name_tmp = handles.cell_names{cell_idx,1};
-
+    
     handles.cell_list.(handles.cell_name_tmp).birth_time_m = handles.birth_time_m;
+    handles.cell_list.(handles.cell_name_tmp).cell_name_m = handles.cell_name_m_tmp; %saving the cell name in the mother generation
     
     %saving as the mother initiation time & initiaion mass in the current generation
     handles.cell_list.(handles.cell_name_tmp).initiation_time = handles.initiation_time;
@@ -424,6 +434,7 @@ elseif color_idx == 0
     end
     
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'birth_time_m');
+    handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'cell_name_m');
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'initiation_time');
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'initiation_mass');
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'n_oc');

@@ -166,8 +166,8 @@ if __name__ == "__main__":
     show_time_stamp = True
 
     # label properties
-    show_label = False
-    label1_text = 'Label 1'
+    show_label = True
+    label1_text = 'SJ1724 MOPS glucose'
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
     shift_time = None
     label2_text = 'Label 2'
@@ -180,21 +180,21 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = False
+    show_green = True
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
+    show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
-    auto_phase_levels = True # set to true to find automatically
+    auto_phase_levels = False # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 500, 5000
-    imin['green'], imax['green'] = 150, 350
-    imin['red'], imax['red'] = 120, 140
+    imin['phase'], imax['phase'] = 1000, 5000
+    imin['green'], imax['green'] = 150, 300
+    imin['red'], imax['red'] = 150, 500
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
