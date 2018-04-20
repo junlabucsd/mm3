@@ -334,7 +334,7 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_ChannelPicker.py',
                                      description='Determines which channels should be analyzed, used as empties for subtraction, or ignored.')
-    parser.add_argument('-f', '--paramfile',  type=file,
+    parser.add_argument('-f', '--paramfile', type=file,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
@@ -342,11 +342,14 @@ if __name__ == "__main__":
                         required=False, help='Number of processors to use.')
     # parser.add_argument('-s', '--specfile',  type=file,
     #                     required=False, help='Filename of specs file.')
-    parser.add_argument('-i', '--interactive', action='store_true',
-                        required=False, help='Do channel picking with GUI.')
+    parser.add_argument('-i', '--noninteractive', action='store_true',
+                        required=False, help='Do channel picking manually.')
     parser.add_argument('-c', '--saved_cross_correlations', action='store_true',
                         required=False, help='Load cross correlation data instead of computing.')
+    parser.add_argument('-s', '--specfile', type=file,
+                        required=False, help='Path to spec.yaml file.')
     namespace = parser.parse_args()
+
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
@@ -368,6 +371,17 @@ if __name__ == "__main__":
     else:
         p['num_analyzers'] = 6
 
+    # use previous specfile
+    if namespace.specfile:
+        try:
+            specfile = os.path.relpath(namespace.specfile.name)
+            if not os.path.isfile(specfile):
+                raise ValueError
+        except ValueError:
+            mm3.warning("\"{}\" is not a regular file or does not exist".format(specfile))
+    else:
+        specfile = None
+
     # set cross correlation calculation flag
     if namespace.saved_cross_correlations:
         do_crosscorrs = False
@@ -375,8 +389,8 @@ if __name__ == "__main__":
         do_crosscorrs = p['channel_picker']['do_crosscorrs']
 
     # set interactive flag
-    if namespace.interactive:
-        interactive = True
+    if namespace.noninteractive:
+        interactive = False
     else:
         interactive = p['channel_picker']['interactive']
 
@@ -467,27 +481,32 @@ if __name__ == "__main__":
         mm3.information("Wrote cross correlations files.")
 
     ### User selection (channel picking) #####################################################
-    mm3.information('Initializing specifications file.')
-    # nested dictionary of {fov : {peak : spec ...}) for if channel should
-    # be analyzed, used for empty, or ignored.
-    specs = {}
+    if specfile == None:
+        mm3.information('Initializing specifications file.')
+        # nested dictionary of {fov : {peak : spec ...}) for if channel should
+        # be analyzed, used for empty, or ignored.
+        specs = {}
 
-    # if there is cross corrs, use it. Otherwise, just make everything -1
-    if crosscorrs:
-        # update dictionary on initial guess from cross correlations
-        for fov_id, peaks in crosscorrs.items():
-            specs[fov_id] = {}
-            for peak_id, xcorrs in peaks.items():
-                # update the guess incase the parameters file was changed
-                xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
+        # if there is cross corrs, use it. Otherwise, just make everything -1
+        if crosscorrs:
+            # update dictionary on initial guess from cross correlations
+            for fov_id, peaks in crosscorrs.items():
+                specs[fov_id] = {}
+                for peak_id, xcorrs in peaks.items():
+                    # update the guess incase the parameters file was changed
+                    xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
 
-                if xcorrs['full'] == True:
-                    specs[fov_id][peak_id] = 1
-                else: # default to don't analyze
-                    specs[fov_id][peak_id] = -1
-    else: # just set everything to 1 and go forward.
-        for fov_id, peaks in channel_masks.items():
-            specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
+                    if xcorrs['full'] == True:
+                        specs[fov_id][peak_id] = 1
+                    else: # default to don't analyze
+                        specs[fov_id][peak_id] = -1
+        else: # just set everything to 1 and go forward.
+            for fov_id, peaks in channel_masks.items():
+                specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
+    else:
+        mm3.information('Loading supplied specifiication file.')
+        with open(specfile,'r') as fin:
+            specs = yaml.load(fin)
 
     if interactive:
         # preload the images
@@ -499,6 +518,7 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
     else:
+        pass
         outputdir = os.path.join(ana_dir, "fovs")
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
