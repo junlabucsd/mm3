@@ -60,12 +60,12 @@ clc;
 handles.dir_name = '../../analysis/';
 handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
 handles.px_to_mu = 0.065;
-handles.IW_thr = 4074; % threshold of intensity weighting
+handles.IW_thr = 2900; % threshold of intensity weighting
 handles.n_oc = 2; %number of overlapping cell cycle (default value)
 
-handles.xlim_max = 320;
+handles.xlim_max = 300;
 handles.ylim_max = 7;
-handles.time_int = 3;
+handles.time_int = 2;
 %%%
 
 if exist([handles.dir_name 'picked/']) == 0
@@ -100,10 +100,10 @@ handles.channels = [0 0];
 for i = fovs'
     fov_index = find(fnames_sort(:,1) == i);
     fnames_fov = fnames_sort(fov_index,:);
-    
+
     channels_tmp(:,2) = unique(fnames_fov(:,2));
     channels_tmp(:,1) = i + zeros(length(channels_tmp(:,2)),1);
-    
+
     handles.channels = [handles.channels; channels_tmp];
     clear channels_tmp;
 end
@@ -157,7 +157,7 @@ guidata(hObject, handles);
 
 
 % --- Outputs from this function are returned to the command line.
-function varargout = Cycle_Picker_OutputFcn(hObject, eventdata, handles) 
+function varargout = Cycle_Picker_OutputFcn(hObject, eventdata, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -194,12 +194,12 @@ end
 [R_1, j_1] = min(d_1);
 
 if color_idx == 1
-           
+
     handles.p1 = plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'p', 'LineWidth',1 , 'MarkerEdgeColor','r','MarkerFaceColor','none','MarkerSize',15);
     handles.initiation_time = handles.foci_list(j_1, 1);
     handles.initiation_pos = handles.foci_list(j_1, 2);
     handles.initiation_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.initiation_time)) / (2^(handles.n_oc_curr-1)); %note that number of origins at initiation is updated to the current OC number;
-    
+
     %saving the cell name in the mother generation
     for i = 1:size(handles.division_list, 1)
         if  handles.initiation_time >= handles.birth_list(i, 1) && handles.initiation_time < handles.division_list(i, 1) %if the initiation is right at division, then regard it as happening at the birth of new cell
@@ -207,10 +207,10 @@ if color_idx == 1
         end
     end
     handles.cell_name_m_tmp = handles.cell_names{cell_idx_m,1};
-    
+
     handles.initiation_time_n = handles.initiation_time;
     handles.initiation_mass_n = handles.initiation_mass;
-    
+
     %saving as the current initiation time & initiaion mass in the current generation
     for i = 1:size(handles.division_list, 1)
         if  handles.initiation_time_n >= handles.birth_list(i, 1) && handles.initiation_time_n < handles.division_list(i, 1) %if the initiation is right at division, then regard it as happening at the birth of new cell
@@ -218,7 +218,7 @@ if color_idx == 1
         end
     end
     handles.cell_name_n_tmp = handles.cell_names{cell_idx_n,1};
-    
+
     %save the second initiation event in the current generation if double-initiation happens
     if isfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n') == 0
         handles.cell_list.(handles.cell_name_n_tmp).initiation_time_n = handles.initiation_time_n;
@@ -230,18 +230,18 @@ if color_idx == 1
         handles.cell_list.(handles.cell_name_n_tmp).n_oc_n2 = handles.n_oc_curr;
     end
 
-    
+
 elseif color_idx == 2
-        
+
     handles.p2 = plot( handles.foci_list(j_1, 1), handles.foci_list(j_1, 2), 'o', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10);
     handles.termination_time = handles.foci_list(j_1, 1);
     handles.termination_pos = handles.foci_list(j_1, 2);
     handles.termination_mass = handles.length_list(2, find(handles.length_list(1,:) == handles.termination_time));
-    
+
     handles.l1 = plot( [handles.initiation_time handles.termination_time], [handles.initiation_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
-            
+
 elseif color_idx == 3
-      
+
     for i = 1:size(handles.birth_list, 1)
         d_3(i) = abs(a(1, 1)-handles.birth_list(i, 1));
     end
@@ -251,7 +251,7 @@ elseif color_idx == 3
     handles.l2 = plot( [handles.birth_time_m handles.initiation_time], [handles.initiation_pos handles.initiation_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
 
 elseif color_idx == 0
-    
+
     for i = 1:size(handles.division_list, 1)
         d_4(i) = abs(a(1, 1)-handles.division_list(i, 1));
     end
@@ -259,28 +259,28 @@ elseif color_idx == 0
     handles.p4 = plot( handles.division_list(j_4, 1), handles.termination_pos, 's', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','None','MarkerSize',10);
     handles.division_time = handles.division_list(j_4, 1);
     handles.l3 = plot( [handles.termination_time handles.division_time], [handles.termination_pos handles.termination_pos], '-', 'LineWidth',1 , 'MarkerEdgeColor','b','MarkerFaceColor','none','MarkerSize',10, 'Color', [0.75 0.75 0.75]);
-    
+
     cell_idx = find(handles.division_list == handles.division_time);
-    
+
     handles.cell_name_tmp = handles.cell_names{cell_idx,1};
-    
+
     handles.cell_list.(handles.cell_name_tmp).birth_time_m = handles.birth_time_m;
     handles.cell_list.(handles.cell_name_tmp).cell_name_m = handles.cell_name_m_tmp; %saving the cell name in the mother generation
-    
+
     %saving as the mother initiation time & initiaion mass in the current generation
     handles.cell_list.(handles.cell_name_tmp).initiation_time = handles.initiation_time;
     handles.cell_list.(handles.cell_name_tmp).initiation_mass = handles.initiation_mass;
     handles.cell_list.(handles.cell_name_tmp).n_oc = handles.n_oc_curr;
-    
+
     handles.cell_list.(handles.cell_name_tmp).termination_time = handles.termination_time;
     handles.cell_list.(handles.cell_name_tmp).termination_mass = handles.termination_mass;
-    
-    handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+
+    handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default
     set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
-    
+
     guidata(hObject, handles);
 end
-                                          
+
 guidata(hObject, handles);
 
 
@@ -308,7 +308,7 @@ handles.channle_idx = handles.channle_idx-1;
 
 cla;
 
-handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default
 set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
 
 [handles.length_list, handles.foci_list, handles.birth_list, handles.division_list, handles.cell_list, handles.cell_names, handles.save_name, handles.save_name_png, handles.display_name] ...
@@ -337,9 +337,9 @@ handles.channle_idx = handles.channle_idx+1;
 
 cla;
 
-handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default 
+handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default
 set(handles.text3, 'String' , num2str(handles.n_oc_curr, '%1d'));
-    
+
 [handles.length_list, handles.foci_list, handles.birth_list, handles.division_list, handles.cell_list, handles.cell_names, handles.save_name, handles.save_name_png, handles.display_name] ...
     = plot_channel(handles.dir_name, handles.cell_data, handles.px_to_mu, handles.IW_thr, handles.fnames_sort, handles.channels, handles.channle_idx, handles.xlim_max, handles.ylim_max, handles.time_int);
 set(handles.display, 'String' , handles.display_name );
@@ -390,11 +390,11 @@ color_idx =  mod(handles.clicks,4);
 
 %can only undo one generation
 if color_idx == 1
-    
+
     if isempty(handles.p1)==0
-        handles.p1.Visible = 'off';   
+        handles.p1.Visible = 'off';
     end
-    
+
     %remove the second initiation event in the current generation if double-initiation happens
     if isfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n2') == 1
         handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_time_n2');
@@ -405,34 +405,34 @@ if color_idx == 1
         handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'initiation_mass_n');
         handles.cell_list.(handles.cell_name_n_tmp) = rmfield(handles.cell_list.(handles.cell_name_n_tmp),'n_oc_n');
     end
-    
+
 elseif color_idx == 2
-    
+
     if isempty(handles.p2)==0
-        handles.p2.Visible = 'off';   
+        handles.p2.Visible = 'off';
     end
     if isempty(handles.l1)==0
-        handles.l1.Visible = 'off';   
+        handles.l1.Visible = 'off';
     end
-    
+
 elseif color_idx == 3
-    
+
     if isempty(handles.p3)==0
-        handles.p3.Visible = 'off';   
+        handles.p3.Visible = 'off';
     end
     if isempty(handles.l2)==0
-        handles.l2.Visible = 'off';   
+        handles.l2.Visible = 'off';
     end
-        
+
 elseif color_idx == 0
-    
+
     if isempty(handles.p4)==0
-        handles.p4.Visible = 'off';   
+        handles.p4.Visible = 'off';
     end
     if isempty(handles.l3)==0
-        handles.l3.Visible = 'off';   
+        handles.l3.Visible = 'off';
     end
-    
+
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'birth_time_m');
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'cell_name_m');
     handles.cell_list.(handles.cell_name_tmp) = rmfield(handles.cell_list.(handles.cell_name_tmp),'initiation_time');
@@ -456,5 +456,3 @@ function axes2_DeleteFcn(hObject, eventdata, handles)
 % hObject    handle to axes2 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-

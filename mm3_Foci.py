@@ -6,6 +6,7 @@ import sys
 import os
 import inspect
 import getopt
+import yaml
 try:
     import cPickle as pickle
 except:
