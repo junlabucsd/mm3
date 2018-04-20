@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
             if show_time_stamp:
                 # put in time stamp
-                seconds = float(t * p['seconds_per_time_index'])
+                seconds = float((t-1) * p['seconds_per_time_index'])
                 mins = seconds / 60
                 hours = mins / 60
                 timedata = "%dhrs %02dmin" % (hours, mins % 60)
