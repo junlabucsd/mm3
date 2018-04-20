@@ -166,7 +166,7 @@ if __name__ == "__main__":
     show_time_stamp = True
 
     # label properties
-    show_label = True
+    show_label = False
     label1_text = 'Label 1'
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
     shift_time = None
@@ -174,27 +174,27 @@ if __name__ == "__main__":
 
     # scalebar properties
     show_scalebar = True
-    scalebar_length_um = 10
+    scalebar_length_um = 3
 
     # color management
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = True
+    show_green = False
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = True
+    show_red = False
     fl_red_index = 2 # index of red fluorsecent channel.
-    fl_red_interval = 2 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
     # min and max pixel intensity for scaling the data
-    auto_phase_levels = False # set to true to find automatically
+    auto_phase_levels = True # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 300, 7000
-    imin['green'], imax['green'] = 100, 450
-    imin['red'], imax['red'] = 100, 450
+    imin['phase'], imax['phase'] = 1000, 5000
+    imin['green'], imax['green'] = 150, 300
+    imin['red'], imax['red'] = 150, 500
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -396,7 +396,7 @@ if __name__ == "__main__":
                 mins = seconds / 60
                 hours = mins / 60
                 timedata = "%dhrs %02dmin" % (hours, mins % 60)
-                timestamp = np.fliplr(make_label(timedata, fontface, size=48,
+                timestamp = np.fliplr(make_label(timedata, fontface, size=20,
                                                    angle=180)).astype('float64')
                 timestamp = np.pad(timestamp, ((size_y - 10 - timestamp.shape[0], 10),
                                                    (size_x - 10 - timestamp.shape[1], 10)),
@@ -409,16 +409,16 @@ if __name__ == "__main__":
                 image = 1 - ((1 - image) * (1 - timestamp))
 
             if show_label:
-                label1 = np.fliplr(make_label(label1_text, fontface, size=48,
+                label1 = np.fliplr(make_label(label1_text, fontface, size=15,
                                               angle=180)).astype('float64')
-                label1 = np.pad(label1, ((10, size_y - 10 - label1.shape[0]),
+                label1 = np.pad(label1, ((5, size_y - 5 - label1.shape[0]),
                                          (10, size_x - 10 - label1.shape[1])),
                                          mode='constant')
                 label1 /= 255.0
                 label1 = np.dstack((label1, label1, label1))
 
                 if shift_time:
-                    label2 = np.fliplr(make_label(label2_text, fontface, size=48,
+                    label2 = np.fliplr(make_label(label2_text, fontface, size=15,
                                                   angle=180)).astype('float64')
                     label2 = np.pad(label2, ((10, size_y - 10 - label2.shape[0]),
                                              (10, size_x - 10 - label2.shape[1])),
@@ -426,13 +426,13 @@ if __name__ == "__main__":
                     label2 /= 255.0
                     label2 = np.dstack((label2, label2, label2))
 
-            if t >= shift_time:
-                image = 1 - ((1 - image) * (1 - label2))
-            else:
-                image = 1 - ((1 - image) * (1 - label1))
+                if shift_time and t >= shift_time:
+                    image = 1 - ((1 - image) * (1 - label2))
+                else:
+                    image = 1 - ((1 - image) * (1 - label1))
 
             if show_scalebar:
-                scalebar_height = 30
+                scalebar_height = 10
                 scalebar_length = np.around(scalebar_length_um / p['pxl2um']).astype(int)
                 scalebar = np.zeros((size_y, size_x), dtype='float64')
                 scalebar[size_y - 10 - scalebar_height:size_y - 10,
@@ -440,7 +440,7 @@ if __name__ == "__main__":
 
                 # scalebar legend
                 scale_text = '{} um'.format(scalebar_length_um)
-                scale_legend = np.fliplr(make_label(scale_text, fontface, size=48,
+                scale_legend = np.fliplr(make_label(scale_text, fontface, size=20,
                                                     angle=180)).astype('float64')
                 scale_legend = np.pad(scale_legend, ((size_y - 10 - scale_legend.shape[0], 10),
                     (20 + scalebar_length, size_x - 20 - scalebar_length - scale_legend.shape[1])),

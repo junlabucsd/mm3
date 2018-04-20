@@ -6,7 +6,8 @@ import sys
 import os
 import time
 import inspect
-import getopt
+import argparse
+import yaml
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
@@ -33,35 +34,35 @@ import mm3_helpers as mm3
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
-    # hardcoded parameters
-    do_segmentation = True # make or load segmentation?
-    do_lineages = True # should lineages be made after segmentation?
 
-    # switches which may be overwritten
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
-    user_spec_fovs = []
+    # set switches and parameters
+    parser = argparse.ArgumentParser(prog='python mm3_Segment.py',
+                                     description='Segment cells and create lineages.')
+    parser.add_argument('-f', '--paramfile',  type=file,
+                        required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-o', '--fov',  type=str,
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+    parser.add_argument('-j', '--nproc',  type=int,
+                        required=False, help='Number of processors to use.')
+    namespace = parser.parse_args()
 
-    # get switches and parameters
-    try:
-        unixoptions="f:o:"
-        gnuoptions=["paramfile=","fov="]
-        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
-    except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -o), using hardcoded parameters.')
+    # Load the project parameters file
+    mm3.information('Loading experiment parameters.')
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    for opt, arg in opts:
-        if opt in ['-f',"--paramfile"]:
-            param_file_path = arg # parameter file path
-        if opt in ['-o',"--fov"]:
-            try:
-                for fov_to_proc in arg.split(","):
-                    user_spec_fovs.append(int(fov_to_proc))
-            except:
-                mm3.warning("Couldn't convert -o argument to an integer:",arg)
-                raise ValueError
+    if namespace.fov:
+        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+    else:
+        user_spec_fovs = []
 
-    # Load the project parameters file & initialized the helper library
-    p = mm3.init_mm3_helpers(param_file_path)
+    # number of threads for multiprocessing
+    if namespace.nproc:
+        p['num_analyzers'] = namespace.nproc
 
     # create segmenteation and cell data folder if they don't exist
     if not os.path.exists(p['seg_dir']) and p['output'] == 'TIFF':
@@ -71,8 +72,8 @@ if __name__ == "__main__":
 
     # load specs file
     try:
-        with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-            specs = pickle.load(specs_file)
+        with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
     except:
         mm3.warning('Could not load specs file.')
         raise ValueError
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
-    if do_segmentation:
+    if p['segment']['do_segmentation']:
         mm3.information("Segmenting channels.")
 
         for fov_id in fov_id_list:
@@ -105,7 +106,7 @@ if __name__ == "__main__":
         mm3.information("Finished segmentation.")
 
     ### Create cell lineages from segmented images
-    if do_lineages:
+    if p['segment']['do_lineages']:
         mm3.information("Creating cell lineages.")
 
         # Load time table, which goes into params

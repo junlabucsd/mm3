@@ -6,7 +6,7 @@ import sys
 import os
 import time
 import inspect
-import getopt
+import argparse
 import yaml
 from pprint import pprint # for human readable file output
 try:
@@ -52,11 +52,10 @@ with warnings.catch_warnings():
 import mm3_helpers as mm3
 
 ### functions
-def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.',phase_plane='c1'):
+def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'):
     '''
     Creates a plot with the channels with guesses for empties and full channels.
     The plot is saved in PDF format.
-
 
     Parameters
     fov_id : str
@@ -319,7 +318,9 @@ def preload_images(specs, fov_id_list):
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
+            first_image = p['channel_picker']['first_image']
             UI_images[fov_id][peak_id]['first'] = imresize(image_data[0,:,:], 0.5)
+            last_image = p['channel_picker']['first_image']
             # phase image at end
             UI_images[fov_id][peak_id]['last'] = imresize(image_data[-1,:,:], 0.5)
 
@@ -327,58 +328,71 @@ def preload_images(specs, fov_id_list):
 
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
-    # hardcoded parameters
-    do_crosscorrs = True
-    interactive = True
-    nproc = 3
-    specfile = None
+    '''mm3_ChannelPicker.py allows the user to identify full and empty channelsself.
+    '''
 
-    # get switches and parameters
-    try:
-        unixoptions="f:o:j:s:ci"
-        gnuoptions=["paramfile=","fov=","nproc=","specfile=","saved-cross-correlations","noninteractive"]
-        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
-        # switches which may be overwritten
-        user_spec_fovs = []
-        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
-    except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -o).')
+    # set switches and parameters
+    parser = argparse.ArgumentParser(prog='python mm3_ChannelPicker.py',
+                                     description='Determines which channels should be analyzed, used as empties for subtraction, or ignored.')
+    parser.add_argument('-f', '--paramfile', type=file,
+                        required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-o', '--fov',  type=str,
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+    parser.add_argument('-j', '--nproc',  type=int,
+                        required=False, help='Number of processors to use.')
+    # parser.add_argument('-s', '--specfile',  type=file,
+    #                     required=False, help='Filename of specs file.')
+    parser.add_argument('-i', '--noninteractive', action='store_true',
+                        required=False, help='Do channel picking manually.')
+    parser.add_argument('-c', '--saved_cross_correlations', action='store_true',
+                        required=False, help='Load cross correlation data instead of computing.')
+    parser.add_argument('-s', '--specfile', type=file,
+                        required=False, help='Path to spec.yaml file.')
+    namespace = parser.parse_args()
 
-    for opt, arg in opts:
-        if opt in ['-f','--paramfile']:
-            param_file_path = arg # parameter file path
-        if opt in ['-o','--fov']:
-            try:
-                for fov_to_proc in arg.split(","):
-                    user_spec_fovs.append(int(fov_to_proc))
-            except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt in ['-j', '--nproc']:
-            try:
-                nproc = int(arg)
-            except ValueError:
-                mm3.warning("Could not convert \"{}\" to an integer".format(arg))
-        if opt in ['-s', '--specfile']:
-            try:
-                specfile = os.path.relpath(arg)
-                if not os.path.isfile(specfile):
-                    raise ValueError
-            except ValueError:
-                mm3.warning("\"{}\" is not a regular file or does not exist".format(specfile))
-        if opt in ['-i','--noninteractive']:
-            interactive=False
-        if opt in ['-c', '--saved-cross-correlations']:
-            do_crosscorrs=False
 
     # Load the project parameters file
-    if len(param_file_path) == 0:
-        raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information('Loading experiment parameters.')
-    with open(param_file_path, 'r') as param_file:
-        p = yaml.safe_load(param_file) # load parameters into dictionary
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+    if namespace.fov:
+        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+    else:
+        user_spec_fovs = []
+
+    # number of threads for multiprocessing
+    if namespace.nproc:
+        p['num_analyzers'] = namespace.nproc
+    else:
+        p['num_analyzers'] = 6
+
+    # use previous specfile
+    if namespace.specfile:
+        try:
+            specfile = os.path.relpath(namespace.specfile.name)
+            if not os.path.isfile(specfile):
+                raise ValueError
+        except ValueError:
+            mm3.warning("\"{}\" is not a regular file or does not exist".format(specfile))
+    else:
+        specfile = None
+
+    # set cross correlation calculation flag
+    if namespace.saved_cross_correlations:
+        do_crosscorrs = False
+    else:
+        do_crosscorrs = p['channel_picker']['do_crosscorrs']
+
+    # set interactive flag
+    if namespace.noninteractive:
+        interactive = False
+    else:
+        interactive = p['channel_picker']['interactive']
 
     # assign shorthand directory names
     ana_dir = os.path.join(p['experiment_directory'], p['analysis_directory'])
@@ -403,7 +417,8 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
-    if not do_crosscorrs: # load precalculate ones if indicated
+    # load precalculate ones if indicated
+    if not do_crosscorrs:
         mm3.information('Loading precalculated cross-correlations.')
 
         try:
@@ -425,7 +440,7 @@ if __name__ == "__main__":
             crosscorrs[fov_id] = {}
 
             # initialize pool for analyzing image metadata
-            pool = Pool(nproc)
+            pool = Pool(p['num_analyzers'])
 
             # find all peak ids in the current FOV
             for peak_id in sorted(channel_masks[fov_id].keys()):
@@ -466,7 +481,7 @@ if __name__ == "__main__":
         mm3.information("Wrote cross correlations files.")
 
     ### User selection (channel picking) #####################################################
-    if (specfile == None):
+    if specfile == None:
         mm3.information('Initializing specifications file.')
         # nested dictionary of {fov : {peak : spec ...}) for if channel should
         # be analyzed, used for empty, or ignored.
@@ -488,8 +503,8 @@ if __name__ == "__main__":
         else: # just set everything to 1 and go forward.
             for fov_id, peaks in channel_masks.items():
                 specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
-
     else:
+        mm3.information('Loading supplied specifiication file.')
         with open(specfile,'r') as fin:
             specs = yaml.load(fin)
 
@@ -508,14 +523,11 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            specs = fov_plot_channels(fov_id, crosscorrs, specs,outputdir=outputdir,phase_plane=p['phase_plane'])
+            specs = fov_plot_channels(fov_id, crosscorrs, specs,
+                                      outputdir=outputdir, phase_plane=p['phase_plane'])
 
-    # write specfications to pickle and text
-    mm3.information("Writing specifications file.")
-    with open(os.path.join(ana_dir,"specs.pkl"), 'w') as specs_file:
-        pickle.dump(specs, specs_file, protocol=pickle.HIGHEST_PROTOCOL)
-    with open(os.path.join(ana_dir,"specs.txt"), 'w') as specs_file:
-        pprint(specs, stream=specs_file)
-    # with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
-    #     yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    # Save out specs file in yaml format
+    with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
+        yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+
     mm3.information("Finished.")

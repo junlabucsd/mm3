@@ -23,7 +23,8 @@ output: 'TIFF' # 'HDF5'
 phase_plane: 'c1'
 
 # conversion factor from pixels to microns
-# use 0.065 for 100X, use 0.108 for 60X
+# use 0.065 for 100X, use 0.108 for 60X (Andor Neo)
+# use 0.11 for 100X (Photometrics Prime 95B)
 pxl2um: 0.108
 
 # image_orientation: set to "up" if growth pushes cells up
@@ -46,7 +47,7 @@ channel_separation: 45
 channel_detection_snr: 1
 
 # channel_length_pad sets the amount of padding to top and bottom when making channel masks
-channel_length_pad: 15
+channel_length_pad: 10
 
 # channel_width_pad sets ammount of padding at sides of channel when making channels masks
 channel_width_pad: 10
@@ -56,7 +57,7 @@ channel_picking_threshold: 0.97
 
 # when aligning channels, this is the pad size in pixels.
 # use large values if your channels move a lot during the experiment (will slow subtraction down)
-alignment_pad: 10
+alignment_pad: 5
 
 ### segmentaion and lineage creation parameters
 # threshold used in readjusting the OTSU method in fold change.
@@ -74,7 +75,7 @@ distance_threshold: 2
 
 # the radius, in pixels, of the size of the disk that is used in the second morphological
 # unit is pixels
-second_opening_size: 0
+second_opening_size: 1
 
 # markers for potential cells smaller than this area will be zeroed
 # unit is pixels^2
@@ -99,6 +100,38 @@ new_cell_y_cutoff: 150
 # only regions with labels less than or equal to this value will be considered to start potential
 # new cells.
 new_cell_region_cutoff: 2
+
+### process control ############################################################
+# Use these flags to control script specific processes and settings
+
+nd2ToTIFF:
+  number_of_rows : 1
+  crop_ymin : # 0.05
+  crop_ymax : # 0.95
+  2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
+  tiff_compress : 5 # integer 1-9 for level of compression.
+  external_directory : # path to location of .nd2 if not in exp. dir.
+
+compile:
+  do_metadata: True
+  do_time_table : True
+  do_channel_masks : True
+  do_slicing : True
+  t_end : # only analyze images up until this t point. Leave blank otherwise
+
+channel_picker:
+  do_crosscorrs: True
+  interactive : True
+  first_image : 1 # image index to show on top row
+  last_image : -1 # image index to show on middle row
+
+subtract:
+  do_empties: True
+  do_subtraction: True
+
+segment:
+  do_segmentation: True
+  do_lineages: True
 
 ### movie parameters ###########################################################
 # parameters for mm3_MovieMaker_alternative.py
@@ -146,20 +179,17 @@ image_start: 0
 image_end: 10000
 
 ### foci_lap detection parameters ##############################################
-# indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
-foci_plane: 'c2'
-
-# toggle foci detection debug
-debug_foci: False
-
-# minimum and maximum sigma of laplacian to convolve in pixels.
-# Scales with minimum foci width to detect as 2*sqrt(2)*minsig
-foci_log_minsig: 1
-foci_log_maxsig: 4
-
-# absolute threshold in which laplacian well reaches to record potential foci
-foci_log_thresh: 0.0006 # default: 0.002;
-
-# foci peaks must be this many times greater than median cell intensity.
-# Think signal to noise ratio
-foci_log_peak_med_ratio: 1.5 # default: 1.2;
+foci:
+  # indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
+  foci_plane: 'c2'
+  # toggle foci detection debug
+  debug_foci: False
+  # minimum and maximum sigma of laplacian to convolve in pixels.
+  # Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+  foci_log_minsig: 2
+  foci_log_maxsig: 3
+  # absolute threshold in which laplacian well reaches to record potential foci
+  foci_log_thresh: 0.001 # default: 0.002;
+  # foci peaks must be this many times greater than median cell intensity.
+  # Think signal to noise ratio
+  foci_log_peak_med_ratio: 1.5 # default: 1.2;

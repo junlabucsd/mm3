@@ -72,7 +72,7 @@ with warnings.catch_warnings():
 
 # print a warning
 def warning(*objs):
-    print(time.strftime("%H:%M:%S Warning:", time.localtime()), *objs, file=sys.stderr)
+    print(time.strftime("%H:%M:%S WARNING:", time.localtime()), *objs, file=sys.stderr)
 
 # print information
 def information(*objs):
@@ -1350,7 +1350,7 @@ def subtract_fluor(image_pair):
     '''
     # get out data and pad
     cropped_channel, empty_channel = image_pair # [channel slice, empty slice]
-    
+
     # check frame size of cropped channel and background, always keep crop channel size the same
     crop_size = np.shape(cropped_channel)[:2]
     empty_size = np.shape(empty_channel)[:2]
@@ -1358,7 +1358,7 @@ def subtract_fluor(image_pair):
         if crop_size[0] > empty_size[0] or crop_size[1] > empty_size[1]:
             pad_row_length = max(crop_size[0]  - empty_size[0], 0) # prevent negatives
             pad_column_length = max(crop_size[1]  - empty_size[1], 0)
-            empty_channel = np.pad(empty_channel, 
+            empty_channel = np.pad(empty_channel,
                 [[np.int(.5*pad_row_length), pad_row_length-np.int(.5*pad_row_length)],
                 [np.int(.5*pad_column_length),  pad_column_length-np.int(.5*pad_column_length)],
                 [0,0]], 'edge')
@@ -2199,7 +2199,7 @@ def find_mother_cells(Cells):
 
 ### functions for additional cell centric analysis
 
-def find_cell_intensities(fov_id, peak_id, Cells, midline=True):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
@@ -2273,7 +2273,7 @@ def foci_analysis(fov_id, peak_id, Cells):
     # Import segmented and fluorescenct images
     image_data_seg = load_stack(fov_id, peak_id, color='seg')
     image_data_FL = load_stack(fov_id, peak_id,
-                               color='sub_{}'.format(params['foci_plane']))
+                               color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -2337,8 +2337,38 @@ def foci_analysis(fov_id, peak_id, Cells):
 
     return
 
+# foci pool (for parallel analysis)
+def foci_analysis_pool(fov_id, peak_id, Cells):
+    '''Find foci in cells using a fluorescent image channel.
+    This function works on a single peak and all the cells therein.'''
+
+    # make directory for foci debug
+    # foci_dir = os.path.join(params['ana_dir'], 'overlay/')
+    # if not os.path.exists(foci_dir):
+    #     os.makedirs(foci_dir)
+
+    # Import segmented and fluorescenct images
+    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_FL = load_stack(fov_id, peak_id,
+                               color='sub_{}'.format(params['foci']['foci_plane']))
+
+    # Load time table to determine first image index.
+    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
+    with open(time_table_path, 'r') as fin:
+        time_table = pickle.load(fin)
+    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    t0 = times_all[0] # first time index
+    tN = times_all[-1] # last time index
+
+    # call foci_cell for each cell object
+    pool = Pool(processes=params['num_analyzers'])
+    [pool.apply_async(foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL)) for cell_id, cell in Cells.items()]
+    pool.close()
+    pool.join()
+
+# parralel function for each cell
 def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
-    '''find foci in a cell, single instance to be called by the foci_analysis_pool for parallel processing. 
+    '''find foci in a cell, single instance to be called by the foci_analysis_pool for parallel processing.
     '''
     disp_l = []
     disp_w = []
@@ -2373,35 +2403,6 @@ def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
     cell.disp_l = disp_l
     cell.disp_w = disp_w
     cell.foci_h = foci_h
-# actual worker function for foci detection
-    
-def foci_analysis_pool(fov_id, peak_id, Cells):
-    '''Find foci in cells using a fluorescent image channel.
-    This function works on a single peak and all the cells therein.'''
-
-    # make directory for foci debug
-    # foci_dir = os.path.join(params['ana_dir'], 'overlay/')
-    # if not os.path.exists(foci_dir):
-    #     os.makedirs(foci_dir)
-
-    # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
-    image_data_FL = load_stack(fov_id, peak_id,
-                               color='sub_{}'.format(params['foci_plane']))
-
-    # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
-    t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
-
-    # call foci_cell for each cell object
-    pool = Pool(processes=params['num_analyzers'])
-    [pool.apply_async(foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL)) for cell_id, cell in Cells.items()]
-    pool.close()
-    pool.join()
 
 # actual worker function for foci detection
 def foci_lap(img, img_foci, cell, t):
@@ -2445,10 +2446,11 @@ def foci_lap(img, img_foci, cell, t):
     foci_h = [] # foci total amount (from raw image)
 
     # define parameters for foci finding
-    minsig = params['foci_log_minsig']
-    maxsig = params['foci_log_maxsig']
-    thresh = params['foci_log_thresh']
-    peak_med_ratio = params['foci_log_peak_med_ratio']
+    minsig = params['foci']['foci_log_minsig']
+    maxsig = params['foci']['foci_log_maxsig']
+    thresh = params['foci']['foci_log_thresh']
+    peak_med_ratio = params['foci']['foci_log_peak_med_ratio']
+    debug_foci = params['foci']['debug_foci']
 
     # test
     #print ("minsig={:d}  maxsig={:d}  thres={:.4g}  peak_med_ratio={:.2g}".format(minsig,maxsig,thresh,peak_med_ratio))
@@ -2459,6 +2461,8 @@ def foci_lap(img, img_foci, cell, t):
     img_foci_masked[img != region] = np.nan
     cell_fl_median = np.nanmedian(img_foci_masked)
     cell_fl_mean = np.nanmean(img_foci_masked)
+
+    img_foci_masked[img != region] = 0
 
     # subtract this value from the cell
     if False:
@@ -2475,7 +2479,7 @@ def foci_lap(img, img_foci, cell, t):
     # find blobs using difference of gaussian
     over_lap = .95 # if two blobs overlap by more than this fraction, smaller blob is cut
     numsig = (maxsig - minsig + 1) # number of division to consider between min ang max sig
-    blobs = blob_log(img_foci, min_sigma=minsig, max_sigma=maxsig,
+    blobs = blob_log(img_foci_masked, min_sigma=minsig, max_sigma=maxsig,
                      overlap=over_lap, num_sigma=numsig, threshold=thresh)
 
     # these will hold information about foci position temporarily
@@ -2508,10 +2512,10 @@ def foci_lap(img, img_foci, cell, t):
 
             # print('peak', peak_fit)
             if x_fit <= 0 or x_fit >= radius*2 or y_fit <= 0 or y_fit >= radius*2:
-                if params['debug_foci']: print('Throw out foci (gaus fit not in gfit_area)')
+                if debug_foci: print('Throw out foci (gaus fit not in gfit_area)')
                 continue
             elif peak_fit/cell_fl_median < peak_med_ratio:
-                if params['debug_foci']: print('Peak does not pass height test.')
+                if debug_foci: print('Peak does not pass height test.')
                 continue
             else:
                 # find x and y position relative to the whole image (convert from small box)
@@ -2532,11 +2536,11 @@ def foci_lap(img, img_foci, cell, t):
                 disp_w = np.append(disp_w, disp_x)
                 foci_h = np.append(foci_h, np.sum(gfit_area))
         else:
-            if params['debug_foci']:
+            if debug_foci:
                 print ('Blob not in bounding box.')
 
     # draw foci on image for quality control
-    if params['debug_foci']:
+    if debug_foci:
         outputdir = os.path.join(params['ana_dir'], 'debug_foci')
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
@@ -2746,7 +2750,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
                 peak_width = popt[2]
             except:
-                information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
+                # information('Ring gaussian fit failed. {} {} {}'.format(fov_id, peak_id, t))
                 peak_width = np.float('NaN')
 
             # Add data to cells
@@ -2758,6 +2762,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
     return
 
+# Calculate Y projection intensity of a fluorecent channel per cell
 def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     '''Calculate profile of plane along cell and add information to Cell object. Sums the fluorescent channel along the long axis of the cell.
 
@@ -2792,7 +2797,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     for Cell in Cells.values():
 
         # initialize ring data arrays for cell
-        Cell.fl_profiles = []
+        fl_profiles = []
 
         # loop through each time point for this cell
         for n, t in enumerate(Cell.times):
@@ -2824,6 +2829,9 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
             profile = profile_line(image_masked, p1, p2, linewidth=width,
                                    order=1, mode='constant', cval=0)
 
-            Cell.fl_profiles.append(profile) # append whole profile
+            fl_profiles.append(profile)
+
+        # append whole profile, using plane name
+        setattr(Cell, 'fl_profiles_'+profile_plane, fl_profiles)
 
     return

@@ -70,8 +70,8 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
-    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-        specs = pickle.load(specs_file)
+    with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
+        specs = yaml.safe_load(specs_file)
 
     # load cell data dict.
     if pklfile == None:

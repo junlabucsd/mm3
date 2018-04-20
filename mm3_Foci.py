@@ -6,6 +6,7 @@ import sys
 import os
 import inspect
 import getopt
+import yaml
 try:
     import cPickle as pickle
 except:
@@ -58,8 +59,8 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path)
 
     # load specs file
-    with open(os.path.join(p['ana_dir'],'specs.pkl'), 'r') as specs_file:
-        specs = pickle.load(specs_file)
+    with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+        specs = yaml.safe_load(specs_file)
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

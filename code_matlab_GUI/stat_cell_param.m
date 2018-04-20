@@ -4,11 +4,11 @@ warning off;
 
 %% load data
 
-dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_shift26/analysis_photo/picked/';
+dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180314_ecoli_29/analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.11;
-t_int = 2.0;
+t_int = 5.0;
 
 %% extract and calculate all cell data
 

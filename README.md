@@ -1,9 +1,10 @@
 # mm3
-### Version 3.15
+### Version 3.16
 
 Please refer to the docs subfolder for information and usage.
 
 ## Version History
+3.16 2018.04.20 Removed hardcoded parameters. Specs file is now .yaml.
 
 3.15 2018.03.12 Volume is now calculated in the Cell object. Additional movie generation options. Plotting of fluorescent Y projection (Z ring analysis). Bug fixes.
 

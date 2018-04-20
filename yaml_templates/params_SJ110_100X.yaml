@@ -101,6 +101,38 @@ new_cell_y_cutoff: 150
 # new cells.
 new_cell_region_cutoff: 2
 
+### process control ############################################################
+# Use these flags to control script specific processes and settings
+
+nd2ToTIFF:
+  number_of_rows : 1
+  crop_ymin : # 0.05
+  crop_ymax : # 0.95
+  2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
+  tiff_compress : 5 # integer 1-9 for level of compression.
+  external_directory : # path to location of .nd2 if not in exp. dir.
+
+compile:
+  do_metadata: True
+  do_time_table : True
+  do_channel_masks : True
+  do_slicing : True
+  t_end : # only analyze images up until this t point. Leave blank otherwise
+
+channel_picker:
+  do_crosscorrs: True
+  interactive : True
+  first_image : 1 # image index to show on top row
+  last_image : -1 # image index to show on middle row
+
+subtract:
+  do_empties: True
+  do_subtraction: True
+
+segment:
+  do_segmentation: True
+  do_lineages: True
+
 ### movie parameters ###########################################################
 # parameters for mm3_MovieMaker_alternative.py
 movie:
@@ -158,20 +190,17 @@ image_start: 0
 image_end: 10000
 
 ### foci_lap detection parameters ##############################################
-# indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
-foci_plane: 'c2'
-
-# toggle foci detection debug
-debug_foci: False
-
-# minimum and maximum sigma of laplacian to convolve in pixels.
-# Scales with minimum foci width to detect as 2*sqrt(2)*minsig
-foci_log_minsig: 1
-foci_log_maxsig: 4
-
-# absolute threshold in which laplacian well reaches to record potential foci
-foci_log_thresh: 0.0006 # default: 0.002;
-
-# foci peaks must be this many times greater than median cell intensity.
-# Think signal to noise ratio
-foci_log_peak_med_ratio: 1.5 # default: 1.2;
+foci:
+  # indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
+  foci_plane: 'c2'
+  # toggle foci detection debug
+  debug_foci: False
+  # minimum and maximum sigma of laplacian to convolve in pixels.
+  # Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+  foci_log_minsig: 2
+  foci_log_maxsig: 3
+  # absolute threshold in which laplacian well reaches to record potential foci
+  foci_log_thresh: 0.001 # default: 0.002;
+  # foci peaks must be this many times greater than median cell intensity.
+  # Think signal to noise ratio
+  foci_log_peak_med_ratio: 1.5 # default: 1.2;
