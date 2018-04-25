@@ -106,9 +106,10 @@ new_cell_region_cutoff: 2
 
 nd2ToTIFF:
   number_of_rows : 1
-  crop_ymin : # 0.05
-  crop_ymax : # 0.95
-  2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
+  # comment the cropping parameters out if you don't want them.
+  # crop_ymin : # 0.05
+  # crop_ymax : # 0.95
+  # 2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
   tiff_compress : 5 # integer 1-9 for level of compression.
   external_directory : # path to location of .nd2 if not in exp. dir.
 
