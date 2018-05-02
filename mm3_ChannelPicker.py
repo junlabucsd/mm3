@@ -319,10 +319,10 @@ def preload_images(specs, fov_id_list):
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
             first_image = p['channel_picker']['first_image']
-            UI_images[fov_id][peak_id]['first'] = imresize(image_data[0,:,:], 0.5)
-            last_image = p['channel_picker']['first_image']
+            UI_images[fov_id][peak_id]['first'] = imresize(image_data[first_image,:,:], 0.5)
+            last_image = p['channel_picker']['last_image']
             # phase image at end
-            UI_images[fov_id][peak_id]['last'] = imresize(image_data[-1,:,:], 0.5)
+            UI_images[fov_id][peak_id]['last'] = imresize(image_data[last_image,:,:], 0.5)
 
     return UI_images
 
