@@ -222,6 +222,11 @@ if __name__ == "__main__":
 
         # do it by FOV. Not set up for multiprocessing
         for fov, peaks in channel_masks.iteritems():
+
+            # skip fov if not in the group
+            if user_spec_fovs and fov not in user_spec_fovs:
+                continue
+
             mm3.information("Loading images for FOV %03d." % fov)
 
             # get filenames just for this fov along with the julian date of acquistion

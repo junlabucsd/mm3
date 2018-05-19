@@ -192,9 +192,9 @@ if __name__ == "__main__":
     auto_phase_levels = True # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 1000, 5000
-    imin['green'], imax['green'] = 150, 300
-    imin['red'], imax['red'] = 150, 500
+    imin['phase'], imax['phase'] = 500, 6000
+    imin['green'], imax['green'] = 160, 350
+    imin['red'], imax['red'] = 115, 130
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""

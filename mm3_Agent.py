@@ -6,7 +6,7 @@ import sys
 import os
 import time
 import inspect
-import getopt
+import argparse
 import yaml
 import glob
 from pprint import pprint # for human readable file output
@@ -54,11 +54,9 @@ def find_unknown_files(processed_files):
     found_files = glob.glob(os.path.join(p['TIFF_dir'],'*.tif')) # get all tiffs
     found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
     found_files = set(found_files) # make a set so we can do comparisons
-
     unknown_files = sorted(found_files.difference(processed_files))
 
     return unknown_files
-
 
 # define function for exting the loop
 def signal_handler(signal, frame):
@@ -70,6 +68,9 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
     '''
     Process images from one FOV, from opening to segmentation.
     '''
+
+    # phase plane index
+    ph_idx = int(p['phase_plane'][1:]) - 1
 
     # make an array of images and then concatenate them into one big stack
     image_fov_stack = []
@@ -83,7 +84,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
     mm3.information('Loading images and collecting metadata for FOV %d' % fov_id)
     for filename in filenames:
         # load image
-        with tiff.TiffFile(os.path.join(p['TIFF_dir'],filename)) as tif:
+        with tiff.TiffFile(os.path.join(p['TIFF_dir'], filename)) as tif:
             image_data = tif.asarray()
 
         # channel finding was also done on images after orientation was fixed
@@ -93,7 +94,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
         if len(image_data.shape) == 2:
             image_data = np.expand_dims(image_data, 0)
 
-        #change axis so it goes X, Y, Plane
+        # change axis so it goes X, Y, Plane
         image_data = np.rollaxis(image_data, 0, 3)
 
         # add it to list. The images should be in time order
@@ -142,7 +143,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
         image_data = channel_stacks[peak_id]
         # just get phase data and put it in list
         if len(image_data.shape) > 3:
-            image_data = image_data[:,:,:,0]
+            image_data = image_data[:,:,:,ph_idx]
 
         empty_stacks.append(image_data)
 
@@ -156,7 +157,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
         for t in time_points:
             # get images from one timepoint at a time and send to alignment and averaging
             imgs = [stack[t] for stack in empty_stacks]
-            avg_empty = mm3.average_empties(imgs) # function is in mm3
+            avg_empty = mm3.average_empties(imgs, align=True)
             avg_empty_stack.append(avg_empty)
 
         # concatenate list and then save out to tiff stack
@@ -173,7 +174,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
 
         # get just the phase data
         if len(image_data.shape) > 3:
-            image_data = image_data[:,:,:,0] # just get phase data and put it in list
+            image_data = image_data[:,:,:,ph_idx] # just get phase data and put it in list
 
         subtract_pairs = zip(image_data, avg_empty_stack)
         subtracted_imgs = []
@@ -195,7 +196,6 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
 
         segmented_stacks[peak_id] = segmented_imgs
 
-
     # Save everything to HDF5
     mm3.information('Saving to HDF5 for FOV %d' % fov_id)
     h5f = h5py.File(os.path.join(p['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
@@ -205,10 +205,6 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
     new_length = h5f[u'filenames'].shape[0] + len(filenames)
 
     # save the items general to the FOV
-    h5ds = h5f[u'filenames']
-    h5ds.resize(new_length, axis=0)
-    h5ds[old_length:new_length] = np.expand_dims(image_filenames, 1)
-
     h5ds = h5f[u'times']
     h5ds.resize(new_length, axis=0)
     h5ds[old_length:new_length] = np.expand_dims(image_times, 1)
@@ -217,7 +213,7 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
     h5ds.resize(new_length, axis=0)
     h5ds[old_length:new_length] = np.expand_dims(image_jds, 1)
 
-    h5ds = h5f[u'empty_channel']
+    h5ds = h5f[u'empty_%s' % p['phase_plane']]
     h5ds.resize(new_length, axis=0)
     h5ds[old_length:new_length] = avg_empty_stack
 
@@ -234,13 +230,18 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
 
         # Put in subtracted and segmented images if this is an analysis peak
         if peak_id in ana_peak_ids:
-            h5ds = h5g[u'p%04d_sub' % (peak_id)]
+            h5ds = h5g[u'p%04d_sub_%s' % (peak_id, p['phase_plane'])]
             h5ds.resize(new_length, axis=0)
             h5ds[old_length:new_length] = subtracted_stacks[peak_id]
 
             h5ds = h5g[u'p%04d_seg' % (peak_id)]
             h5ds.resize(new_length, axis=0)
             h5ds[old_length:new_length] = segmented_stacks[peak_id]
+
+    # save filenames last, as this is used to check if the above was successful.
+    h5ds = h5f[u'filenames']
+    h5ds.resize(new_length, axis=0)
+    h5ds[old_length:new_length] = np.expand_dims(image_filenames, 1)
 
     # We're done here
     h5f.close()
@@ -252,29 +253,27 @@ def process_FOV_images(fov_id, filenames, channel_masks, specs):
 if __name__ == "__main__":
 
     # get switches and parameters
-    try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:")
-        param_file_path = ''
-    except getopt.GetoptError:
-        print('No arguments detected (-f).')
-
-    # set parameters
-    for opt, arg in opts:
-        if opt == '-f':
-            param_file_path = arg # parameter file path
+    parser = argparse.ArgumentParser(prog='python mm3_Agent.py',
+                                     description='Real-time analysis of mother machine data.')
+    parser.add_argument('-f', '--paramfile',  type=file,
+                        required=True, help='Yaml file containing parameters.')
+    namespace = parser.parse_args()
 
     # Load the project parameters file
-    if len(param_file_path) == 0:
-        raise ValueError("A parameter file must be specified (-f <filename>).")
     mm3.information('Loading experiment parameters.')
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     # Load the channel_masks file
-    with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
+    with open(os.path.join(p['ana_dir'], 'channel_masks.pkl'), 'r') as cmask_file:
         channel_masks = pickle.load(cmask_file)
 
     # Load specs file
-    with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
+    with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
         specs = yaml.safe_load(specs_file)
 
     # make list of FOVs to process (keys of specs file)
@@ -317,10 +316,16 @@ if __name__ == "__main__":
                 # send to multiprocessing
                 process_results[fov_id] = pool.apply_async(process_FOV_images,
                                           args=(fov_id, filenames, channel_masks, specs))
-                #process_FOV_images(fov_id, filenames, channel_masks, specs)
 
         pool.close()
         pool.join() # wait until analysis for every FOV is finished.
+
+        # loop version for debug
+        # for fov_id, filenames in images_by_fov.items():
+        #     # only send files to processing if there are more than x images
+        #     if len(filenames) >= 1:
+        #         mm3.information('Analyzing %d images for FOV %d.' % (len(filenames), fov_id))
+        #         process_results[fov_id] = process_FOV_images(fov_id, filenames, channel_masks, specs)
 
         # move the analyzed files, if the results were successful, to the analyzed list.
         for fov_id, result in process_results.iteritems():
