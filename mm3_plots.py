@@ -324,6 +324,64 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
 
     return Continuous_Lineages
 
+def find_generation_gap(cell, Cells, gen):
+    '''Finds how many continuous ancestors this cell has.'''
+
+    if cell.parent in Cells:
+        gen += 1
+        gen = find_generation_gap(Cells[cell.parent], Cells, gen)
+
+    return gen
+
+def return_ancestors(cell, Cells, ancestors):
+    '''Returns all ancestors of a cell. Returns them in reverse age.'''
+
+    if cell.parent in Cells:
+        ancestors.append(cell.parent)
+        ancestors = return_ancestors(Cells[cell.parent], Cells, ancestors)
+
+    return ancestors
+
+
+def find_lineages_of_length(Cells, n_gens=5, remove_ends=False):
+    '''Returns cell lineages of at least a certain length, indicated by n_gens.
+
+    Parameters
+    ----------
+    Cells - Dictionary of cell objects
+    n_gens - int. Minimum number generations in lineage to be included.
+    remove_ends : bool. Remove the first and last cell from the list. So number of minimum cells in a lineage is n_gens - 2.
+    '''
+
+    filtered_cells = []
+
+    for cell_id, cell_tmp in Cells.iteritems():
+        # find the last continuous daughter
+        last_daughter = find_last_daughter(cell_tmp, Cells)
+
+        # check if last daughter is n generations away from this cell
+        gen = 0
+        gen = find_generation_gap(last_daughter, Cells, gen)
+
+        if gen >= n_gens:
+            ancestors = return_ancestors(last_daughter, Cells, [last_daughter.id])
+
+            # remove first cell and last cell, they may be weird
+            if remove_ends:
+                ancestors = ancestors[1:-1]
+
+            filtered_cells += ancestors
+
+    # remove all the doubles
+    filtered_cells = sorted(list(set(filtered_cells)))
+
+    # add all the cells that made it back to a new dictionary.
+    Filtered_Cells = {}
+    for cell_id in filtered_cells:
+        Filtered_Cells[cell_id] = Cells[cell_id]
+
+    return Filtered_Cells
+
 def lineages_to_dict(Lineages):
     '''Converts the lineage structure of cells organized by peak back
     to a dictionary of cells. Useful for filtering but then using the
@@ -336,7 +394,6 @@ def lineages_to_dict(Lineages):
             Cells.update(cells)
 
     return Cells
-
 
 ### Statistics and analysis functions ##############################################################
 def stats_table(Cells_df):
