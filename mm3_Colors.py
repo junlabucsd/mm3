@@ -92,7 +92,7 @@ if __name__ == "__main__":
     mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     # load cell data dict
-    with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'r') as cell_file:
+    with open(os.path.join(p['cell_dir'], '20180611_cells.pkl'), 'r') as cell_file:
         Complete_Cells = pickle.load(cell_file)
 
     # create dictionary which organizes cells by fov and peak_id

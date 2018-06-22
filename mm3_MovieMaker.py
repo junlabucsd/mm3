@@ -166,11 +166,11 @@ if __name__ == "__main__":
     show_time_stamp = True
 
     # label properties
-    show_label = False
-    label1_text = 'Label 1'
+    show_label = True
+    label1_text = 'MOPS glucose 11AA'
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
-    shift_time = None
-    label2_text = 'Label 2'
+    shift_time = 162
+    label2_text = 'MOPS glucose'
 
     # scalebar properties
     show_scalebar = True
@@ -180,11 +180,11 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = False
+    show_green = True
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
+    show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
@@ -192,9 +192,9 @@ if __name__ == "__main__":
     auto_phase_levels = True # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 500, 6000
-    imin['green'], imax['green'] = 160, 350
-    imin['red'], imax['red'] = 115, 130
+    imin['phase'], imax['phase'] = 400, 6500
+    imin['green'], imax['green'] = 265, 430
+    imin['red'], imax['red'] = 280, 900
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -411,7 +411,7 @@ if __name__ == "__main__":
             if show_label:
                 label1 = np.fliplr(make_label(label1_text, fontface, size=15,
                                               angle=180)).astype('float64')
-                label1 = np.pad(label1, ((5, size_y - 5 - label1.shape[0]),
+                label1 = np.pad(label1, ((10, size_y - 10 - label1.shape[0]),
                                          (10, size_x - 10 - label1.shape[1])),
                                          mode='constant')
                 label1 /= 255.0

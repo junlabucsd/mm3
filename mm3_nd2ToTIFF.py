@@ -132,7 +132,7 @@ if __name__ == "__main__":
             # if there is more than one FOV (len(nd2f) != 1), make sure the user input
             # last time index is before the actual time index. Ignore it.
             if (p['image_start'] < 1):
-                p['image_start']=1
+                p['image_start'] = 1
             if len(nd2f) > 1 and len(nd2f) < p['image_end']:
                 p['image_end'] = len(nd2f)
             extraction_range = range(p['image_start'], p['image_end']+1)

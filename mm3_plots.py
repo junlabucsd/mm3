@@ -342,7 +342,6 @@ def return_ancestors(cell, Cells, ancestors):
 
     return ancestors
 
-
 def find_lineages_of_length(Cells, n_gens=5, remove_ends=False):
     '''Returns cell lineages of at least a certain length, indicated by n_gens.
 
@@ -428,7 +427,9 @@ def channel_locations(channel_file, filetype='specs'):
 
     '''
 
-    fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(4,4))
+
+    point_size = 10
 
     # Using the channel masks
     if filetype == 'channel_masks':
@@ -436,7 +437,7 @@ def channel_locations(channel_file, filetype='specs'):
         # print('FOV {} has {} channels'.format(key, len(values)))
             y = (np.ones(len(values))) + key - 1
             x = values.keys()
-            plt.scatter(x, y)
+            plt.scatter(x, y, s=point_size)
 
     # Using the specs file
     if filetype == 'specs':
@@ -447,21 +448,21 @@ def channel_locations(channel_file, filetype='specs'):
             # green for analyze (==1)
             greenx = [x[i] for i, v in enumerate(values.values()) if v == 1]
             greeny = [y[i] for i, v in enumerate(values.values()) if v == 1]
-            plt.scatter(greenx, greeny, color='g')
+            plt.scatter(greenx, greeny, color='g', s=point_size)
 
             # blue for empty (==0)
             bluex = [x[i] for i, v in enumerate(values.values()) if v == 0]
             bluey = [y[i] for i, v in enumerate(values.values()) if v == 0]
-            plt.scatter(bluex, bluey, color='b')
+            plt.scatter(bluex, bluey, color='b', s=point_size)
 
             # red for ignore (==-1)
             redx = [x[i] for i, v in enumerate(values.values()) if v == -1]
             redy = [y[i] for i, v in enumerate(values.values()) if v == -1]
-            plt.scatter(redx, redy, color='r')
+            plt.scatter(redx, redy, color='r', s=point_size)
 
-    plt.title('Channel locations across FOVs', fontsize=24)
-    plt.xlabel('Peak Position', fontsize=20)
-    plt.ylabel('FOV', fontsize=20)
+    plt.title('Channel locations across FOVs')
+    plt.xlabel('peak position [x pixel location of channel in TIFF]')
+    plt.ylabel('FOV')
 
     return fig
 
@@ -563,9 +564,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 5 # minimum bin size to display
+    binmin = 3 # minimum bin size to display
     bingrid = (20, 10) # how many bins to have in the x and y directions
-    moving_window = 5 # window to calculate moving stat
+    moving_window = 10 # window to calculate moving stat
 
     # bining parameters for each data type
     # bin_extent in within which bounds should bins go. (left, right, bottom, top)
