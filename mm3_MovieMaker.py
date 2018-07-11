@@ -167,10 +167,10 @@ if __name__ == "__main__":
 
     # label properties
     show_label = False
-    label1_text = 'Label 1'
+    label1_text = ''
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
     shift_time = None
-    label2_text = 'Label 2'
+    label2_text = ''
 
     # scalebar properties
     show_scalebar = True
@@ -184,7 +184,7 @@ if __name__ == "__main__":
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = False
+    show_red = True
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
@@ -192,9 +192,9 @@ if __name__ == "__main__":
     auto_phase_levels = True # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 1000, 5000
-    imin['green'], imax['green'] = 150, 300
-    imin['red'], imax['red'] = 150, 500
+    imin['phase'], imax['phase'] = 400, 6500
+    imin['green'], imax['green'] = 250, 1000
+    imin['red'], imax['red'] = 125, 150
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -392,7 +392,7 @@ if __name__ == "__main__":
 
             if show_time_stamp:
                 # put in time stamp
-                seconds = float(t * p['seconds_per_time_index'])
+                seconds = float((t-1) * p['seconds_per_time_index'])
                 mins = seconds / 60
                 hours = mins / 60
                 timedata = "%dhrs %02dmin" % (hours, mins % 60)
@@ -411,7 +411,7 @@ if __name__ == "__main__":
             if show_label:
                 label1 = np.fliplr(make_label(label1_text, fontface, size=15,
                                               angle=180)).astype('float64')
-                label1 = np.pad(label1, ((5, size_y - 5 - label1.shape[0]),
+                label1 = np.pad(label1, ((10, size_y - 10 - label1.shape[0]),
                                          (10, size_x - 10 - label1.shape[1])),
                                          mode='constant')
                 label1 /= 255.0

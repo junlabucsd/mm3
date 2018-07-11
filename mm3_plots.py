@@ -62,8 +62,11 @@ def cells2df(Cells, rescale=False):
 
     # columns to include
     columns = ['fov', 'peak', 'birth_time', 'division_time', 'birth_label',
-               'sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+               'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
     rescale_columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+
+    for cell_tmp in Cells:
+        Cells[cell_tmp].width = np.mean(Cells[cell_tmp].widths_w_div)
 
     # Make dataframe for plotting variables
     Cells_dict = cells2dict(Cells)
@@ -324,6 +327,63 @@ def find_continuous_lineages(Lineages, t1=0, t2=1000):
 
     return Continuous_Lineages
 
+def find_generation_gap(cell, Cells, gen):
+    '''Finds how many continuous ancestors this cell has.'''
+
+    if cell.parent in Cells:
+        gen += 1
+        gen = find_generation_gap(Cells[cell.parent], Cells, gen)
+
+    return gen
+
+def return_ancestors(cell, Cells, ancestors):
+    '''Returns all ancestors of a cell. Returns them in reverse age.'''
+
+    if cell.parent in Cells:
+        ancestors.append(cell.parent)
+        ancestors = return_ancestors(Cells[cell.parent], Cells, ancestors)
+
+    return ancestors
+
+def find_lineages_of_length(Cells, n_gens=5, remove_ends=False):
+    '''Returns cell lineages of at least a certain length, indicated by n_gens.
+
+    Parameters
+    ----------
+    Cells - Dictionary of cell objects
+    n_gens - int. Minimum number generations in lineage to be included.
+    remove_ends : bool. Remove the first and last cell from the list. So number of minimum cells in a lineage is n_gens - 2.
+    '''
+
+    filtered_cells = []
+
+    for cell_id, cell_tmp in Cells.iteritems():
+        # find the last continuous daughter
+        last_daughter = find_last_daughter(cell_tmp, Cells)
+
+        # check if last daughter is n generations away from this cell
+        gen = 0
+        gen = find_generation_gap(last_daughter, Cells, gen)
+
+        if gen >= n_gens:
+            ancestors = return_ancestors(last_daughter, Cells, [last_daughter.id])
+
+            # remove first cell and last cell, they may be weird
+            if remove_ends:
+                ancestors = ancestors[1:-1]
+
+            filtered_cells += ancestors
+
+    # remove all the doubles
+    filtered_cells = sorted(list(set(filtered_cells)))
+
+    # add all the cells that made it back to a new dictionary.
+    Filtered_Cells = {}
+    for cell_id in filtered_cells:
+        Filtered_Cells[cell_id] = Cells[cell_id]
+
+    return Filtered_Cells
+
 def lineages_to_dict(Lineages):
     '''Converts the lineage structure of cells organized by peak back
     to a dictionary of cells. Useful for filtering but then using the
@@ -337,13 +397,12 @@ def lineages_to_dict(Lineages):
 
     return Cells
 
-
 ### Statistics and analysis functions ##############################################################
 def stats_table(Cells_df):
     '''Returns a Pandas dataframe with statistics about the 6 major cell parameters.
     '''
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    columns = ['sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
     cell_stats = Cells_df[columns].describe() # This is a nifty function
 
     # add a CV row
@@ -371,7 +430,9 @@ def channel_locations(channel_file, filetype='specs'):
 
     '''
 
-    fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(4,4))
+
+    point_size = 10
 
     # Using the channel masks
     if filetype == 'channel_masks':
@@ -379,7 +440,7 @@ def channel_locations(channel_file, filetype='specs'):
         # print('FOV {} has {} channels'.format(key, len(values)))
             y = (np.ones(len(values))) + key - 1
             x = values.keys()
-            plt.scatter(x, y)
+            plt.scatter(x, y, s=point_size)
 
     # Using the specs file
     if filetype == 'specs':
@@ -390,21 +451,21 @@ def channel_locations(channel_file, filetype='specs'):
             # green for analyze (==1)
             greenx = [x[i] for i, v in enumerate(values.values()) if v == 1]
             greeny = [y[i] for i, v in enumerate(values.values()) if v == 1]
-            plt.scatter(greenx, greeny, color='g')
+            plt.scatter(greenx, greeny, color='g', s=point_size)
 
             # blue for empty (==0)
             bluex = [x[i] for i, v in enumerate(values.values()) if v == 0]
             bluey = [y[i] for i, v in enumerate(values.values()) if v == 0]
-            plt.scatter(bluex, bluey, color='b')
+            plt.scatter(bluex, bluey, color='b', s=point_size)
 
             # red for ignore (==-1)
             redx = [x[i] for i, v in enumerate(values.values()) if v == -1]
             redy = [y[i] for i, v in enumerate(values.values()) if v == -1]
-            plt.scatter(redx, redy, color='r')
+            plt.scatter(redx, redy, color='r', s=point_size)
 
-    plt.title('Channel locations across FOVs', fontsize=24)
-    plt.xlabel('Peak Position', fontsize=20)
-    plt.ylabel('FOV', fontsize=20)
+    plt.title('Channel locations across FOVs')
+    plt.xlabel('peak position [x pixel location of channel in TIFF]')
+    plt.ylabel('FOV')
 
     return fig
 
@@ -495,7 +556,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     '''
 
     # lists for plotting and formatting
-    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    columns = ['sb', 'elong_rate', 'width', 'tau', 'delta', 'septum_position']
     titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
               'Generation Time', 'Delta', 'Septum Position']
     ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
@@ -506,9 +567,9 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax = np.ravel(axes)
 
     # binning parameters, should be arguments
-    binmin = 5 # minimum bin size to display
+    binmin = 3 # minimum bin size to display
     bingrid = (20, 10) # how many bins to have in the x and y directions
-    moving_window = 5 # window to calculate moving stat
+    moving_window = 10 # window to calculate moving stat
 
     # bining parameters for each data type
     # bin_extent in within which bounds should bins go. (left, right, bottom, top)

@@ -4,11 +4,11 @@ warning off;
 
 %% load data
 
-dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180314_ecoli_29/analysis/picked/';
+dir_name = '../../analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
-px_to_mu = 0.11;
-t_int = 5.0;
+px_to_mu = 0.065;
+t_int = 2.0;
 
 %% extract and calculate all cell data
 
@@ -18,7 +18,7 @@ for i=1:numel(fnames)
     struct_tmp = load([dir_name fnames(i).name]);
     fnames_channel = fieldnames(struct_tmp.cell_list);
     L_channles = length(fnames_channel(:,1));
-  
+
     for j=1:L_channles
         fname_rec = fnames_channel{j,1};
         cell_temp = struct_tmp.cell_list.(fname_rec);
@@ -28,7 +28,7 @@ for i=1:numel(fnames)
         if cell_temp.birth_label ==1 && isfield(cell_temp,'initiation_time') == 1 % && isfield(cell_temp,'initiation_time_n') == 1  && cell_temp.lengths_w_div(end) < 20 %&& cell_temp.peak > 0 && cell_temp.peak < 2000  %only look at mother cells and only those have cell cycle information; %filter out filamentous cells
 
             cell_id( mother_cell_counter ) = {cell_temp.id} ;
-            
+
             generation_time( mother_cell_counter ) = double( cell_temp.tau ) ;
 
             newborn_length( mother_cell_counter ) = cell_temp.sb;
@@ -60,7 +60,7 @@ for i=1:numel(fnames)
             if length(length_temp)>2
             ft1 = fittype('a*x+b');
             Growth_time = t_int*double( cell_temp.times_w_div - cell_temp.times_w_div(1) );
-            Growth_length = px_to_mu*cell_temp.lengths_w_div; 
+            Growth_length = px_to_mu*cell_temp.lengths_w_div;
 
             fit_temp = fit(Growth_time',log(Growth_length)',ft1);
 
@@ -78,18 +78,18 @@ for i=1:numel(fnames)
             termination_mass( mother_cell_counter ) = cell_temp.termination_mass;
 
             % calculate occ of mother cell for volumn calculation
-            n_oc( mother_cell_counter) = cell_temp.n_oc ; 
-            
+            n_oc( mother_cell_counter) = cell_temp.n_oc ;
+
             B_period( mother_cell_counter ) = t_int*double(cell_temp.initiation_time - cell_temp.birth_time_m);
             C_period( mother_cell_counter ) = t_int*double(cell_temp.termination_time - cell_temp.initiation_time);
             D_period( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.termination_time);
             tau_cyc( mother_cell_counter ) = t_int*double(cell_temp.division_time - cell_temp.initiation_time);
-            
-          
+
+
             mother_cell_counter = mother_cell_counter + 1;
 
         end
-      
+
     end
     if mod(i,10)==0
         i
