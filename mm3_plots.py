@@ -62,8 +62,11 @@ def cells2df(Cells, rescale=False):
 
     # columns to include
     columns = ['fov', 'peak', 'birth_time', 'division_time', 'birth_label',
-               'sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+               'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
     rescale_columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+
+    for cell_tmp in Cells:
+        Cells[cell_tmp].width = np.mean(Cells[cell_tmp].widths_w_div)
 
     # Make dataframe for plotting variables
     Cells_dict = cells2dict(Cells)
@@ -399,7 +402,7 @@ def stats_table(Cells_df):
     '''Returns a Pandas dataframe with statistics about the 6 major cell parameters.
     '''
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    columns = ['sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
     cell_stats = Cells_df[columns].describe() # This is a nifty function
 
     # add a CV row
@@ -553,7 +556,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     '''
 
     # lists for plotting and formatting
-    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    columns = ['sb', 'elong_rate', 'width', 'tau', 'delta', 'septum_position']
     titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
               'Generation Time', 'Delta', 'Septum Position']
     ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']

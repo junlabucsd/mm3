@@ -2960,10 +2960,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
         The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
 
     '''
-
-    # width to sum over in pixels
-    line_width = 6
-
+    
     # Load data
     sub_stack = load_stack(fov_id, peak_id, color=plane)
     seg_stack = load_stack(fov_id, peak_id, color='seg')

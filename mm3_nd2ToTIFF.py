@@ -76,8 +76,8 @@ if __name__ == "__main__":
     number_of_rows = p['nd2ToTIFF']['number_of_rows']
 
     # cropping
-    vertical_crop = []
-    if number_of_rows == 1:
+    vertical_crop = False
+    if number_of_rows == 1 and p['nd2ToTIFF']['crop_ymin'] and p['nd2ToTIFF']['crop_ymax']:
         try:
             # This is for percentage crop
             vertical_crop = [p['nd2ToTIFF']['crop_ymin'], p['nd2ToTIFF']['crop_ymax']]
@@ -178,8 +178,7 @@ if __name__ == "__main__":
                     # get the pixel information
                     image_data = nd2f[t_id]
 
-                    # crop tiff if specified. Lots of flags for if there are double rows or
-                    # multiple colors
+                    # crop tiff if specified. Lots of flags for if there are double rows or  multiple colors
                     if vertical_crop:
                         # add extra axis to make below slicing simpler.
                         if len(image_data.shape) < 3:
@@ -187,6 +186,7 @@ if __name__ == "__main__":
 
                         # for just a simple crop
                         if number_of_rows == 1:
+
                             nc, H, W = image_data.shape
                             ylo = int(vertical_crop[0]*H)
                             yhi = int(vertical_crop[1]*H)

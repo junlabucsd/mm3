@@ -166,11 +166,11 @@ if __name__ == "__main__":
     show_time_stamp = True
 
     # label properties
-    show_label = True
-    label1_text = 'MOPS glucose 11AA'
+    show_label = False
+    label1_text = ''
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
-    shift_time = 162
-    label2_text = 'MOPS glucose'
+    shift_time = None
+    label2_text = ''
 
     # scalebar properties
     show_scalebar = True
@@ -180,7 +180,7 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = True
+    show_green = False
     fl_green_index = 1 # index of green channel.
     fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
@@ -193,8 +193,8 @@ if __name__ == "__main__":
     imin = {}
     imax = {}
     imin['phase'], imax['phase'] = 400, 6500
-    imin['green'], imax['green'] = 265, 430
-    imin['red'], imax['red'] = 280, 900
+    imin['green'], imax['green'] = 250, 1000
+    imin['red'], imax['red'] = 125, 150
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
