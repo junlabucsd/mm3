@@ -166,13 +166,13 @@ if __name__ == "__main__":
     show_time_stamp = True
 
     # label properties
-    show_label = False
-    label1_text = ''
+    show_label = True
+    label1_text = 'SJ1725 (FtsZ-mVenus clpX+) M9 100uM glucose (from spent)'
     # if shift time is set to a value, label2 will be displayed in place of label1 at that timepoint
-    shift_time = None
-    label2_text = ''
+    shift_time = 167
+    label2_text = 'SJ1725 (FtsZ-mVenus clpX+) M9 no glucose (from spent)'
 
-    # scalebar properties
+    # scalebar propertiest
     show_scalebar = True
     scalebar_length_um = 3
 
@@ -180,11 +180,11 @@ if __name__ == "__main__":
     show_phase = True
     phase_plane_index = 0 # index of the phase plane
 
-    show_green = False
+    show_green = True
     fl_green_index = 1 # index of green channel.
-    fl_green_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
+    fl_green_interval = 20 # how often the fluorescent image is taken. will hold image over rather than strobe
 
-    show_red = True
+    show_red = False
     fl_red_index = 2 # index of red fluorsecent channel.
     fl_red_interval = 1 # how often the fluorescent image is taken. will hold image over rather than strobe
 
@@ -192,9 +192,9 @@ if __name__ == "__main__":
     auto_phase_levels = True # set to true to find automatically
     imin = {}
     imax = {}
-    imin['phase'], imax['phase'] = 400, 6500
-    imin['green'], imax['green'] = 250, 1000
-    imin['red'], imax['red'] = 125, 150
+    imin['phase'], imax['phase'] = 120, 2500
+    imin['green'], imax['green'] = 200, 900
+    imin['red'], imax['red'] = 1000, 6000
 
     # soft defaults, overridden by command line parameters if specified
     param_file = ""
@@ -272,7 +272,7 @@ if __name__ == "__main__":
         size_x, size_y = image.shape[-1], image.shape[-2]
         size_x = (size_x / 2) * 2 # fixes bug if images don't have even dimensions with ffmpeg
         size_y = (size_y / 2) * 2
-        image = image[:, :size_y, :size_x]
+        image = image[:, :size_y, :size_x] # I don't think this does anything. 
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,

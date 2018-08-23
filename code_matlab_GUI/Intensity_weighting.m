@@ -2,12 +2,15 @@ clear all; clc;
 % close all;
 
 %% load data
-cell_data = load('/path/to/cells_foci.mat');
+% cell_data = load('/path/to/cells_foci.mat');
+% cell_data = load('/Volumes/JunLabSSD_04/bsub_unitcell/20180727_BS43_1/analysis/cell_data/cells_2160_foci.mat');
+% cell_data = load('/Volumes/JunLabSSD_04/bsub_unitcell/20180728_BS43_2/analysis/cell_data/cells_5958_foci.mat');
+cell_data = load('/Volumes/JunLabSSD_04/bsub_unitcell/20180803_BS43_3/analysis/cell_data/cells_3643_foci.mat');
 
 px_to_mu = 0.11;
-t_int = 2.0;
-start_cut = 0;
-end_cut = 1500;
+t_int = 3.0;
+start_cut = 100;
+end_cut = 250;
 
 % extract data
 L = length(fieldnames(cell_data));

@@ -4,11 +4,14 @@ warning off;
 
 %% load data
 
-dir_name = '../../analysis/picked/';
+% dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180727_BS43_1/analysis/picked/';
+% dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180728_BS43_2/analysis/picked/';
+% dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180803_BS43_3/analysis/picked/';
+dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180809_BS43_4/analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
-px_to_mu = 0.065;
-t_int = 2.0;
+px_to_mu = 0.11;
+t_int = 4.0;
 
 %% extract and calculate all cell data
 
