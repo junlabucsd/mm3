@@ -517,7 +517,7 @@ def violin_birth_label(Cells_df):
     farther down the channel are not being segmented well.
     '''
 
-    sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
+    # sns.set(style="whitegrid", palette="pastel", color_codes=True, font_scale=1.25)
 
     columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
     ylabels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
@@ -525,7 +525,7 @@ def violin_birth_label(Cells_df):
               'Generation Time', 'Elongation Rate', 'Septum Position']
 
     fig, axes = plt.subplots(nrows=len(columns), ncols=1,
-                            figsize=[10,2.5*len(columns)], squeeze=False)
+                            figsize=[8,2.5*len(columns)], squeeze=False)
     ax = np.ravel(axes)
 
     for i, column in enumerate(columns):
@@ -533,18 +533,18 @@ def violin_birth_label(Cells_df):
         sns.violinplot(x="birth_label", y=column, data=Cells_df,
                       scale="count", inner="quartile", ax=ax[i], lw=1)
 
-        ax[i].set_title(titles[i], size=18)
-        ax[i].set_ylabel(ylabels[i], size=16)
+        ax[i].set_title(titles[i])
+        ax[i].set_ylabel(ylabels[i])
         ax[i].set_xlabel('')
         ax[i].tick_params(axis='both', which='major', labelsize=10)
 
-    ax[i].set_xlabel('Birth Label', size=16)
+    ax[i].set_xlabel('Birth Label')
 
     # plt.tight_layout()
 
     # Make title, need a little extra space
     plt.subplots_adjust(top=.925, hspace=0.5)
-    fig.suptitle('Cell Parameters vs Birth Label', size=20)
+    fig.suptitle('Cell Parameters vs Birth Label')
 
     sns.despine()
 
@@ -556,7 +556,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     '''
 
     # lists for plotting and formatting
-    columns = ['sb', 'elong_rate', 'width', 'tau', 'delta', 'septum_position']
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
     titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
               'Generation Time', 'Delta', 'Septum Position']
     ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
@@ -609,7 +609,7 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
-    ax[5].legend(['%s minute binned average' % moving_window], loc='lower right')
+    ax[5].legend(['%s frame binned average' % moving_window], loc='lower right')
     ax[4].set_xlabel('%s [frame]' % time_mark)
     ax[5].set_xlabel('%s [frame]' % time_mark)
 
@@ -687,11 +687,11 @@ def plot_traces(Cells, trace_limit=1000):
         Plotting all the traces can be time consuming and mask the trends in the graph.
     '''
 
-    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    # sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
     ### Traces #################################################################################
-    fig, axes = plt.subplots(ncols=1, nrows=2, figsize=(10, 10))
-    ax = axes.flat # same as axes.ravel()
+    fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(8, 4))
+    ax = [axes] # same as axes.ravel()
 
     if trace_limit:
         cell_id_subset = sample(list(Cells), trace_limit)
@@ -699,23 +699,26 @@ def plot_traces(Cells, trace_limit=1000):
 
     for cell_id, Cell in Cells.iteritems():
 
-        ax[0].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
-        ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
+        ax[0].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.25)
+        # ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
 
-    ax[0].set_title('Cell Length vs Time', size=18)
-    ax[0].set_ylabel('Length [um]', size=16)
-    ax[0].set_ylim([0, 8])
+    # ax[0].set_title('cell length vs time')
+    ax[0].set_ylabel('length [$\mu$m]')
+    ax[0].set_xlabel('time [frame]')
 
-    ax[1].set_xlabel('Frame [min/5]', size=16)
-    ax[1].set_ylabel('Length [um] (log scale)', size=16)
-    ax[1].set_yscale('symlog')
-    ax[1].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
-    ax[1].set_yticks([2, 4, 8])
-    ax[1].set_ylim([2, 8])
+    # ax[0].set_ylim([0, 8])
 
-    plt.subplots_adjust(top=0.925, hspace=0.1)
+    # ax[1].set_xlabel('Frame [min/5]', size=16)
+    # ax[1].set_ylabel('Length [um] (log scale)', size=16)
+    # ax[1].set_yscale('symlog')
+    # ax[1].yaxis.set_major_formatter(mpl.ticker.FormatStrFormatter("%d"))
+    # ax[1].set_yticks([2, 4, 8])
+    # ax[1].set_ylim([2, 8])
+
+    # plt.subplots_adjust(top=0.925, hspace=0.1)
 
     sns.despine()
+    plt.tight_layout()
 
     return fig, ax
 
@@ -1074,8 +1077,6 @@ def plot_distributions(Cells_df):
     Plot distributions of the 6 major parameters
     '''
 
-    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
-
     columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
     xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
     titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
@@ -1084,8 +1085,7 @@ def plot_distributions(Cells_df):
     kde_options = {'lw' : 2, 'linestyle' : '--', 'color' : 'b'}
 
     # create figure, going to apply graphs to each axis sequentially
-    fig, axes = plt.subplots(nrows=len(columns)/2, ncols=2,
-                            figsize=[15,5*len(columns)/2], squeeze=True)
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=[8,10])
     ax = np.ravel(axes)
 
     # Plot each distribution
@@ -1099,7 +1099,7 @@ def plot_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = np.array(range(0, int(data.max())+1, 5)) + 2.5
+            bin_edges = np.array(range(0, int(data.max())+1, 4)) + 2
             sns.distplot(data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
@@ -1107,17 +1107,18 @@ def plot_distributions(Cells_df):
             sns.distplot(data, ax=ax[i], bins=25,
                          hist_kws=hist_options, kde_kws=kde_options)
 
-        ax[i].set_title(titles[i], size=18)
-        ax[i].set_xlabel(xlabels[i], size=16)
+        ax[i].set_title(titles[i])
+        ax[i].set_xlabel(xlabels[i])
         ax[i].get_yaxis().set_ticks([])
-        ax[i].set_ylabel('pdf', size=16)
-        ax[i].legend(['$\mu$=%.3f, CV=%.2f' % (data_mean, data_cv)], fontsize=14)
+        # ax[i].set_ylabel('pdf')
+        ax[i].legend(['$\mu$=%.3f, CV=%.2f' % (data_mean, data_cv)], fontsize=SMALL_SIZE, loc=1)
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.925, hspace=0.35)
-    fig.suptitle('Cell Parameter Distributions', size=24)
+    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.35)
+    # fig.suptitle('Cell Parameter Distributions')
 
-    sns.despine()
+    sns.despine(left=True)
 
     return fig, ax
 
@@ -1126,21 +1127,20 @@ def plot_rescaled_distributions(Cells_df):
     Plot the 6 major cell distributions with all values normalized by the mean.
     '''
 
-    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    # sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
 
     columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
     # xlabels = ['Rescaled Length at Birth', 'Rescaled Length at Division', 'Rescaled Delta',
     #           'Rescaled Generation Time', 'Rescaled Elongation Rate', 'Rescaled Septum Position']
-    xlabels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>',
+    xlabels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta_d$ /<$\Delta_d$>',
                '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
                '$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>']
     hist_options = {'histtype' : 'step', 'lw' : 2, 'color' : 'b'}
     kde_options = {'lw' : 2, 'linestyle' : '--', 'color' : 'b'}
 
     # create figure, going to apply graphs to each axis sequentially
-    fig, axes = plt.subplots(nrows=1, ncols=len(columns),
-                             figsize=[15, 5], squeeze=False)
-    ax = np.ravel(axes)
+    fig, axes = plt.subplots(nrows=1, ncols=len(columns), figsize=[8, 3])
+    ax = axes.flat
 
     # Plot each distribution
     for i, column in enumerate(columns):
@@ -1155,28 +1155,29 @@ def plot_rescaled_distributions(Cells_df):
 
         # set tau bins to be in 1 minute intervals
         if column == 'tau':
-            bin_edges = (np.array(range(0, int(data.max())+1, 2)) + 1) / data_mean
+            bin_edges = (np.array(range(0, int(data.max())+1, 4)) + 1) / data_mean
             sns.distplot(plot_data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
         else:
-            sns.distplot(plot_data, ax=ax[i], bins=25,
+            bin_edges = (np.arange(0.4, 1.6, 0.05))
+            sns.distplot(plot_data, ax=ax[i], bins=bin_edges,
                          hist_kws=hist_options, kde_kws=kde_options)
 
-        ax[i].set_xlabel(xlabels[i], size=16)
+        ax[i].set_xlabel(xlabels[i])
         ax[i].set_xlim([0.4, 1.6])
         ax[i].get_yaxis().set_visible(False)
         # ax[i].legend(['CV=%.2f' % data_cv], size=12)
         # plt.legend(markerscale=0) # this will remove the line next the label
-        ax[i].annotate('CV=%.2f' % data_cv, xy=(0.75,0.85), xycoords='axes fraction', size=12)
+        ax[i].annotate('CV=%.2f' % data_cv, xy=(0.75,0.85), xycoords='axes fraction')
 
         for t in ax[i].get_xticklabels():
             t.set(rotation=45)
 
     # Make title, need a little extra space
     plt.tight_layout()
-    plt.subplots_adjust(top=0.85, hspace=0.35, left=None, right=None)
-    fig.suptitle('Rescaled Cell Parameter Distributions', size=24)
+    plt.subplots_adjust(top=0.9, hspace=0.35, left=None, right=None)
+    fig.suptitle('Rescaled cell parameter distributions')
 
     sns.despine(left=True)
 
@@ -1190,12 +1191,10 @@ def plot_correlations(Cells_df, rescale=False):
         If rescale is set to True, then axis labeling reflects rescaled data.
     '''
 
-    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
-
     columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    titles = ['Length at Birth', 'Length at Division', 'Delta',
-                  'Generation Time', 'Elongation Rate', 'Septum Position']
-    labels = ['$\mu$m', '$\mu$m', '$\mu$m', 'min', '$\lambda$', 'daughter/mother']
+    labels = ['$L_b$ [$\mu$m]', '$L_d$ [$\mu$m]', '$\Delta$ [$\mu$m]',
+               '$\\tau$ [min]', '$\lambda$ [1/hours]',
+               '$L_\\frac{1}{2}$']
     rlabels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>',
                '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
                '$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>']
@@ -1205,34 +1204,33 @@ def plot_correlations(Cells_df, rescale=False):
                      plot_kws={'scatter':True,
                                'x_bins':10,
                                'scatter_kws':{'alpha':0.25}})
+    g.fig.set_size_inches([8,8])
 
     # Make title, need a little extra space
-    plt.subplots_adjust(top=0.95, left=0.075, right=0.95)
-    g.fig.suptitle('Correlations and Distributions', size=24)
+    # plt.subplots_adjust(top=0.95, left=0.075, right=0.95)
+    # g.fig.suptitle('Correlations and Distributions', size=24)
 
     for i, ax in enumerate(g.axes.flatten()):
 
         if not rescale:
-            if i <= 5:
-                ax.set_title(titles[i], size=16)
             if i % 6 == 0:
-                ax.set_ylabel(titles[i / 6], size=16)
+                ax.set_ylabel(labels[int(i / 6)])
             if i >= 30:
-                ax.set_xlabel(labels[i - 30], size=16)
+                ax.set_xlabel(labels[i - 30])
 
         if rescale:
             ax.set_ylim([0.4, 1.6])
             ax.set_xlim([0.4, 1.6])
 
-            # if i <= 5:
-            #     ax.set_title(titles[i], size=16)
             if i % 6 == 0:
-                ax.set_ylabel(rlabels[i / 6], size=16)
+                ax.set_ylabel(rlabels[int(i / 6)])
             if i >= 30:
-                ax.set_xlabel(rlabels[i - 30], size=16)
+                ax.set_xlabel(rlabels[i - 30])
+
 
         for t in ax.get_xticklabels():
             t.set(rotation=45)
+
 
     return g
 

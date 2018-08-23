@@ -7,7 +7,7 @@ warning off;
 dir_name = '../../analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
-px_to_mu = 0.065;
+px_to_mu = 0.11;
 t_int = 2.0;
 
 %% extract and calculate all cell data

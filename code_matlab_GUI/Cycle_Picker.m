@@ -66,6 +66,7 @@ handles.n_oc = 2; %number of overlapping cell cycle (default value)
 handles.xlim_max = 300;
 handles.ylim_max = 7;
 handles.time_int = 2;
+
 %%%
 
 if exist([handles.dir_name 'picked/']) == 0
@@ -304,8 +305,8 @@ function pushbutton2_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 
-handles.channle_idx = handles.channle_idx-1;
-
+% % handles.channle_idx = handles.channle_idx-1;
+% handles.channle_idx = 60;
 cla;
 
 handles.n_oc_curr = handles.n_oc; %restore the current number of overlapping cycles to default

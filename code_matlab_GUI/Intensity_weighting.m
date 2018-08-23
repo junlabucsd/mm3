@@ -1,4 +1,4 @@
-clear all; clc; 
+clear all; clc;
 % close all;
 
 %% load data
@@ -6,8 +6,8 @@ cell_data = load('/path/to/cells_foci.mat');
 
 px_to_mu = 0.11;
 t_int = 2.0;
-start_cut = 0;
-end_cut = 1500;
+start_cut = 100;
+end_cut = 250;
 
 % extract data
 L = length(fieldnames(cell_data));
@@ -18,15 +18,15 @@ Foci_all = [];
 
 
 for i = 1:L
-    
+
     N = length( cell_data.(fnames{i}).times );
-          
-    channel = cell_data.(fnames{i}); 
-    
-    if isempty(channel.foci_h) == 0 && channel.division_time < end_cut %&& channel.peak > 0 && channel.peak < 2000 
-    
+
+    channel = cell_data.(fnames{i});
+
+    if isempty(channel.foci_h) == 0 && channel.division_time < end_cut %&& channel.peak > 0 && channel.peak < 2000
+
         for j = 1:N
-            
+
             if isempty(channel.foci_h) == 0
 
                 iscell_foci = double(iscell(channel.foci_h));
@@ -37,18 +37,18 @@ for i = 1:L
 
                 if iscell_foci == 0
                     Foci_all = [Foci_all; [channel.foci_h(j,1)']];
-                end 
-                
+                end
+
             end
 
         end
-        
+
     end
-    
+
     if mod(i,100)==0
         i
     end
-    
+
 end
 
 % save('../../analysis/IW_foci_20171026.mat');
@@ -76,11 +76,11 @@ positions = [400, 400, 420, 400];
 % %-------------Fitted Peak intensity of focus------------
 %-------------Total intensity of focus------------
 bin_wid4 = 2*mean(Foci_all(:,1))/bin_wid_scale;
-      
+
 fig = figure;
 set(fig,'Position',positions(1,:));
 hold on;
-      
+
 [f, x] = hist(Foci_all(:,1), (max(Foci_all(:,1))-min(Foci_all(:,1)))/bin_wid4);
 h1 = plot(x,f/length(foci_counter));
 h1.Color = colors(1,:);
@@ -89,12 +89,12 @@ set(h1,'LineWidth',1,'LineStyle','-');
 
 set(gca,'YScale','linear','YTick',[],'YTickLabel',{});
 
-% xlabel('Total intensity of focus (AU)','fontsize',20) 
+% xlabel('Total intensity of focus (AU)','fontsize',20)
 % set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240]*1e2,'XTickLabel',{'0','','','','1.2\times10^4','','','','2.4\times10^4'})
 set(gca,'XScale','linear','XTick',[0 30 60 90 120 150 180 210 240]*2e2,'XTickLabel',{'','','','','','','','',''})
 xlim([0 mean(Foci_all(:,1))+5*std(Foci_all(:,1))])
 
-set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1]) 
+set(gca,'TickLength',[0.025 0.05],'fontsize',20,'TickDir','out','PlotBoxAspectRatio',[1 1 1])
 
 %% fit the intensity weighting distribution
 % close all;
@@ -132,4 +132,3 @@ for i=1:length(x)-1
         thr_x = (x(i+1)+x(i))/2;
     end
 end
-

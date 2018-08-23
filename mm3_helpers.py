@@ -1363,7 +1363,7 @@ def subtract_fluor(image_pair):
                 [[np.int(.5*pad_row_length), pad_row_length-np.int(.5*pad_row_length)],
                 [np.int(.5*pad_column_length),  pad_column_length-np.int(.5*pad_column_length)],
                 [0,0]], 'edge')
-            print('size adjusted 1')
+            # mm3.information('size adjusted 1')
         empty_size = np.shape(empty_channel)[:2]
         if crop_size[0] < empty_size[0] or crop_size[1] < empty_size[1]:
             empty_channel = empty_channel[:crop_size[0], :crop_size[1],]
