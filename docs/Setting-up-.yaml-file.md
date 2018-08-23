@@ -42,12 +42,6 @@ Options: `'TIFF'` or `'HDF5'`
 
 mm3 supports saving processed images (sliced, empty, subtracted, and segmented channel stacks) to either TIFF stacks per channel or into a single HDF5 file per one FOV. TIFF stacks are a little more familiar for debugging. Using HDF5 is a little faster and the final file size is smaller. HDF5 is required if doing real-time analysis.
 
-### Indicate picture interval.
-
-`seconds_per_time_index: 60`
-
-This number is needed for creating the time stamps during movie making.
-
 ### Indicate which color channel (plane) has the phase images.
 
 `phase_plane: 'c1'`
@@ -153,11 +147,15 @@ Regions only less than this value down the channel from the closed end will be c
 
 `new_cell_region_cutoff: 2`
 
-Regions with values only less than or equal to this number will be considered to start new cells. The mother cell has region value 1. 
+Regions with values only less than or equal to this number will be considered to start new cells. The mother cell has region value 1.
 
 ### Set movie making parameters.
 
 The following parameters are only used by mm3_MovieMaker.py
+
+`seconds_per_time_index: 60`
+
+This number is needed for creating the time stamps during movie making.
 
 `movie_directory: 'movies/`
 

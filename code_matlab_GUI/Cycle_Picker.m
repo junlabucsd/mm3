@@ -57,54 +57,15 @@ clc;
 % close all;
 
 %-------------start pre-prosessing-----------
-% handles.dir_name = '../../analysis/';
-% handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
-% handles.px_to_mu = 0.065;
-% handles.IW_thr = 2900; % threshold of intensity weighting
-% handles.n_oc = 2; %number of overlapping cell cycle (default value)
-% 
-% handles.xlim_max = 300;
-% handles.ylim_max = 7;
-% handles.time_int = 2;
-%%%
-% handles.dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180727_BS43_1/analysis/';
-% handles.cell_data = load([handles.dir_name 'cell_data/cells_2160_foci.mat']);
+handles.dir_name = '../../analysis/';
+handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
+handles.px_to_mu = 0.065;
+handles.IW_thr = 2900; % threshold of intensity weighting
+handles.n_oc = 2; %number of overlapping cell cycle (default value)
 
-% handles.dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180728_BS43_2/analysis/';
-% handles.cell_data = load([handles.dir_name 'cell_data/cells_5958_foci.mat']);
-% 
-% handles.px_to_mu = 0.11;
-% handles.IW_thr = 10^4; % threshold of intensity weighting
-% handles.n_oc = 2; %number of overlapping cell cycle (default value)
-% 
-% handles.xlim_max = 450;
-% handles.ylim_max = 8;
-% handles.time_int = 2;
-
-% '/Volumes/JunLabSSD_04/bsub_unitcell/20180803_BS43_3/analysis/cell_data/cells_3643_foci.mat'
-% 
-% handles.dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180803_BS43_3/analysis/';
-% handles.cell_data = load([handles.dir_name '/cell_data/cells_3643_foci.mat']);
-% 
-% handles.px_to_mu = 0.11;
-% handles.IW_thr = 10^4; % threshold of intensity weighting
-% handles.n_oc = 3; %number of overlapping cell cycle (default value)
-% 
-% handles.xlim_max = 300;
-% handles.ylim_max = 10;
-% handles.time_int = 3;
-
-handles.dir_name = '/Volumes/JunLabSSD_04/bsub_unitcell/20180809_BS43_4/analysis/';
-handles.cell_data = load([handles.dir_name '/cell_data/cells_1264_foci.mat']);
-
-handles.px_to_mu = 0.11;
-handles.IW_thr = 0.5 * 10^4; % threshold of intensity weighting
-handles.n_oc = 3; %number of overlapping cell cycle (default value)
-
-handles.xlim_max = 250;
-handles.ylim_max = 14;
-handles.time_int = 4;
-
+handles.xlim_max = 300;
+handles.ylim_max = 7;
+handles.time_int = 2;
 
 %%%
 

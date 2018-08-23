@@ -4,7 +4,7 @@ warning off;
 
 %% load data
 
-dir_name = '/Volumes/JunLabSSD_04/shift/ecoli/20180301_ecoli_26/analysis_photo/picked/';
+dir_name = '../../analysis/picked/';;
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.065;
@@ -18,7 +18,7 @@ for i=1:numel(fnames)
     struct_tmp = load([dir_name fnames(i).name]);
     fnames_channel = fieldnames(struct_tmp.cell_list);
     L_channles = length(fnames_channel(:,1));
-  
+
     for j=1:L_channles
         cell_g2_id = fnames_channel{j,1};
         cell_g2_temp = struct_tmp.cell_list.(cell_g2_id);
@@ -40,7 +40,7 @@ for i=1:numel(fnames)
 %             if cell_g2_temp.lengths_w_div(end) < 20 && isfield(cell_g3_temp,'initiation_time') == 1  && isfield(cell_g3_temp,'initiation_time_n') == 1 && isfield(cell_g3_temp,'initiation_time_n2') == 0 && cell_g3_temp.n_oc_n == 2 && cell_g3_temp.lengths_w_div(end) < 20 %filter out filamentous cells
 
 
-                
+
                 %----------parameters for mother generation--------
                 generation_time_g2( mother_cell_counter ) = double( cell_g2_temp.tau ) ;
 
@@ -70,7 +70,7 @@ for i=1:numel(fnames)
                 if length(length_g2_temp)>2
                     ft1 = fittype('a*x+b');
                     Growth_time = t_int*double( cell_g2_temp.times_w_div - cell_g2_temp.times_w_div(1) );
-                    Growth_length = px_to_mu*cell_g2_temp.lengths_w_div; 
+                    Growth_length = px_to_mu*cell_g2_temp.lengths_w_div;
 
                     fit_temp = fit(Growth_time',log(Growth_length)',ft1);
 
@@ -122,7 +122,7 @@ for i=1:numel(fnames)
                 if length(length_g3_temp)>2
                     ft1 = fittype('a*x+b');
                     Growth_time = t_int*double( cell_g3_temp.times_w_div - cell_g3_temp.times_w_div(1) );
-                    Growth_length = px_to_mu*cell_g3_temp.lengths_w_div; 
+                    Growth_length = px_to_mu*cell_g3_temp.lengths_w_div;
 
                     fit_temp = fit(Growth_time',log(Growth_length)',ft1);
 
@@ -147,10 +147,10 @@ for i=1:numel(fnames)
                 mother_cell_counter = mother_cell_counter + 1;
 
             end
-                
-            
+
+
         end
-      
+
     end
     if mod(i,10)==0
         i
