@@ -106,12 +106,13 @@ new_cell_region_cutoff: 2
 
 nd2ToTIFF:
   number_of_rows : 1
-  # comment the cropping parameters out if you don't want them.
-  # crop_ymin : # 0.05
-  # crop_ymax : # 0.95
-  # 2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
+  crop_ymin : # 0.05
+  crop_ymax : # 0.95
+  2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
   tiff_compress : 5 # integer 1-9 for level of compression.
   external_directory : # path to location of .nd2 if not in exp. dir.
+  image_start: 1
+  image_end: None
 
 compile:
   do_metadata: True
@@ -123,8 +124,8 @@ compile:
 channel_picker:
   do_crosscorrs: True
   interactive : True
-  first_image : 1 # image index to show on top row
-  last_image : -1 # image index to show on middle row
+  first_image : 10 # image index to show on top row
+  last_image : 200 # image index to show on middle row
 
 subtract:
   do_empties: True
@@ -138,26 +139,18 @@ segment:
 # parameters for mm3_MovieMaker_alternative.py
 movie:
   t0:
-  tN: 200
+  tN:
   directory: 'movies'
   background: 2
-  overlay: [3]
+  overlay: [0,1]
   #overlay: leave empty if no overlay
-  ratiometric:
-          channel_num: 0
-          channel_den: 1
-          channel_new: 3
-          bg_subtract: True # if None the default is True
-          bg_diff: # Default is 1.5
-          bin_neighbors: 1 # default 0
   channels:
     2:
       rgb: [255,255,255] # rgb color choose [255,255,255] for phase contrast
-      min:  # use min, max to define dynamic range of image
-      max:
+      min: 100 # use min, max to define dynamic range of image
+      max: 4000
       alpha: 0.7 # alpha (only relevant if channel is in overlay list)
       #xlo: 100 # value from the original 16-bit grayscale image for masking in blending operation (alpha will be 0 for value below this threshold)
-      histogram: #plot or not the histogram for concatenated data (not implemented yet).
     0:
       rgb: [130,0,200]
       min: 100
@@ -168,27 +161,38 @@ movie:
       min: 100
       alpha: 0.30
       xlo: 250
-    3:
-      rgb: [255,255,0]
-      alpha: 0.30
   fps: 20
 
-# set a subdirectory name to contain movies for this experiment
-movie_directory: 'movies/'
-
-# nominal time between indexes for a single FOV used during image acquisition
-seconds_per_time_index: 60
-
-# fps set the framerate per second
-fps: 24
-
-# image start for movie making. zero indexed
-image_start: 0
-
-# image end for movie making. If this value exceeds the maximum index value
-# present in an experiment, it will be silently ignored
-# This is also used for nd2ToTIFF
-image_end: 10000
+# parameters for mm3_MovieMaker
+moviemaker:
+  movie_directory: 'movies/'   # subdirectory in exp folder
+  seconds_per_time_index: 120   # used for time stamp
+  fps: 15 # frames per second
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end: None
+  show_time_stamp: True
+  show_label: True
+  label1_text: 'Label 1'
+  shift_time: None
+  label2_text: '' # will show after shift time
+  show_scalebar: True
+  scalebar_length_um: 3
+  # color management
+  show_phase: True
+  auto_phase_levels: True # set to true to find automatically
+  ph_min: 400 # will be ignored if auto_phase_levels is True
+  ph_max: 6000
+  phase_plane_index: 0 # index of the phase plane
+  show_green: False
+  gr_min: 150
+  gr_max: 300
+  fl_green_index: 1 # index of green channel.
+  fl_green_interval: 1 # relative to phase. Avoids strobe
+  show_red: False
+  rd_min: 120
+  rd_max: 170
+  fl_red_index: 2 # index of red fluorsecent channel.
+  fl_red_interval: 1
 
 ### foci_lap detection parameters ##############################################
 foci:
