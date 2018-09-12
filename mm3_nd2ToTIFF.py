@@ -131,11 +131,15 @@ if __name__ == "__main__":
             # it is zero indexed to grab from nd2, but TIFF naming starts at 1.
             # if there is more than one FOV (len(nd2f) != 1), make sure the user input
             # last time index is before the actual time index. Ignore it.
-            if (p['image_start'] < 1):
-                p['image_start'] = 1
-            if len(nd2f) > 1 and len(nd2f) < p['image_end']:
-                p['image_end'] = len(nd2f)
-            extraction_range = range(p['image_start'], p['image_end']+1)
+            if (p['nd2ToTIFF']['image_start'] < 1):
+                p['nd2ToTIFF']['image_start'] = 1
+            if p['nd2ToTIFF']['image_end']:
+                if len(nd2f) > 1 and len(nd2f) < p['nd2ToTIFF']['image_end']:
+                    p['nd2ToTIFF']['image_end'] = len(nd2f)
+            else:
+                p['nd2ToTIFF']['image_end'] = len(nd2f)
+            extraction_range = range(p['nd2ToTIFF']['image_start'],
+                                     p['nd2ToTIFF']['image_end']+1)
 
             # loop through time points
             for t in extraction_range:
