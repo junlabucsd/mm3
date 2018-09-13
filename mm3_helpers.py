@@ -1893,7 +1893,6 @@ class Cell():
 
         # generation time. Use more accurate times but round them to integer minutes
         self.tau = np.around((self.abs_times[-1] - self.abs_times[0]) / 60.0)
-        old_tau = (self.division_time - self.birth_time) * params['seconds_per_time_index'] / 60.0
 
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
@@ -2007,7 +2006,7 @@ def feretdiameter(region):
 
     #####################
     # calculate cell width
-    # draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length = 0.4, to avoid constriction in midcell
+    # draw 2 parallel lines along the short axis line spaced by 0.8*quarter of length = 0.4, to avoid  in midcell
 
     # limit to points in each half
     W_coords = []
@@ -2960,7 +2959,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
         The suffix of the channel to analyze. 'c1', 'c2', 'sub_c2', etc.
 
     '''
-    
+
     # Load data
     sub_stack = load_stack(fov_id, peak_id, color=plane)
     seg_stack = load_stack(fov_id, peak_id, color='seg')
@@ -2982,6 +2981,8 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
         midcell_sums = [] # holds sum of pixel values in midcell area
         midcell_vars = [] # variances
 
+        coeffs_2nd = [] # coeffiients for fitting
+
         # loop through each time point for this cell
         for n, t in enumerate(Cell.times):
             # Make mask of subtracted image
@@ -2997,7 +2998,6 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
             slice_w = np.around(width/2).astype('int') + 3
             slice_l = slice_w
 
-
             # rotate box and then slice out area around centroid
             if orientation > 0:
                 rot_angle = 90 - orientation * (180 / np.pi)
@@ -3010,13 +3010,45 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
             cropped_md = rotated[centroid[0]-slice_l:centroid[0]+slice_l,
                                  centroid[1]-slice_w:centroid[1]+slice_w]
 
-            midcell_imgs.append(cropped_md)
+            # sum across with widths
+            md_widths = np.array([np.around(sum(row),5) for row in cropped_md])
+
+            # fit widths
+            x_pixels = np.arange(1, len(md_widths)+1) - (len(md_widths)+1)/2
+            p_guess = (1, 1, 1)
+            popt, pcov = curve_fit(poly2o, x_pixels, md_widths, p0=p_guess)
+            a, b, c = popt
+            # save coefficients
+            coeffs_2nd.append(a)
+
+            # go backwards through coeeficients and find at which index the coeff becomes negative.
+            constriction_index = None
+            for i, coeff in enumerate(reversed(coeffs_2nd), start=0):
+                if coeff < 0:
+                    constriction_index = i
+                    break
+
+            # fix index
+            if constriction_index == None:
+                constriction_index = len(coeffs_2nd) - 1 # make it last point if it was not found
+            else:
+                constriction_index = len(coeffs_2nd) - constriction_index - 1
+
+            # midcell_imgs.append(cropped_md)
             # midcell_sums.append(np.sum(cropped_md))
             # midcell_vars.append(np.var(cropped_md))
 
         # append whole profile, using plane name
-        setattr(Cell, 'md_image_'+plane, midcell_imgs)
+        # setattr(Cell, 'md_image_'+plane, midcell_imgs)
         # setattr(Cell, 'md_sums', midcell_sums)
         # setattr(Cell, 'md_vars', midcell_vars)
 
+        setattr(Cell, 'constriction_time', Cell.times[constriction_index])
+
     return
+
+def poly2o(x, a, b, c):
+    '''Second order polynomial of the form
+       y = a*x^2 + bx + c'''
+
+    return a*x**2 + b*x + c
