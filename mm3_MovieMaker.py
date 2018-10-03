@@ -272,7 +272,6 @@ if __name__ == "__main__":
         size_x, size_y = image.shape[-1], image.shape[-2]
         size_x = (size_x / 2) * 2 # fixes bug if images don't have even dimensions with ffmpeg
         size_y = (size_y / 2) * 2
-        image = image[:, :size_y, :size_x] # I don't think this does anything.
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -310,7 +309,8 @@ if __name__ == "__main__":
                 continue
 
             image_data = tiff.imread(img) # get the image
-
+            image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
+            
             # make phase stack
             if show_phase:
                 if len(image_data.shape) > 2:
