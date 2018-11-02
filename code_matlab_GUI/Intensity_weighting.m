@@ -5,7 +5,6 @@ clear all; clc;
 cell_data = load('/path/to/cells_foci.mat');
 
 px_to_mu = 0.11;
-t_int = 2.0;
 start_cut = 100;
 end_cut = 250;
 

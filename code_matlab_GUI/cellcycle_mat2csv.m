@@ -2,10 +2,6 @@
 
 % directory from which to load and save data
 % data_dir = '../../analysis/cell_data/';
-% data_dir = '/Volumes/JunLabSSD_04/bsub_unitcell/20180727_BS43_1/analysis/cell_data/';
-% data_dir = '/Volumes/JunLabSSD_04/bsub_unitcell/20180728_BS43_2/analysis/cell_data/';
-% data_dir = '/Volumes/JunLabSSD_04/bsub_unitcell/20180803_BS43_3/analysis/cell_data/';
-data_dir = '/Volumes/JunLabSSD_04/bsub_unitcell/20180809_BS43_4/analysis/cell_data/';
 
 % load output from stat_cell_param
 % load([data_dir 'cell_cycle_stat_GUI.mat']);

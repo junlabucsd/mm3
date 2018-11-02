@@ -4,9 +4,9 @@ fov_index = find(fnames_sort(:,1) == channels(channle_idx,1));
 fnames_fov = fnames_sort(fov_index,:);
 
 channel_index = find(fnames_fov(:,2) == channels(channle_idx,2));
-fnames_channel = fnames_fov(channel_index,:);
+fnames_channel = fnames_fov(channel_index,:); % cell numeric identifiers
 
-L_channles = length(fnames_channel(:,1));
+L_channles = length(fnames_channel(:,1)); 
 
 foci_list = [0.0 0.0];
 birth_list = 0.0;
@@ -25,9 +25,7 @@ cmap = colormap(gray);
 
 for k = 1:L_channles
     fname_rec = ['f' num2str(fnames_channel(k,1),'%.2d') 'p' num2str(fnames_channel(k,2),'%.4d') 't' num2str(fnames_channel(k,3),'%.4d') 'r' num2str(fnames_channel(k,4),'%.2d')];
-    cell_temp = cell_data.(fname_rec);
     
-    if fnames_channel(k,4) == 1 && length(cell_temp.times)>=2 && isempty(cell_temp.disp_l)==0 %only look at mother cells and only those have two daughter cells and are with fluorescence
 
         time_temp = double(cell_temp.times); % stitch time point array of all generations into one WITHOUT division time point
         birth_time_temp = double(cell_temp.birth_time); %birth time of all generations

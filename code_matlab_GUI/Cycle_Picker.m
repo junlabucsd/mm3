@@ -57,15 +57,6 @@ clc;
 % close all;
 
 %-------------start pre-prosessing-----------
-handles.dir_name = '../../analysis/';
-handles.cell_data = load([handles.dir_name 'cell_data/complete_cells_foci.mat']);
-handles.px_to_mu = 0.065;
-handles.IW_thr = 2900; % threshold of intensity weighting
-handles.n_oc = 2; %number of overlapping cell cycle (default value)
-
-handles.xlim_max = 300;
-handles.ylim_max = 7;
-handles.time_int = 2;
 
 %%%
 

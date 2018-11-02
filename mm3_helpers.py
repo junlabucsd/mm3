@@ -1573,7 +1573,7 @@ def make_lineages_fov(fov_id, specs):
     pool.close() # tells the process nothing more will be added.
     pool.join() # blocks script until everything has been processed and workers exit
 
-    # # This is the non-parallelized version (useful for debug)
+    # This is the non-parallelized version (useful for debug)
     # for fov_and_peak_ids in fov_and_peak_ids_list:
     #     lineages = make_lineage_chnl_stack(fov_and_peak_ids)
 
