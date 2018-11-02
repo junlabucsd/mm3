@@ -8,7 +8,6 @@ dir_name = '../../analysis/picked/';
 fnames = dir( [ dir_name '/*.mat' ]);
 
 px_to_mu = 0.11;
-t_int = 2.0;
 
 %% extract and calculate all cell data
 
@@ -25,7 +24,6 @@ for i=1:numel(fnames)
 
         length_temp = double(px_to_mu*cell_temp.lengths_w_div);
 
-        if cell_temp.birth_label ==1 && isfield(cell_temp,'initiation_time') == 1 % && isfield(cell_temp,'initiation_time_n') == 1  && cell_temp.lengths_w_div(end) < 20 %&& cell_temp.peak > 0 && cell_temp.peak < 2000  %only look at mother cells and only those have cell cycle information; %filter out filamentous cells
 
             cell_id( mother_cell_counter ) = {cell_temp.id} ;
 

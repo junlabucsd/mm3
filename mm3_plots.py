@@ -397,6 +397,50 @@ def lineages_to_dict(Lineages):
 
     return Cells
 
+def calculate_pole_age(Cells):
+    '''Finds the pole age of each end of the cell. Adds this information to the cell object.'''
+
+    # run through once and set up default
+    for cell_id, cell_tmp in Cells.iteritems():
+        cell_tmp.poleage = None
+
+    for cell_id, cell_tmp in Cells.iteritems():
+        # start from r1 cells which have r1 parents in the list.
+        # these cells are old pole mothers.
+    #     if cell_tmp.parent in Cells and cell_tmp.birth_label == 1:
+
+        # less stringent requirement that the cell just r1
+        if cell_tmp.birth_label == 1:
+
+            # label this cell
+            cell_tmp.poleage = (1000, 0) # closed end age first, 1000 for old pole.
+
+            # label the daughter cell 01 if it is in the list
+            if cell_tmp.daughters[1] in Cells:
+                # sets poleage of this cell and recursively goes through descendents.
+                Cells = set_poleages(cell_tmp.daughters[1], 1, Cells)
+
+    return Cells
+
+def set_poleages(cell_id, daughter_index, Cells):
+    '''Determines pole ages for cells. Only for cells which are not old-pole mother.'''
+
+    parent_poleage = Cells[Cells[cell_id].parent].poleage
+
+    # the lower daughter
+    if daughter_index == 0:
+        Cells[cell_id].poleage = (parent_poleage[0]+1, 0)
+    elif daughter_index == 1:
+        Cells[cell_id].poleage = (0, parent_poleage[1]+1)
+
+#     print(cell_id, Cells[cell_id].poleage)
+
+    for i, daughter_id in enumerate(Cells[cell_id].daughters):
+        if daughter_id in Cells:
+            Cells = set_poleages(daughter_id, i, Cells)
+
+    return Cells
+
 ### Statistics and analysis functions ##############################################################
 def stats_table(Cells_df):
     '''Returns a Pandas dataframe with statistics about the 6 major cell parameters.
@@ -613,6 +657,8 @@ def hex_time_plot(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
     ax[4].set_xlabel('%s [frame]' % time_mark)
     ax[5].set_xlabel('%s [frame]' % time_mark)
 
+    plt.tight_layout()
+
     return fig, ax
 
 def derivative_plot(Cells_df, time_mark='birth_time', x_extents=None, time_window=10):
@@ -699,8 +745,8 @@ def plot_traces(Cells, trace_limit=1000):
 
     for cell_id, Cell in Cells.iteritems():
 
-        ax[0].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.25)
-        # ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
+        # ax[0].plot(Cell.times, Cell.lengths, 'b-', lw=.5, alpha=0.25)
+        ax[1].plot(Cell.times_w_div, Cell.lengths_w_div, 'b-', lw=.5, alpha=0.5)
 
     # ax[0].set_title('cell length vs time')
     ax[0].set_ylabel('length [$\mu$m]')

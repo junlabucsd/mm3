@@ -6,7 +6,7 @@ import sys
 import os
 import time
 import inspect
-import getopt
+import argparse
 import yaml
 from pprint import pprint # for human readable file output
 try:
@@ -43,34 +43,42 @@ if __name__ == "__main__":
     # switches which may be overwritten
     param_file_path = ''
     user_spec_fovs = []
-    start_with_fov = -1
 
-    # get switches and parameters
-    try:
-        opts, args = getopt.getopt(sys.argv[1:],"f:o:s:")
-    except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -s -o).')
-
-    for opt, arg in opts:
-        if opt == '-o':
-            try:
-                for fov_to_proc in arg.split(","):
-                    user_spec_fovs.append(int(fov_to_proc))
-            except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt == '-s':
-            try:
-                start_with_fov = int(arg)
-            except:
-                mm3.warning("Couldn't convert argument to an integer:",arg)
-                raise ValueError
-        if opt == '-f':
-            param_file_path = arg # parameter file path
+    # set switches and parameters
+    parser = argparse.ArgumentParser(prog='python mm3_Colors.py',
+                                     description='Calculates total and average fluorescence per cell.')
+    parser.add_argument('-f', '--paramfile', type=file,
+                        required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-o', '--fov', type=str,
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+    parser.add_argument('-c', '--cellfile', type=file,
+                        required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
+    namespace = parser.parse_args()
 
     # Load the project parameters file
-    mm3.information ('Loading experiment parameters.')
-    p = mm3.init_mm3_helpers(param_file_path) # loads and returns
+    mm3.information('Loading experiment parameters.')
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+
+    if namespace.fov:
+        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+    else:
+        user_spec_fovs = []
+
+    # load cell file
+    mm3.information('Loading cell data.')
+    if namespace.cellfile:
+        cell_file_path = namespace.cellfile.name
+    else:
+        mm3.warning('No cell file specified. Using complete_cells.pkl.')
+        cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
+
+    with open(cell_file_path, 'r') as cell_file:
+        Complete_Cells = pickle.load(cell_file)
 
     # load specs file
     try:
@@ -86,14 +94,8 @@ if __name__ == "__main__":
     # remove fovs if the user specified so
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
-    if start_with_fov > 0:
-        fov_id_list[:] = [fov for fov in fov_id_list if fov_id >= start_with_fov]
 
     mm3.information("Processing %d FOVs." % len(fov_id_list))
-
-    # load cell data dict
-    with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'r') as cell_file:
-        Complete_Cells = pickle.load(cell_file)
 
     # create dictionary which organizes cells by fov and peak_id
     Cells_by_peak = mm3_plots.organize_cells_by_channel(Complete_Cells, specs)
@@ -107,7 +109,8 @@ if __name__ == "__main__":
                 mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=False)
 
     # Just the complete cells, those with mother and daugther
-    with open(os.path.join(p['cell_dir'], 'complete_cells_fl.pkl'), 'wb') as cell_file:
+    cell_filename = os.path.basename(cell_file_path)
+    with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_fl.pkl'), 'wb') as cell_file:
         pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     mm3.information('Finished.')
