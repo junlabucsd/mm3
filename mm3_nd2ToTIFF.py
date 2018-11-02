@@ -8,7 +8,6 @@ import time
 import inspect
 import argparse
 import yaml
-import fnmatch
 import glob
 import math
 import copy
