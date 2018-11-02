@@ -5,7 +5,7 @@ from __future__ import print_function
 import sys
 import os
 import inspect
-import getopt
+import argparse
 import yaml
 try:
     import cPickle as pickle
@@ -35,42 +35,46 @@ if __name__ == "__main__":
     '''
     This script adds foci location information onto an existing dictionary of cells.
     '''
-    # switches which may be overwritten
-    param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
-    cell_filename = 'complete_cells.pkl'
-    cell_file_path = None
 
-    # get switches and parameters
-    try:
-        unixoptions="f:c:"
-        gnuoptions=["paramfile=","cellfile="]
-        opts, args = getopt.getopt(sys.argv[1:],unixoptions,gnuoptions)
-    except getopt.GetoptError:
-        mm3.warning('No arguments detected (-f -c), using hardcoded parameters.')
+    # set switches and parameters
+    parser = argparse.ArgumentParser(prog='python mm3_Foci.py',
+                                     description='Finds foci.')
+    parser.add_argument('-f', '--paramfile', type=file,
+                        required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-c', '--cellfile', type=file,
+                        required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
+    namespace = parser.parse_args()
 
-    for opt, arg in opts:
-        if opt in ['-f',"--paramfile"]:
-            param_file_path = arg # parameter file path
-        if opt in ['-c',"--cellfile="]:
-            cell_file_path = arg
-            cell_filename = os.path.basename(cell_file_path)
+    # Load the project parameters file
+    mm3.information('Loading experiment parameters.')
+    if namespace.paramfile.name:
+        param_file_path = namespace.paramfile.name
+    else:
+        mm3.warning('No param file specified. Using 100X template.')
+        param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+    p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
-    # Load the project parameters file & initialized the helper library
-    p = mm3.init_mm3_helpers(param_file_path)
+    # load cell file
+    mm3.information('Loading cell data.')
+    if namespace.cellfile:
+        cell_file_path = namespace.cellfile.name
+    else:
+        mm3.warning('No cell file specified. Using complete_cells.pkl.')
+        cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
+
+    with open(cell_file_path, 'r') as cell_file:
+        Cells = pickle.load(cell_file)
 
     # load specs file
-    with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-        specs = yaml.safe_load(specs_file)
+    try:
+        with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
+    except:
+        mm3.warning('Could not load specs file.')
+        raise ValueError
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-
-    mm3.information("Loading cell dictionary.")
-    if cell_file_path == None:
-        cell_file_path = os.path.join(p['cell_dir'], cell_filename)
-    with open(cell_file_path, 'r') as cell_file:
-        Cells = pickle.load(cell_file)
-    mm3.information("Finished loading cell dictionary.")
 
     ### foci analysis
     mm3.information("Starting foci analysis.")
@@ -97,9 +101,9 @@ if __name__ == "__main__":
             # sys.exit()
 
     # Output data to both dictionary and the .mat format used by the GUI
+    cell_filename = os.path.basename(cell_file_path)
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:
         pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
-
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
         sio.savemat(cell_file, Cells)
 
