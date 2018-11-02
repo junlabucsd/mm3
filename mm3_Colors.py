@@ -109,7 +109,8 @@ if __name__ == "__main__":
                 mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=False)
 
     # Just the complete cells, those with mother and daugther
-    with open(os.path.join(p['cell_dir'], 'complete_cells_fl.pkl'), 'wb') as cell_file:
+    cell_filename = os.path.basename(cell_file_path)
+    with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_fl.pkl'), 'wb') as cell_file:
         pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     mm3.information('Finished.')
