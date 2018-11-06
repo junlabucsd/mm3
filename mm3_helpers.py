@@ -34,6 +34,12 @@ from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 
+# deep learning
+import tensorflow as tf
+from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.python.keras import models
+from tensorflow.python.keras import losses
+
 # Parralelization modules
 import multiprocessing
 from multiprocessing import Pool
@@ -87,8 +93,7 @@ def init_mm3_helpers(param_file_path):
         params = yaml.safe_load(param_file)
 
     # set up how to manage cores for multiprocessing
-    cpu_count = multiprocessing.cpu_count()
-    params['num_analyzers'] = cpu_count*2 - 2
+    params['num_analyzers'] = multiprocessing.cpu_count()
 
     # useful folder shorthands for opening files
     params['TIFF_dir'] = os.path.join(params['experiment_directory'], params['image_directory'])
@@ -1417,7 +1422,7 @@ def segment_chnl_stack(fov_id, peak_id):
     segmented_imgs = np.stack(segmented_imgs, axis=0)
     segmented_imgs = segmented_imgs.astype('uint16')
 
-    # save out the subtracted stack
+    # save out the segmented stack
     if params['output'] == 'TIFF':
         seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
         tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
@@ -1535,6 +1540,109 @@ def segment_image(image):
         return np.zeros_like(image)
 
     return labeled_image
+
+# loss functions for model
+def dice_coeff(y_true, y_pred):
+    smooth = 1.
+    # Flatten
+    y_true_f = tf.reshape(y_true, [-1])
+    y_pred_f = tf.reshape(y_pred, [-1])
+    intersection = tf.reduce_sum(y_true_f * y_pred_f)
+    score = (2. * intersection + smooth) / (tf.reduce_sum(y_true_f) + tf.reduce_sum(y_pred_f) + smooth)
+    return score
+
+def dice_loss(y_true, y_pred):
+    loss = 1 - dice_coeff(y_true, y_pred)
+    return loss
+
+def bce_dice_loss(y_true, y_pred):
+    loss = losses.binary_crossentropy(y_true, y_pred) + dice_loss(y_true, y_pred)
+    return loss
+
+def segment_chnl_stack_unet(fov_id, peak_id, model):
+    '''
+    Segment a channel of phase contrast images and return a segmented stack.
+
+    Parameters
+    ----------
+    fov_id : int
+    peak_id : int
+    model : TensorFlow model
+    '''
+
+    information('Segmenting FOV %d, channel %d with U-net.' % (fov_id, peak_id))
+
+    # load images
+    img_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
+
+    # pad image. Later, I will need to combine channels into one block
+    unet_shape = (256, 256) # this should be a parameter or inferred. Actually it should be a parameter because it is dependent on the model ***
+
+    img_shape = img_data[0].shape
+    pad = ((0, 0),
+           (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
+            np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
+           (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
+            np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
+    img_data = np.pad(img_data, pad_width=pad, mode='edge')
+
+    # tf wants this to be a 4D array. Last dim is 1 for grayscale
+    images_to_segment = np.expand_dims(img_data, 4)
+
+    # set up image generator
+    image_datagen = ImageDataGenerator()
+    batch_size = 1 # this should be a parameter ***
+    image_generator = image_datagen.flow(x=images_to_segment,
+                                         batch_size=batch_size,
+                                         shuffle=False) # keep same order
+
+    # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
+    predict_args = dict(steps=None,
+                        max_queue_size=10, # maybe should also be parameter
+                        workers = params['num_analyzers'],
+                        use_multiprocessing=True,
+                        verbose=1)
+    predictions = model.predict_generator(image_generator, **predict_args)
+
+    # post processing
+    # remove padding
+    predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
+                                 pad[2][0]:unet_shape[1]-pad[2][1], 0]
+
+    # binarized and label # the 0.99 should be a parameter ***
+    predictions[predictions >= 0.99] = 1
+    predictions[predictions < 0.99] = 0
+    # must do labels slice by slice or it will connect them through time
+    segmented_imgs = [morphology.label(predictions[i]) for i in
+                      range(predictions.shape[0])]
+    segmented_imgs = np.stack(segmented_imgs, axis=0)
+    segmented_imgs = segmented_imgs.astype('uint8')
+
+    # save out the segmented stack
+    if params['output'] == 'TIFF':
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
+                    segmented_imgs, compress=4)
+
+    if params['output'] == 'HDF5':
+        h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
+
+        # put segmented channel in correct group
+        h5g = h5f['channel_%04d' % peak_id]
+
+        # delete the dataset if it exists (important for debug)
+        if 'p%04d_seg_unet' % peak_id in h5g:
+            del h5g['p%04d_seg_unet' % peak_id]
+
+        h5ds = h5g.create_dataset(u'p%04d_seg_unet' % peak_id,
+                        data=segmented_imgs,
+                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                        compression="gzip", shuffle=True, fletcher32=True)
+        h5f.close()
+
+    information("Saved segmented channel %d." % peak_id)
+    return
 
 # finds lineages for all peaks in a fov
 def make_lineages_fov(fov_id, specs):

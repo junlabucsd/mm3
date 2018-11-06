@@ -4,7 +4,7 @@ from __future__ import print_function
 # import modules
 import sys
 import os
-import time
+# import time
 import inspect
 import argparse
 import yaml
@@ -15,6 +15,8 @@ except:
     import pickle
 import numpy as np
 from scipy.io import savemat
+
+from tensorflow.python.keras import models
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -91,8 +93,25 @@ if __name__ == "__main__":
     if p['segment']['do_segmentation']:
         mm3.information("Segmenting channels using U-net.")
 
-        # put magic here
+        # load model to pass to algorithm
+        mm3.information("Loading model...")
+        # *** Need parameter for weights
+        model = models.load_model('/Users/jt/code/motherMachineSegger/demo/weights.hdf5',
+                          custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
+                                          'dice_loss': mm3.dice_loss})
+        mm3.information("Model loaded.")
 
+        for fov_id in fov_id_list:
+            # determine which peaks are to be analyzed (those which have been subtracted)
+            ana_peak_ids = []
+            for peak_id, spec in specs[fov_id].items():
+                if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
+                    ana_peak_ids.append(peak_id)
+            ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+            for peak_id in ana_peak_ids:
+                # send to segmentation
+                mm3.segment_chnl_stack_unet(fov_id, peak_id, model)
 
         mm3.information("Finished segmentation.")
 
