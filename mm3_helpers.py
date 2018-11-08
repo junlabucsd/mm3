@@ -1619,7 +1619,7 @@ def segment_fov_unet(fov_id, specs, model):
 
         # set up image generator
         image_datagen = ImageDataGenerator()
-        batch_size = 1 # this should be a parameter ***
+        batch_size = 10 # this should be a parameter ***
         image_generator = image_datagen.flow(x=imgs,
                                              batch_size=batch_size,
                                              shuffle=False) # keep same order
@@ -1627,7 +1627,7 @@ def segment_fov_unet(fov_id, specs, model):
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
         predict_args = dict(steps=None,
                             max_queue_size=10, # maybe should also be parameter
-                            workers = params['num_analyzers'],
+                            workers=params['num_analyzers'],
                             use_multiprocessing=True,
                             verbose=1)
         predictions = model.predict_generator(image_generator, **predict_args)
@@ -2080,8 +2080,8 @@ class Cell():
 
         # calculating cell length and width by using Feret Diamter. These values are in pixels
         length_tmp, width_tmp = feretdiameter(region)
-        if length_tmp == 100:
-            print(self.id)
+        if length_tmp == None:
+            mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
@@ -2121,8 +2121,8 @@ class Cell():
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
-        if length_tmp == 100:
-            print(self.id)
+        if length_tmp == None:
+            mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
         self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
@@ -2270,9 +2270,7 @@ def feretdiameter(region):
         pt_L2 = L2_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords])]
         length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
     except:
-        print('L1', L1_coords)
-        print('L2', L2_coords)
-        length = 100
+        length = None
 
     #####################
     # calculate cell width
