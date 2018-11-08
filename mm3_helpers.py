@@ -35,7 +35,7 @@ from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 
 # deep learning
-import tensorflow as tf
+import tensorflow as tf # ignore message about how tf was compiled
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import models
 from tensorflow.python.keras import losses
@@ -1559,6 +1559,140 @@ def bce_dice_loss(y_true, y_pred):
     loss = losses.binary_crossentropy(y_true, y_pred) + dice_loss(y_true, y_pred)
     return loss
 
+def segment_fov_unet(fov_id, specs, model):
+    '''
+    Segments the channels from one fov using the U-net CNN modelself. It batches channels together by stiching them into one image. It then splits them up again to save the segmented masks.
+
+    Parameters
+    ----------
+    fov_id : int
+    specs : dict
+    model : TensorFlow model
+    '''
+
+    information('Segmenting FOV {} with U-net.'.format(fov_id))
+
+    # load segmentation parameters
+    min_object_size = params['min_object_size']
+    unet_shape = (256, 256) # This should be a parameter
+
+    ### determine stitching of images.
+    # need channel shape, specifically the width. load first for example
+    # this assumes that all channels are the same size for this FOV, which they should
+    for peak_id, spec in specs[fov_id].iteritems():
+        if spec == 1:
+            break # just break out with the current peak_id
+    img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
+    chnl_shape = img_stack.shape[1:]
+    timepoints = img_stack.shape[0]
+    del img_stack
+
+    # dermine how many channels we have to analyze for this FOV
+    ana_peak_ids = []
+    for peak_id, spec in specs[fov_id].items():
+        if spec == 1:
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+    # how many stitched images will we make?
+    max_chnls = int(unet_shape[1] / chnl_shape[1]) # max channels per stich
+    n_stitch = int(np.ceil(len(ana_peak_ids) / float(max_chnls))) # float div
+    # information(len(ana_peak_ids), max_chnls, unet_shape[1], chnl_shape[1], n_stitch)
+    # make stich groups of close to even size. array_split allows for uneven sizes
+    stitch_groups = np.array_split(ana_peak_ids, n_stitch)
+
+    # process each stich group individually
+    for s_grp in stitch_groups:
+        information('Processing channels: ' + ', '.join([str(p) for p in s_grp]) + ' with {} time points.'.format(timepoints))
+        # load images and stich side by side
+        imgs = [load_stack(fov_id, peak_id, color=params['phase_plane']) for peak_id in s_grp]
+        imgs = np.concatenate(imgs, axis=2) # along x/cols
+        # pad
+        img_shape = imgs[0].shape # this is shape of stitched image
+        pad = ((0, 0),
+               (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
+                np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
+               (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
+                np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
+        imgs = np.pad(imgs, pad_width=pad, mode='edge')
+        imgs = np.expand_dims(imgs, 4) # tf wants 4D array even for grayscale
+
+        # set up image generator
+        image_datagen = ImageDataGenerator()
+        batch_size = 1 # this should be a parameter ***
+        image_generator = image_datagen.flow(x=imgs,
+                                             batch_size=batch_size,
+                                             shuffle=False) # keep same order
+
+        # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
+        predict_args = dict(steps=None,
+                            max_queue_size=10, # maybe should also be parameter
+                            workers = params['num_analyzers'],
+                            use_multiprocessing=True,
+                            verbose=1)
+        predictions = model.predict_generator(image_generator, **predict_args)
+
+        # post processing
+        # remove padding
+        predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
+                                     pad[2][0]:unet_shape[1]-pad[2][1], 0]
+
+        # binarized and label # the 0.99 should be a parameter ***
+        predictions[predictions >= 0.99] = 1
+        predictions[predictions < 0.99] = 0
+
+        # split up images back into channels
+        pred_chnls = np.split(predictions, len(s_grp), axis=2)
+        segmented_chnls = []
+        # process and label (segment) channels individually
+        for pred_chnl in pred_chnls:
+            # must do processing slice by slice or it will connect them through first dim
+            segmented_chnl = [pred_chnl[i].astype('uint8') for i in range(pred_chnl.shape[0])]
+            # round out regions and remove speckle with opening
+            # segmented_chnl = [morphology.binary_opening(img, morphology.square(1)) for
+            #                   img in segmented_chnl]
+            # remove any labels that touch the border
+            # segmented_chnl = [segmentation.clear_border(img) for img in segmented_chnl]
+            # remove regions and fill holes with size smaller than min_object_size
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                segmented_chnl = [morphology.remove_small_holes(img, area_threshold=min_object_size)
+                                  for img in segmented_chnl]
+                segmented_chnl = [morphology.remove_small_objects(morphology.label(img),
+                                  min_size=min_object_size) for img in segmented_chnl]
+
+            segmented_chnl = [morphology.label(img) for img in segmented_chnl]
+            segmented_chnls.append(np.stack(segmented_chnl, axis=0).astype('uint8'))
+
+        # save out the segmented stacks
+        if params['output'] == 'TIFF':
+            for i, peak_id in enumerate(s_grp):
+                segmented_imgs = segmented_chnls[i]
+                seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+                tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
+                            segmented_imgs, compress=4)
+
+        if params['output'] == 'HDF5':
+            h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
+            for i, peak_id in enumerate(s_grp):
+                segmented_imgs = segmented_chnls[i]
+                # put segmented channel in correct group
+                h5g = h5f['channel_%04d' % peak_id]
+                # delete the dataset if it exists (important for debug)
+                if 'p%04d_seg_unet' % peak_id in h5g:
+                    del h5g['p%04d_seg_unet' % peak_id]
+
+                h5ds = h5g.create_dataset(u'p%04d_seg_unet' % peak_id,
+                                data=segmented_imgs,
+                                chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+            h5f.close()
+
+        information('Saved segmented channels ' + ', '.join([str(p) for p in s_grp]))
+    information("Finished segmentation for FOV {}.".format(fov_id))
+    return
+
 def segment_chnl_stack_unet(fov_id, peak_id, model):
     '''
     Segment a channel of phase contrast images and return a segmented stack.
@@ -1571,6 +1705,9 @@ def segment_chnl_stack_unet(fov_id, peak_id, model):
     '''
 
     information('Segmenting FOV %d, channel %d with U-net.' % (fov_id, peak_id))
+
+    # load segmentation parameters
+    min_object_size = params['min_object_size']
 
     # load images
     img_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
@@ -1612,11 +1749,17 @@ def segment_chnl_stack_unet(fov_id, peak_id, model):
     # binarized and label # the 0.99 should be a parameter ***
     predictions[predictions >= 0.99] = 1
     predictions[predictions < 0.99] = 0
-    # must do labels slice by slice or it will connect them through time
-    segmented_imgs = [morphology.label(predictions[i]) for i in
-                      range(predictions.shape[0])]
-    segmented_imgs = np.stack(segmented_imgs, axis=0)
-    segmented_imgs = segmented_imgs.astype('uint8')
+    # processing and labeling
+    # must do processing slice by slice or it will connect them through time
+    processed_imgs = [predictions[i].astype('uint8') for i in
+                                              range(predictions.shape[0])]
+    processed_imgs = [morphology.binary_opening(img, morphology.disk(2)) for
+                      img in processed_imgs]
+    processed_imgs = [segmentation.clear_border(img) for img in processed_imgs]
+    processed_imgs = [morphology.remove_small_objects(img, min_size=min_object_size) for
+                      img in processed_imgs]
+    processed_imgs = [morphology.label(img) for img in processed_imgs]
+    segmented_imgs = np.stack(processed_imgs, axis=0).astype('uint8')
 
     # save out the segmented stack
     if params['output'] == 'TIFF':
@@ -1682,8 +1825,9 @@ def make_lineages_fov(fov_id, specs):
     pool.join() # blocks script until everything has been processed and workers exit
 
     # This is the non-parallelized version (useful for debug)
+    # lineages = []
     # for fov_and_peak_ids in fov_and_peak_ids_list:
-    #     lineages = make_lineage_chnl_stack(fov_and_peak_ids)
+    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_ids))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -1728,11 +1872,11 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Calculate all data for all time points.
     # this list will be length of the number of time points
-    regions_by_time = [regionprops(timepoint) for timepoint in image_data_seg]
+    regions_by_time = [regionprops(timepoint, coordinates='xy') for timepoint in image_data_seg]
 
     # Set up data structures.
     Cells = {} # Dict that holds all the cell objects, divided and undivided
@@ -1927,6 +2071,8 @@ class Cell():
 
         # calculating cell length and width by using Feret Diamter. These values are in pixels
         length_tmp, width_tmp = feretdiameter(region)
+        if length_tmp == 100:
+            print(self.id)
         self.lengths = [length_tmp]
         self.widths = [width_tmp]
 
@@ -1966,6 +2112,8 @@ class Cell():
 
         #calculating cell length and width by using Feret Diamter
         length_tmp, width_tmp = feretdiameter(region)
+        if length_tmp == 100:
+            print(self.id)
         self.lengths.append(length_tmp)
         self.widths.append(width_tmp)
         self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
@@ -2108,9 +2256,14 @@ def feretdiameter(region):
     # pt_L1 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in r_coords])]
     # pt_L2 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in r_coords])]
 
-    pt_L1 = L1_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in L1_coords])]
-    pt_L2 = L2_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords])]
-    length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
+    try:
+        pt_L1 = L1_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in L1_coords])]
+        pt_L2 = L2_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords])]
+        length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
+    except:
+        print('L1', L1_coords)
+        print('L2', L2_coords)
+        length = 100
 
     #####################
     # calculate cell width

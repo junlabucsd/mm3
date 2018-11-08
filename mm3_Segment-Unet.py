@@ -102,16 +102,7 @@ if __name__ == "__main__":
         mm3.information("Model loaded.")
 
         for fov_id in fov_id_list:
-            # determine which peaks are to be analyzed (those which have been subtracted)
-            ana_peak_ids = []
-            for peak_id, spec in specs[fov_id].items():
-                if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
-                    ana_peak_ids.append(peak_id)
-            ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
-
-            for peak_id in ana_peak_ids:
-                # send to segmentation
-                mm3.segment_chnl_stack_unet(fov_id, peak_id, model)
+            mm3.segment_fov_unet(fov_id, specs, model)
 
         mm3.information("Finished segmentation.")
 
