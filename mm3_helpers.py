@@ -1855,13 +1855,12 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # load in parameters
     # if leaf regions see no action for longer than this, drop them
-    lost_cell_time = params['lost_cell_time']
+    lost_cell_time = params['segment']['lost_cell_time']
     # only cells with y positions below this value will recieve the honor of becoming new
     # cells, unless they are daughters of current cells
-    new_cell_y_cutoff = params['new_cell_y_cutoff']
-
+    new_cell_y_cutoff = params['segment']['new_cell_y_cutoff']
     # only regions with labels less than or equal to this value will be considered to start cells
-    new_cell_region_cutoff = params['new_cell_region_cutoff']
+    new_cell_region_cutoff = params['segment']['new_cell_region_cutoff']
 
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
@@ -1998,13 +1997,23 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                             cell_leaves.append(daughter2_id)
 
                     # 1 means that daughter 1 is just a continuation of the mother
-                    # the other region will simply be discarded.
+                    # The other region should be a leaf it passes the requirements
                     elif check_division_result == 1:
                         Cells[leaf_id].grow(region1, t)
+
+                        if region2.centroid[0] < new_cell_y_cutoff and region2.label <= new_cell_region_cutoff:
+                            cell_id = create_cell_id(region2, t, peak_id, fov_id)
+                            Cells[cell_id] = Cell(cell_id, region2, t, parent_id=None)
+                            cell_leaves.append(cell_id) # add to leaves
 
                     # ditto for 2
                     elif check_division_result == 2:
                         Cells[leaf_id].grow(region2, t)
+
+                        if region1.centroid[0] < new_cell_y_cutoff and region1.label <=     new_cell_region_cutoff:
+                            cell_id = create_cell_id(region1, t, peak_id, fov_id)
+                            Cells[cell_id] = Cell(cell_id, region1, t, parent_id=None)
+                            cell_leaves.append(cell_id) # add to leaves
 
     # return the dictionary with all the cells
     return Cells
@@ -2350,10 +2359,10 @@ def check_growth_by_region(cell, region):
     '''Checks to see if it makes sense
     to grow a cell by a particular region'''
     # load parameters for checking
-    max_growth_length = params['max_growth_length']
-    min_growth_length = params['min_growth_length']
-    max_growth_area = params['max_growth_area']
-    min_growth_area = params['min_growth_area']
+    max_growth_length = params['segment']['max_growth_length']
+    min_growth_length = params['segment']['min_growth_length']
+    max_growth_area = params['segment']['max_growth_area']
+    min_growth_area = params['segment']['min_growth_area']
 
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
@@ -2398,8 +2407,8 @@ def check_division(cell, region1, region2):
     Return 3 if cell should divide into the regions.'''
 
     # load in parameters
-    max_growth_length = params['max_growth_length']
-    min_growth_length = params['min_growth_length']
+    max_growth_length = params['segment']['max_growth_length']
+    min_growth_length = params['segment']['min_growth_length']
 
     # see if either region just could be continued growth,
     # if that is the case then just return

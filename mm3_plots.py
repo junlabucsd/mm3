@@ -1457,7 +1457,7 @@ def bilinear_init(x, y):
         return np.array([ymid,(ymid-y0)/(xmid-x0),(yN-ymid)/(xN-xmid),xmid])
 
 ### Debugginp plots
-def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, color='sub_c1', trim_time=False):
+def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', fgcolor='seg', trim_time=False):
     '''
     Plot linages over images across time points for one FOV/peak.
     Parameters
@@ -1472,8 +1472,8 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, color='sub_c1', tri
     Cells = find_cells_of_fov_and_peak(Cells, fov_id, peak_id)
 
     # load subtracted and segmented data
-    image_data_sub = mm3.load_stack(fov_id, peak_id, color=color)
-    image_data_seg = mm3.load_stack(fov_id, peak_id, color='seg_unet')
+    image_data_sub = mm3.load_stack(fov_id, peak_id, color=bgcolor)
+    image_data_seg = mm3.load_stack(fov_id, peak_id, color=fgcolor)
 
     if trim_time:
         time_set = (0,100)
