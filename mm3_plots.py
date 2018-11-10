@@ -1548,23 +1548,27 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
                 ax[t].add_patch(circle)
 
                 # draw connecting lines between the centroids of cells in same lineage
-                if n < len(Cells[cell_id].times)-1:
-                    # coordinates of the next centroid
-                    x_next = Cells[cell_id].centroids[n+1][1]
-                    y_next = Cells[cell_id].centroids[n+1][0]
-                    t_next = Cells[cell_id].times[n+1] - 1 # adjust for special indexing
+                try:
+                    if n < len(Cells[cell_id].times)-1:
+                        # coordinates of the next centroid
+                        x_next = Cells[cell_id].centroids[n+1][1]
+                        y_next = Cells[cell_id].centroids[n+1][0]
+                        t_next = Cells[cell_id].times[n+1] - 1 # adjust for special indexing
 
-                    # get coordinates for the whole figure
-                    coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                    coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+                        # get coordinates for the whole figure
+                        coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                        coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
 
-                    # create line
-                    line = mpl.lines.Line2D((coord1[0], coord2[0]), (coord1[1], coord2[1]),
-                                            transform=fig.transFigure,
-                                            color='white', lw=1, alpha=0.25)
+                        # create line
+                        line = mpl.lines.Line2D((coord1[0], coord2[0]), (coord1[1], coord2[1]),
+                                                transform=fig.transFigure,
+                                                color='white', lw=1, alpha=0.25)
 
-                    # add it to plot
-                    fig.lines.append(line)
+                        # add it to plot
+                        fig.lines.append(line)
+                except:
+                    pass
+
 
                 # draw connecting between mother and daughters
                 try:
@@ -1617,23 +1621,26 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
                     ax[t].add_patch(circle)
 
                     # draw connecting lines between the centroids of cells in same lineage
-                    if n < len(Cells2[cell_id].times)-1:
-                        # coordinates of the next centroid
-                        x_next = Cells2[cell_id].centroids[n+1][1]
-                        y_next = Cells2[cell_id].centroids[n+1][0]
-                        t_next = Cells2[cell_id].times[n+1] - 1
+                    try:
+                        if n < len(Cells2[cell_id].times)-1:
+                            # coordinates of the next centroid
+                            x_next = Cells2[cell_id].centroids[n+1][1]
+                            y_next = Cells2[cell_id].centroids[n+1][0]
+                            t_next = Cells2[cell_id].times[n+1] - 1
 
-                        # get coordinates for the whole figure
-                        coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
-                        coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
+                            # get coordinates for the whole figure
+                            coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
+                            coord2 = transFigure.transform(ax[t_next].transData.transform([x_next, y_next]))
 
-                        # create line
-                        line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
-                                                transform=fig.transFigure,
-                                                color='yellow', lw=1, alpha=0.25)
+                            # create line
+                            line = mpl.lines.Line2D((coord1[0],coord2[0]),(coord1[1],coord2[1]),
+                                                    transform=fig.transFigure,
+                                                    color='yellow', lw=1, alpha=0.25)
 
-                        # add it to plot
-                        fig.lines.append(line)
+                            # add it to plot
+                            fig.lines.append(line)
+                    except:
+                        pass
 
                     # draw connecting between mother and daughters
                     try:
