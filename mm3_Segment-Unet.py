@@ -72,13 +72,11 @@ if __name__ == "__main__":
     if not os.path.exists(p['cell_dir']):
         os.makedirs(p['cell_dir'])
 
+    # set segmentation image name for saving and loading segmented images
+    p['seg_img'] = 'seg_unet'
+
     # load specs file
-    try:
-        with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-            specs = yaml.safe_load(specs_file)
-    except:
-        mm3.warning('Could not load specs file.')
-        raise ValueError
+    specs = mm3.load_specs()
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

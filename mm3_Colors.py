@@ -81,12 +81,10 @@ if __name__ == "__main__":
         Complete_Cells = pickle.load(cell_file)
 
     # load specs file
-    try:
-        with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
-            specs = yaml.safe_load(specs_file)
-    except:
-        mm3.warning('Could not load specs file.')
-        raise ValueError
+    specs = mm3.load_specs()
+
+    # load time table. Puts in params dictionary
+    mm3.load_time_table()
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

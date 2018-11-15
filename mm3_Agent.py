@@ -269,12 +269,10 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     # Load the channel_masks file
-    with open(os.path.join(p['ana_dir'], 'channel_masks.pkl'), 'r') as cmask_file:
-        channel_masks = pickle.load(cmask_file)
+    channel_masks = mm3.load_channel_masks()
 
     # Load specs file
-    with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-        specs = yaml.safe_load(specs_file)
+    specs = mm3.load_specs()
 
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

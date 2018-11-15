@@ -90,12 +90,7 @@ if __name__ == "__main__":
             os.makedirs(p['sub_dir'])
 
     # load specs file
-    try:
-        with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-            specs = yaml.safe_load(specs_file)
-    except:
-        mm3.warning('Could not load specs file.')
-        raise ValueError
+    specs = mm3.load_specs()
 
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

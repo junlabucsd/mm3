@@ -400,12 +400,7 @@ if __name__ == "__main__":
     hdf5_dir = os.path.join(p['experiment_directory'], p['analysis_directory'], 'hdf5')
 
     # load channel masks
-    try:
-        with open(os.path.join(ana_dir,'channel_masks.pkl'), 'r') as cmask_file:
-            channel_masks = pickle.load(cmask_file)
-    except:
-        mm3.warning('Could not load channel mask file.')
-        raise ValueError
+    channel_masks = mm3.load_channel_masks()
 
     # make list of FOVs to process (keys of channel_mask file), but only if there are channels
     fov_id_list = sorted([fov_id for fov_id, peaks in channel_masks.items() if peaks])
@@ -417,7 +412,7 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
-    # load precalculate ones if indicated
+    # load precalculated ones if indicated
     if not do_crosscorrs:
         mm3.information('Loading precalculated cross-correlations.')
 
@@ -468,7 +463,7 @@ if __name__ == "__main__":
                     # is full into the dictionary
                     crosscorrs[fov_id][peak_id] = {'ccs' : result.get(),
                                                    'cc_avg' : np.average(result.get()),
-                                                   'full' : np.average(result.get()) < p['channel_picking_threshold']}
+                                                   'full' : np.average(result.get()) < p['channel_picker']['channel_picking_threshold']}
                 else:
                     crosscorrs[fov_id][peak_id] = False # put a false there if it's bad
 
@@ -494,7 +489,7 @@ if __name__ == "__main__":
                 specs[fov_id] = {}
                 for peak_id, xcorrs in peaks.items():
                     # update the guess incase the parameters file was changed
-                    xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picking_threshold']
+                    xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picker']['channel_picking_threshold']
 
                     if xcorrs['full'] == True:
                         specs[fov_id][peak_id] = 1
@@ -505,7 +500,7 @@ if __name__ == "__main__":
                 specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
     else:
         mm3.information('Loading supplied specifiication file.')
-        with open(specfile,'r') as fin:
+        with open(specfile, 'r') as fin:
             specs = yaml.load(fin)
 
     if interactive:

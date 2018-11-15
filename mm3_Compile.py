@@ -163,42 +163,26 @@ if __name__ == "__main__":
             else:
                 analyzed_imgs[fn] = False # put a false there if it's bad
 
-        mm3.information('Got results from analyzed images.')
-
         # save metadata to a .pkl and a human readable txt file
         mm3.information('Saving metadata from analyzed images...')
         with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'wb') as tiff_metadata:
             pickle.dump(analyzed_imgs, tiff_metadata, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(p['ana_dir'], 'TIFF_metadata.txt'), 'w') as tiff_metadata:
             pprint(analyzed_imgs, stream=tiff_metadata)
+
         mm3.information('Saved metadata from analyzed images.')
 
     ### Make table for jd time to FOV and time point
     if not p['compile']['do_time_table']:
         mm3.information('Skipping time table creation.')
-
     else:
-        # do it
         time_table = mm3.make_time_table(analyzed_imgs)
-
-        # save to .pkl. This pkl will be loaded into the params
-        mm3.information('Saving time table...')
-        with open(os.path.join(p['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
-            pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(os.path.join(p['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
-            pprint(time_table, stream=time_table_file)
-        mm3.information('Saved time table.')
 
     ### Make consensus channel masks and get other shared metadata #################################
     if not p['compile']['do_channel_masks'] and p['compile']['do_slicing']:
-        mm3.information("Loading channel masks dictionary.")
-
-        with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'r') as cmask_file:
-            channel_masks = pickle.load(cmask_file)
+        channel_masks = mm3.load_channel_masks()
 
     elif p['compile']['do_channel_masks']:
-        mm3.information("Calculating channel masks.")
-
         # only calculate channels masks from images before t_end in case it is specified
         if t_end:
             analyzed_imgs = {fn : i_metadata for fn, i_metadata in analyzed_imgs.items() if
@@ -206,14 +190,6 @@ if __name__ == "__main__":
 
         # Uses channel mm3.information from the already processed image data
         channel_masks = mm3.make_masks(analyzed_imgs)
-
-        #save the channel mask dictionary to a pickle and a text file
-        with open(os.path.join(p['ana_dir'],'channel_masks.pkl'), 'wb') as cmask_file:
-            pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
-        with open(os.path.join(p['ana_dir'],'channel_masks.txt'), 'w') as cmask_file:
-            pprint(channel_masks, stream=cmask_file)
-
-        mm3.information("Channel masks saved.")
 
     ### Slice and write TIFF files into channels ###################################################
     if p['compile']['do_slicing']:

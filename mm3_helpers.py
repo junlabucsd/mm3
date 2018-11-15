@@ -15,6 +15,7 @@ except:
 import numpy as np # numbers package
 import struct # for interpretting strings as binary data
 import re # regular expressions
+from pprint import pprint # for human readable file output
 import traceback # for error messaging
 import warnings # error messaging
 import copy # not sure this is needed
@@ -206,6 +207,43 @@ def load_stack(fov_id, peak_id, color='c1'):
 
     return img_stack
 
+# load the time table and add it to the global params
+def load_time_table():
+    '''Add the time table dictionary to the params global dictionary.
+    This is so it can be used during Cell creation.
+    '''
+
+    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'r') as time_table_file:
+        params['time_table'] = pickle.load(time_table_file)
+
+    return
+
+# function for loading the channel masks
+def load_channel_masks():
+    '''Load channel masks dictionary. Should be .yaml but try pickle too.
+    '''
+    information("Loading channel masks dictionary.")
+
+    try:
+        with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'r') as cmask_file:
+            channel_masks = pickle.load(cmask_file)
+    except ValueError:
+        warning('Could not load channel masks dictionary.')
+
+    return channel_masks
+
+# function for loading the specs file
+def load_specs():
+    '''Load specs file which indicates which channels should be analyzed, used as empties, or ignored.'''
+
+    try:
+        with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
+    except ValueError:
+        warning('Could not load specs file.')
+
+    return specs
+
 ### functions for dealing with raw TIFF images
 
 # get params is the major function which processes raw TIFF images
@@ -272,6 +310,7 @@ def get_tif_params(image_filename, find_channels=True):
                 'y' : image_metadata['y'], # y position on stage [um]
                 'planes' : image_metadata['planes'], # list of plane names
                 'shape' : img_shape, # image shape x y in pixels
+                # 'channels' : {1 : {'A' : 1, 'B' : 2}, 2 : {'C' : 3, 'D' : 4}}}
                 'channels' : chnl_loc_dict} # dictionary of channel locations
 
     except:
@@ -438,6 +477,7 @@ def make_time_table(analyzed_imgs):
     time_table : dict
         Look up dictionary with keys for the FOV and then the time point.
     '''
+    information('Making time table...')
 
     # initialize
     time_table = {}
@@ -457,18 +497,14 @@ def make_time_table(analyzed_imgs):
         t_in_seconds = np.around((idata['jd'] - first_jd) * 24*60*60, decimals=0).astype('uint32')
         time_table[idata['fov']][idata['t']] = t_in_seconds
 
+    # save to .pkl. This pkl will be loaded into the params
+    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
+        pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
+        pprint(time_table, stream=time_table_file)
+    information('Time table saved.')
+
     return time_table
-
-# load the time table and add it to the global params
-def load_time_table():
-    '''Add the time table dictionary to the params global dictionary.
-    This is so it can be used during Cell creation.
-    '''
-
-    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'r') as time_table_file:
-        params['time_table'] = pickle.load(time_table_file)
-
-    return
 
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
@@ -660,10 +696,10 @@ def find_channel_locs(image_data):
     '''
 
     # declare temp variables from yaml parameter dict.
-    chan_w = params['channel_width']
-    chan_sep = params['channel_separation']
-    crop_wp = int(params['channel_width_pad'] + params['channel_width']/2)
-    chan_snr = params['channel_detection_snr']
+    chan_w = params['compile']['channel_width']
+    chan_sep = params['compile']['channel_separation']
+    crop_wp = int(params['compile']['channel_width_pad'] + chan_w/2)
+    chan_snr = params['compile']['channel_detection_snr']
 
     # Detect peaks in the x projection (i.e. find the channels)
     projection_x = image_data.sum(axis=0).astype(np.int32)
@@ -720,8 +756,8 @@ def find_channel_locs(image_data):
             continue
 
         # if you made it to this point then update the entry
-        chnl_loc_dict[peak] = {'closed_end_px': slice_closed_end_px,
-                                 'open_end_px': slice_open_end_px}
+        chnl_loc_dict[peak] = {'closed_end_px' : slice_closed_end_px,
+                                 'open_end_px' : slice_open_end_px}
 
     return chnl_loc_dict
 
@@ -753,8 +789,8 @@ def make_masks(analyzed_imgs):
     information("Determining initial channel masks...")
 
     # declare temp variables from yaml parameter dict.
-    crop_wp = int(params['channel_width_pad'] + params['channel_width']/2)
-    chan_lp = params['channel_length_pad']
+    crop_wp = int(params['compile']['channel_width_pad'] + params['compile']['channel_width']/2)
+    chan_lp = params['compile']['channel_length_pad']
 
     #intiaize dictionary
     channel_masks = {}
@@ -870,6 +906,15 @@ def make_masks(analyzed_imgs):
                     cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
                     cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
 
+
+    #save the channel mask dictionary to a pickle and a text file
+    with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
+        pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'wb') as cmask_file:
+        pprint(channel_masks, stream=cmask_file)
+
+    information("Channel masks saved.")
+
     return cm_copy
 
 ### functions about trimming, padding, and manipulating images
@@ -885,7 +930,7 @@ def fix_orientation(image_data):
     '''
 
     # user parameter indicates how things should be flipped
-    image_orientation = params['image_orientation']
+    image_orientation = params['compile']['image_orientation']
 
     # if this is just a phase image give in an extra layer so rest of code is fine
     flat = False # flag for if the image is flat or multiple levels
@@ -979,7 +1024,7 @@ def channel_xcorr(fov_id, peak_id):
     The very first value should be 1.
     '''
 
-    pad_size = params['alignment_pad']
+    pad_size = params['subtract']['alignment_pad']
 
     # Use this number of images to calculate cross correlations
     number_of_images = 20
@@ -1127,7 +1172,7 @@ def average_empties(imgs, align=True):
 
     if align:
         # pixel size to use for padding (ammount that alignment could be off)
-        pad_size = params['alignment_pad']
+        pad_size = params['subtract']['alignment_pad']
 
         for n, img in enumerate(imgs):
             # if this is the first image, pad it and add it to the stack
@@ -1312,7 +1357,7 @@ def subtract_phase(image_pair):
 
     # this is for aligning the empty channel to the cell channel.
     ### Pad cropped channel.
-    pad_size = params['alignment_pad'] # pixel size to use for padding (ammount that alignment could be off)
+    pad_size = params['subtract']['alignment_pad'] # pixel size to use for padding (ammount that alignment could be off)
     padded_chnl = np.pad(cropped_channel, pad_size, mode='reflect')
 
     # ### Align channel to empty using match template.
@@ -1420,11 +1465,11 @@ def segment_chnl_stack(fov_id, peak_id):
 
     # stack them up along a time axis
     segmented_imgs = np.stack(segmented_imgs, axis=0)
-    segmented_imgs = segmented_imgs.astype('uint16')
+    segmented_imgs = segmented_imgs.astype('uint8')
 
     # save out the segmented stack
     if params['output'] == 'TIFF':
-        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
         tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
                     segmented_imgs.astype('uint16'), compress=4)
 
@@ -1435,10 +1480,10 @@ def segment_chnl_stack(fov_id, peak_id):
         h5g = h5f['channel_%04d' % peak_id]
 
         # delete the dataset if it exists (important for debug)
-        if 'p%04d_seg' % peak_id in h5g:
-            del h5g['p%04d_seg' % peak_id]
+        if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
+            del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
 
-        h5ds = h5g.create_dataset(u'p%04d_seg' % peak_id,
+        h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
                         data=segmented_imgs,
                         chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
                         maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
@@ -1463,11 +1508,11 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['OTSU_threshold']
-    first_opening_size = params['first_opening_size']
-    distance_threshold = params['distance_threshold']
-    second_opening_size = params['second_opening_size']
-    min_object_size = params['min_object_size']
+    OTSU_threshold = params['segment']['OTSU_threshold']
+    first_opening_size = params['segment']['first_opening_size']
+    distance_threshold = params['segment']['distance_threshold']
+    second_opening_size = params['segment']['second_opening_size']
+    min_object_size = params['segment']['min_object_size']
 
     # threshold image
     try:
@@ -1573,7 +1618,7 @@ def segment_fov_unet(fov_id, specs, model):
     information('Segmenting FOV {} with U-net.'.format(fov_id))
 
     # load segmentation parameters
-    min_object_size = params['min_object_size']
+    min_object_size = params['segment']['min_object_size']
     unet_shape = (256, 256) # This should be a parameter
 
     ### determine stitching of images.
@@ -1607,6 +1652,12 @@ def segment_fov_unet(fov_id, specs, model):
         # load images and stich side by side
         imgs = [load_stack(fov_id, peak_id, color=params['phase_plane']) for peak_id in s_grp]
         imgs = np.concatenate(imgs, axis=2) # along x/cols
+
+        # if channel image is longer than Unet shape then trim it down
+        if chnl_shape[0] > 256:
+            imgs = imgs[:,:unet_shape[0],:]
+        # information('Channel shape', chnl_shape)
+
         # pad
         img_shape = imgs[0].shape # this is shape of stitched image
         pad = ((0, 0),
@@ -1616,6 +1667,8 @@ def segment_fov_unet(fov_id, specs, model):
                 np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
         imgs = np.pad(imgs, pad_width=pad, mode='edge')
         imgs = np.expand_dims(imgs, 4) # tf wants 4D array even for grayscale
+
+        # information('Padded shape', img_shape, imgs.shape)
 
         # set up image generator
         image_datagen = ImageDataGenerator()
@@ -1636,6 +1689,15 @@ def segment_fov_unet(fov_id, specs, model):
         # remove padding
         predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
                                      pad[2][0]:unet_shape[1]-pad[2][1], 0]
+
+
+
+        # pad back zeros to add on y that was cut off
+        if chnl_shape[0] > unet_shape[0]:
+            predictions = np.pad(predictions,
+                                 pad_width=((0,0), (0, chnl_shape[0] - unet_shape[0]), (0, 0)),
+                                 mode='constant') # defaults to 0
+        # information('Prediction shape resolved', predictions.shape)
 
         # binarized and label # the 0.99 should be a parameter ***
         predictions[predictions >= 0.99] = 1
@@ -1668,7 +1730,7 @@ def segment_fov_unet(fov_id, specs, model):
         if params['output'] == 'TIFF':
             for i, peak_id in enumerate(s_grp):
                 segmented_imgs = segmented_chnls[i]
-                seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
+                seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
                 tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
                             segmented_imgs, compress=4)
 
@@ -1679,10 +1741,10 @@ def segment_fov_unet(fov_id, specs, model):
                 # put segmented channel in correct group
                 h5g = h5f['channel_%04d' % peak_id]
                 # delete the dataset if it exists (important for debug)
-                if 'p%04d_seg_unet' % peak_id in h5g:
-                    del h5g['p%04d_seg_unet' % peak_id]
+                if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
+                    del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
 
-                h5ds = h5g.create_dataset(u'p%04d_seg_unet' % peak_id,
+                h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
                                 data=segmented_imgs,
                                 chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
                                 maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
@@ -1691,100 +1753,6 @@ def segment_fov_unet(fov_id, specs, model):
 
         information('Saved segmented channels ' + ', '.join([str(p) for p in s_grp]))
     information("Finished segmentation for FOV {}.".format(fov_id))
-    return
-
-def segment_chnl_stack_unet(fov_id, peak_id, model):
-    '''
-    Segment a channel of phase contrast images and return a segmented stack.
-
-    Parameters
-    ----------
-    fov_id : int
-    peak_id : int
-    model : TensorFlow model
-    '''
-
-    information('Segmenting FOV %d, channel %d with U-net.' % (fov_id, peak_id))
-
-    # load segmentation parameters
-    min_object_size = params['min_object_size']
-
-    # load images
-    img_data = load_stack(fov_id, peak_id, color=params['phase_plane'])
-
-    # pad image. Later, I will need to combine channels into one block
-    unet_shape = (256, 256) # this should be a parameter or inferred. Actually it should be a parameter because it is dependent on the model ***
-
-    img_shape = img_data[0].shape
-    pad = ((0, 0),
-           (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
-            np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
-           (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
-            np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
-    img_data = np.pad(img_data, pad_width=pad, mode='edge')
-
-    # tf wants this to be a 4D array. Last dim is 1 for grayscale
-    images_to_segment = np.expand_dims(img_data, 4)
-
-    # set up image generator
-    image_datagen = ImageDataGenerator()
-    batch_size = 1 # this should be a parameter ***
-    image_generator = image_datagen.flow(x=images_to_segment,
-                                         batch_size=batch_size,
-                                         shuffle=False) # keep same order
-
-    # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
-    predict_args = dict(steps=None,
-                        max_queue_size=10, # maybe should also be parameter
-                        workers = params['num_analyzers'],
-                        use_multiprocessing=True,
-                        verbose=1)
-    predictions = model.predict_generator(image_generator, **predict_args)
-
-    # post processing
-    # remove padding
-    predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
-                                 pad[2][0]:unet_shape[1]-pad[2][1], 0]
-
-    # binarized and label # the 0.99 should be a parameter ***
-    predictions[predictions >= 0.99] = 1
-    predictions[predictions < 0.99] = 0
-    # processing and labeling
-    # must do processing slice by slice or it will connect them through time
-    processed_imgs = [predictions[i].astype('uint8') for i in
-                                              range(predictions.shape[0])]
-    processed_imgs = [morphology.binary_opening(img, morphology.disk(2)) for
-                      img in processed_imgs]
-    processed_imgs = [segmentation.clear_border(img) for img in processed_imgs]
-    processed_imgs = [morphology.remove_small_objects(img, min_size=min_object_size) for
-                      img in processed_imgs]
-    processed_imgs = [morphology.label(img) for img in processed_imgs]
-    segmented_imgs = np.stack(processed_imgs, axis=0).astype('uint8')
-
-    # save out the segmented stack
-    if params['output'] == 'TIFF':
-        seg_filename = params['experiment_name'] + '_xy%03d_p%04d_seg.tif' % (fov_id, peak_id)
-        tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
-                    segmented_imgs, compress=4)
-
-    if params['output'] == 'HDF5':
-        h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
-
-        # put segmented channel in correct group
-        h5g = h5f['channel_%04d' % peak_id]
-
-        # delete the dataset if it exists (important for debug)
-        if 'p%04d_seg_unet' % peak_id in h5g:
-            del h5g['p%04d_seg_unet' % peak_id]
-
-        h5ds = h5g.create_dataset(u'p%04d_seg_unet' % peak_id,
-                        data=segmented_imgs,
-                        chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                        compression="gzip", shuffle=True, fletcher32=True)
-        h5f.close()
-
-    information("Saved segmented channel %d." % peak_id)
     return
 
 # finds lineages for all peaks in a fov
@@ -1871,7 +1839,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data
-    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
+    image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
 
     # Calculate all data for all time points.
     # this list will be length of the number of time points
@@ -2479,11 +2447,8 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
     seg_stack = load_stack(fov_id, peak_id, color='seg')
 
     # determine absolute time index
-    time_table_path = os.path.join(params['ana_dir'],'time_table.pkl')
-    with open(time_table_path,'r') as fin:
-        time_table = pickle.load(fin)
     times_all = []
-    for fov in time_table:
+    for fov in params['time_table']:
         times_all = np.append(times_all, time_table[fov].keys())
     times_all = np.unique(times_all)
     times_all = np.sort(times_all)
@@ -2544,10 +2509,7 @@ def foci_analysis(fov_id, peak_id, Cells):
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
@@ -2621,10 +2583,7 @@ def foci_analysis_pool(fov_id, peak_id, Cells):
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
