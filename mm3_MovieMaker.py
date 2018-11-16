@@ -29,6 +29,9 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0, parentdir)
 
 # supress the warning this always gives
 with warnings.catch_warnings():
@@ -185,7 +188,9 @@ if __name__ == "__main__":
 
     # assign shorthand directory names
     TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
-    movie_dir = os.path.join(p['experiment_directory'], p['moviemaker']['movie_directory'])
+    movie_dir = os.path.realpath(os.path.join(p['experiment_directory'], p['moviemaker']['movie_directory']))
+
+    print(movie_dir)
 
     # set up movie folder if it does not already exist
     if not os.path.exists(movie_dir):
@@ -291,7 +296,7 @@ if __name__ == "__main__":
 
             image_data = tiff.imread(img) # get the image
             image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
-            
+
             # make phase stack
             if show_phase:
                 if len(image_data.shape) > 2:
