@@ -1466,7 +1466,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
     Cells1 : second set of linages to overlay. Useful for comparing lineage output.
     '''
 
-
+    t_adj = 30 # adjust time indexing for differences between t index of image and image number
 
     # filter cells
     Cells = find_cells_of_fov_and_peak(Cells, fov_id, peak_id)
@@ -1518,7 +1518,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
             seg_relabeled[seg_relabeled == region.label] = region.centroid[0]
 
         ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.25, vmin=vmin, vmax=vmax)
-        ax[i].set_title(str(i), color='white')
+        ax[i].set_title(str(i + t_adj), color='white')
 
     # save just the segmented images
     # lin_dir = params['experiment_directory'] + params['analysis_directory'] + 'lineages/'
@@ -1533,7 +1533,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
     if True:
         for cell_id in Cells:
             for n, t in enumerate(Cells[cell_id].times):
-                t -= 1 # adjust for special indexing
+                t -= t_adj # adjust for special indexing
 
                 # don't look at time points out of the interval
                 if trim_time:
@@ -1549,11 +1549,11 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
 
                 # draw connecting lines between the centroids of cells in same lineage
                 try:
-                    if n < len(Cells[cell_id].times)-1:
+                    if n < len(Cells[cell_id].times) - 1:
                         # coordinates of the next centroid
                         x_next = Cells[cell_id].centroids[n+1][1]
                         y_next = Cells[cell_id].centroids[n+1][0]
-                        t_next = Cells[cell_id].times[n+1] - 1 # adjust for special indexing
+                        t_next = Cells[cell_id].times[n+1] - t_adj # adjust for special indexing
 
                         # get coordinates for the whole figure
                         coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
@@ -1578,7 +1578,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
                         d2_id = Cells[cell_id].daughters[1]
 
                         # both daughters should have been born at the same time.
-                        t_next = Cells[d1_id].times[0] - 1
+                        t_next = Cells[d1_id].times[0] - t_adj
 
                         # coordinates of the two daughters
                         x_d1 = Cells[d1_id].centroids[0][1]
@@ -1606,7 +1606,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
             Cells2 = find_cells_of_fov_and_peak(Cells2, fov_id, peak_id)
             for cell_id in Cells2:
                 for n, t in enumerate(Cells2[cell_id].times):
-                    t -= 1
+                    t -= t_adj
 
                     # don't look at time points out of the interval
                     if trim_time:
@@ -1622,11 +1622,11 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
 
                     # draw connecting lines between the centroids of cells in same lineage
                     try:
-                        if n < len(Cells2[cell_id].times)-1:
+                        if n < len(Cells2[cell_id].times) - 1:
                             # coordinates of the next centroid
                             x_next = Cells2[cell_id].centroids[n+1][1]
                             y_next = Cells2[cell_id].centroids[n+1][0]
-                            t_next = Cells2[cell_id].times[n+1] - 1
+                            t_next = Cells2[cell_id].times[n+1] - t_adj
 
                             # get coordinates for the whole figure
                             coord1 = transFigure.transform(ax[t].transData.transform([x, y]))
@@ -1650,7 +1650,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
                             d2_id = Cells2[cell_id].daughters[1]
 
                             # both daughters should have been born at the same time.
-                            t_next = Cells2[d1_id].times[0] - 1
+                            t_next = Cells2[d1_id].times[0] - t_adj
 
                             # coordinates of the two daughters
                             x_d1 = Cells2[d1_id].centroids[0][1]
@@ -1673,8 +1673,10 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
                     except:
                         pass
 
-    #         # this is for putting cell id on first time cell appears and when it divides
-    #         if n == 0 or n == len(Cells[cell_id].times)-1:
-    #             ax[t].text(x, y, cell_id, color='red', size=10, ha='center', va='center')
+            # this is for putting cell id on first time cell appears and when it divides
+            # this is broken, need to translate coordinates to correct location on figure.
+            # if n == 0 or n == len(Cells[cell_id].times)-1:
+            #     print(x/100.0, y/100.0, cell_id[9:])
+            #     ax[t].text(x/100.0, y/100.0, cell_id[9:], color='red', size=10, ha='center', va='center')
 
     return fig, ax
