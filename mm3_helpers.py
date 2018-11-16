@@ -106,6 +106,12 @@ def init_mm3_helpers(param_file_path):
     params['seg_dir'] = os.path.join(params['ana_dir'], 'segmented')
     params['cell_dir'] = os.path.join(params['ana_dir'], 'cell_data')
 
+    # use jd time in image metadata to make time table. Set to false if no jd time
+    if params['TIFF_source'] == 'elements' or params['TIFF_source'] == 'nd2ToTIFF':
+        params['use_jd'] = True
+    else:
+        params['use_jd'] = False
+
     return params
 
 def julian_day_number():
@@ -280,6 +286,8 @@ def get_tif_params(image_filename, find_channels=True):
                 image_metadata = get_tif_metadata_elements(tif)
             elif params['TIFF_source'] == 'nd2ToTIFF':
                 image_metadata = get_tif_metadata_nd2ToTIFF(tif)
+            else:
+                image_metadata = get_tif_metadata_filename(tif)
 
         # look for channels if flagged
         if find_channels:
@@ -302,7 +310,7 @@ def get_tif_params(image_filename, find_channels=True):
         information('Analyzed %s' % image_filename)
 
         # return the file name, the data for the channels in that image, and the metadata
-        return {'filepath': os.path.join(params['TIFF_dir'],image_filename),
+        return {'filepath': os.path.join(params['TIFF_dir'], image_filename),
                 'fov' : image_metadata['fov'], # fov id
                 't' : image_metadata['t'], # time point
                 'jd' : image_metadata['jd'], # absolute julian time
@@ -318,7 +326,7 @@ def get_tif_params(image_filename, find_channels=True):
         print(sys.exc_info()[0])
         print(sys.exc_info()[1])
         print(traceback.print_tb(sys.exc_info()[2]))
-        return {'filepath': os.path.join(TIFF_dir,image_filename), 'analyze_success': False}
+        return {'filepath': os.path.join(params['TIFF_dir'],image_filename), 'analyze_success': False}
 
 # finds metdata in a tiff image which has been expoted with Nikon Elements.
 def get_tif_metadata_elements(tif):
@@ -460,6 +468,35 @@ def get_tif_metadata_nd2ToTIFF(tif):
 
     return idata
 
+# Finds metadata from the filename
+def get_tif_metadata_filename(tif):
+    '''This function pulls out the metadata from a tif file and returns it as a dictionary.
+    This just gets the tiff metadata from the filename and is a backup option when the known format of the metadata is not known.
+
+    Paramters:
+        tif: TIFF file object from which data will be extracted
+    Returns:
+        dictionary of values:
+            'fov': int,
+            't' : int,
+            'jdn' (float)
+            'x' (float)
+            'y' (float)
+            'planes' (list of strings)
+
+    Called by
+    mm3_Compile.get_tif_params
+
+    '''
+    idata = {'fov' : get_fov(tif.fname), # fov id
+             't' : get_time(tif.fname), # time point
+             'jd' : None, # absolute julian time
+             'x' : None, # x position on stage [um]
+             'y' : None, # y position on stage [um]
+             'planes' : [str(x+1) for x in range(len(tif.pages))]}
+
+    return idata
+
 # make a lookup time table for converting nominal time to elapsed time in seconds
 def make_time_table(analyzed_imgs):
     '''
@@ -471,6 +508,8 @@ def make_time_table(analyzed_imgs):
     ---------
     analyzed_imgs : dict
         The output of get_tif_params.
+    params['use_jd'] : boolean
+        If set to True, 'jd' time will be used from the image metadata to use to create time table. Otherwise the 't' index will be used, and the parameter 'seconds_per_time_index' will be used from the parameters.yaml file to convert to seconds.
 
     Returns
     -------
@@ -481,20 +520,29 @@ def make_time_table(analyzed_imgs):
 
     # initialize
     time_table = {}
-    first_jd = float('inf')
+
+    first_time = float('inf')
 
     # need to go through the data once to find the first time
     for iname, idata in analyzed_imgs.items():
-        if idata['jd'] < first_jd:
-            first_jd = idata['jd']
+        if params['use_jd']:
+            if idata['jd'] < first_time:
+                first_time = idata['jd']
+        else:
+            if idata['t'] < first_time:
+                first_time = idata['t']
 
         # init dictionary for specific times per FOV
         if idata['fov'] not in time_table:
             time_table[idata['fov']] = {}
 
     for iname, idata in analyzed_imgs.items():
-        # convert jd time to elapsed time in seconds
-        t_in_seconds = np.around((idata['jd'] - first_jd) * 24*60*60, decimals=0).astype('uint32')
+        if params['use_jd']:
+            # convert jd time to elapsed time in seconds
+            t_in_seconds = np.around((idata['jd'] - first_time) * 24*60*60, decimals=0).astype('uint32')
+        else:
+            t_in_seconds = np.around((idata['t'] - first_time) * params['moviemaker']['seconds_per_time_index'], decimals=0).astype('uint32')
+
         time_table[idata['fov']][idata['t']] = t_in_seconds
 
     # save to .pkl. This pkl will be loaded into the params
@@ -540,7 +588,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         if len(image_data.shape) == 2:
             image_data = np.expand_dims(image_data, 0)
 
-        #change axis so it goes X, Y, Plane
+        # change axis so it goes Y, X, Plane
         image_data = np.rollaxis(image_data, 0, 3)
 
         # add it to list. The images should be in time order

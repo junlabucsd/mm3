@@ -2,7 +2,7 @@
 # Name your experiment
 experiment_name: 'exp_name'
 
-# root directory for the experiment. Must end in "/"
+# root directory for the experiment.
 experiment_directory: '/path/to/exp/folder/'
 
 # subdirectory for the original TIFs. This should be in your experiment_directory
@@ -27,80 +27,6 @@ phase_plane: 'c1'
 # use 0.11 for 100X (Photometrics Prime 95B)
 pxl2um: 0.108
 
-# image_orientation: set to "up" if growth pushes cells up
-# set to "down" if growth pushes cells down
-# set to 'auto' if there is a mix
-image_orientation: 'auto'
-
-# constants for tuning the algorithm (units are pixels)
-# channel_width is simply the width of the channels in pixels
-# is used to set the middle of the size range for detecting
-# intensity peaks corresponding to individual channels.
-channel_width: 12
-
-# channel_separation is used to judge the closeness of channels
-# to the edges of the image
-channel_separation: 45
-
-# channel_detection_snr sets the signal-to-noise ratio for detecting
-# intensities corresponding to channels
-channel_detection_snr: 1
-
-# channel_length_pad sets the amount of padding to top and bottom when making channel masks
-channel_length_pad: 10
-
-# channel_width_pad sets ammount of padding at sides of channel when making channels masks
-channel_width_pad: 10
-
-# threshold for calling empty/full channels in ChannelPicker
-channel_picking_threshold: 0.97
-
-# when aligning channels, this is the pad size in pixels.
-# use large values if your channels move a lot during the experiment (will slow subtraction down)
-alignment_pad: 5
-
-### segmentaion and lineage creation parameters
-# threshold used in readjusting the OTSU method in fold change.
-# Higher number will create smaller markers. 1.0 == default OTSU
-# Only for marker creation,final watershed uses default OTSU
-OTSU_threshold: 1.0
-
-# the radius of the disk that is used in the first morphological opening
-# unit is pixels
-first_opening_size: 2
-
-# pixels closer than this distance to the edge of a cell will be zeroed.
-# unit is pixels
-distance_threshold: 2
-
-# the radius, in pixels, of the size of the disk that is used in the second morphological
-# unit is pixels
-second_opening_size: 1
-
-# markers for potential cells smaller than this area will be zeroed
-# unit is pixels^2
-min_object_size: 20
-
-# amount of frames after which a cell is dropped because no new regions linked to it
-lost_cell_time: 3
-
-# parameters for the minimum and maximum a region can when linking new regions to
-# existing potential cell
-# Unit is ratio
-max_growth_length: 1.3
-min_growth_length: 0.8
-max_growth_area: 1.3
-min_growth_area: 0.8
-
-# regions only less than this value down the channel from the closed end will be considered
-# to start potential new cells. Does not apply to daughters
-# unit is pixels
-new_cell_y_cutoff: 150
-
-# only regions with labels less than or equal to this value will be considered to start potential
-# new cells.
-new_cell_region_cutoff: 2
-
 ### process control ############################################################
 # Use these flags to control script specific processes and settings
 
@@ -111,29 +37,59 @@ nd2ToTIFF:
   2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
   tiff_compress : 5 # integer 1-9 for level of compression.
   external_directory : # path to location of .nd2 if not in exp. dir.
-  image_start: 1
-  image_end: None
 
 compile:
   do_metadata: True
   do_time_table : True
   do_channel_masks : True
   do_slicing : True
+
   t_end : # only analyze images up until this t point. Leave blank otherwise
+  image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
+  channel_width : 8 # width of channels in pixels
+  channel_separation : 45 # peak-to-peak distance between channels in pixels
+  channel_detection_snr : 1 # signal to noise ratio for channel detection
+  channel_length_pad : 10 # pad for slicing out channels
+  channel_width_pad : 10 # pad for slicing out channels
 
 channel_picker:
   do_crosscorrs: True
   interactive : True
-  first_image : 10 # image index to show on top row
-  last_image : 200 # image index to show on middle row
+
+  first_image : 1 # image index to show on top row
+  last_image : -1 # image index to show on middle row
+  channel_picking_threshold: 0.97 # threshold for calling empty/full channels
 
 subtract:
   do_empties: True
   do_subtraction: True
 
+  alignment_pad: 10 # for translational alignment
+
 segment:
   do_segmentation: True
   do_lineages: True
+
+  OTSU_threshold: 1.0 # readjusting the OTSU method in fold change
+  first_opening_size: 2 # pixel size used in the first morphological opening
+  distance_threshold: 2 # pixel distance to be zeroed
+  second_opening_size: 1 # pixel size used in the second morphological opening
+  min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
+
+  model_path: '/path/to/model.hdf5' # U-net model to use for segmentation
+
+  lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
+  # regions only less than this value down the channel from the closed end will be considered
+  # to start potential new cells. Does not apply to daughters. unit is pixels
+  new_cell_y_cutoff: 150
+  # only regions with labels less than or equal to this value will be considered to start potential new cells. Does not apply to daughters
+  new_cell_region_cutoff: 4
+  # parameters for the minimum and maximum a region can when linking new regions to
+  # existing potential cell. Unit is ratio
+  max_growth_length: 1.3
+  min_growth_length: 0.8
+  max_growth_area: 1.3
+  min_growth_area: 0.8
 
 ### movie parameters ###########################################################
 # parameters for mm3_MovieMaker_alternative.py
@@ -165,13 +121,13 @@ movie:
 
 # parameters for mm3_MovieMaker
 moviemaker:
-  movie_directory: 'movies/'   # subdirectory in exp folder
-  seconds_per_time_index: 120   # used for time stamp
-  fps: 15 # frames per second
+  movie_directory: 'movies'   # subdirectory in exp folder
+  seconds_per_time_index: 60   # used for time stamp
+  fps: 12 # frames per second
   image_start: 1 # 1 indexed (like how the TIFFs are named)
   image_end: None
   show_time_stamp: True
-  show_label: True
+  show_label: False
   label1_text: 'Label 1'
   shift_time: None
   label2_text: '' # will show after shift time
@@ -184,13 +140,13 @@ moviemaker:
   ph_max: 6000
   phase_plane_index: 0 # index of the phase plane
   show_green: False
-  gr_min: 150
-  gr_max: 300
+  gr_min: 450
+  gr_max: 1000
   fl_green_index: 1 # index of green channel.
   fl_green_interval: 1 # relative to phase. Avoids strobe
   show_red: False
   rd_min: 120
-  rd_max: 170
+  rd_max: 150
   fl_red_index: 2 # index of red fluorsecent channel.
   fl_red_interval: 1
 

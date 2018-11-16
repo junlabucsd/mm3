@@ -4,7 +4,7 @@ from __future__ import print_function
 # import modules
 import sys
 import os
-# import time
+import time
 import inspect
 import argparse
 import yaml
@@ -15,8 +15,6 @@ except:
     import pickle
 import numpy as np
 from scipy.io import savemat
-
-from tensorflow.python.keras import models
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -40,14 +38,12 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Segment.py',
                                      description='Segment cells and create lineages.')
-    parser.add_argument('-f', '--paramfile', type=file,
+    parser.add_argument('-f', '--paramfile',  type=file,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
-    parser.add_argument('-m', '--modelfile', type=file,
-                        required=False, help='Path to trained U-net model.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -75,7 +71,7 @@ if __name__ == "__main__":
         os.makedirs(p['cell_dir'])
 
     # set segmentation image name for saving and loading segmented images
-    p['seg_img'] = 'seg_unet'
+    p['seg_img'] = 'seg_otsu' # ideally this should be called seg_otsu
 
     # load specs file
     specs = mm3.load_specs()
@@ -87,27 +83,23 @@ if __name__ == "__main__":
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
-    mm3.information("Processing %d FOVs." % len(fov_id_list))
+    mm3.information("Segmenting %d FOVs." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
     if p['segment']['do_segmentation']:
-        mm3.information("Segmenting channels using U-net.")
-
-        # load model to pass to algorithm
-        mm3.information("Loading model...")
-
-        if namespace.modelfile:
-            model_file_path = namespace.modelfile.name
-        else:
-            model_file_path = p['segment']['model_file']
-        # *** Need parameter for weights
-        model = models.load_model(model_file_path,
-                                  custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
-                                                  'dice_loss': mm3.dice_loss})
-        mm3.information("Model loaded.")
+        mm3.information("Segmenting channels using Otsu method.")
 
         for fov_id in fov_id_list:
-            mm3.segment_fov_unet(fov_id, specs, model)
+            # determine which peaks are to be analyzed (those which have been subtracted)
+            ana_peak_ids = []
+            for peak_id, spec in specs[fov_id].items():
+                if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
+                    ana_peak_ids.append(peak_id)
+            ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
+
+            for peak_id in ana_peak_ids:
+                # send to segmentation
+                mm3.segment_chnl_stack(fov_id, peak_id)
 
         mm3.information("Finished segmentation.")
 
