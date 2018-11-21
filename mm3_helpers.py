@@ -1667,7 +1667,7 @@ def segment_fov_unet(fov_id, specs, model):
 
     # load segmentation parameters
     min_object_size = params['segment']['min_object_size']
-    unet_shape = (256, 256) # This should be a parameter
+    unet_shape = (256, 256) # This should be a parameter *** or it could be grabbed from model?
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -1702,7 +1702,7 @@ def segment_fov_unet(fov_id, specs, model):
         imgs = np.concatenate(imgs, axis=2) # along x/cols
 
         # if channel image is longer than Unet shape then trim it down
-        if chnl_shape[0] > 256:
+        if chnl_shape[0] > unet_shape[0]:
             imgs = imgs[:,:unet_shape[0],:]
         # information('Channel shape', chnl_shape)
 
