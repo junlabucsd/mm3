@@ -1611,7 +1611,7 @@ def segment_image(image):
         return np.zeros_like(image)
 
     # relabel now that small objects and labels on edges have been cleared
-    markers = morphology.label(cleared)
+    markers = morphology.label(cleared, connectivity=1)
 
     # just break if there is no label
     if np.amax(markers) == 0:
@@ -1668,6 +1668,7 @@ def segment_fov_unet(fov_id, specs, model):
     # load segmentation parameters
     min_object_size = params['segment']['min_object_size']
     unet_shape = params['segment']['unet_shape']
+    bin_threshold = params['segment']['binary_threshold']
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -1738,8 +1739,6 @@ def segment_fov_unet(fov_id, specs, model):
         predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
                                      pad[2][0]:unet_shape[1]-pad[2][1], 0]
 
-
-
         # pad back zeros to add on y that was cut off
         if chnl_shape[0] > unet_shape[0]:
             predictions = np.pad(predictions,
@@ -1747,9 +1746,9 @@ def segment_fov_unet(fov_id, specs, model):
                                  mode='constant') # defaults to 0
         # information('Prediction shape resolved', predictions.shape)
 
-        # binarized and label # the 0.99 should be a parameter ***
-        predictions[predictions >= 0.99] = 1
-        predictions[predictions < 0.99] = 0
+        # binarized and label
+        predictions[predictions >= bin_threshold] = 1
+        predictions[predictions < bin_threshold] = 0
 
         # split up images back into channels
         pred_chnls = np.split(predictions, len(s_grp), axis=2)
@@ -1768,10 +1767,10 @@ def segment_fov_unet(fov_id, specs, model):
                 warnings.simplefilter("ignore")
                 segmented_chnl = [morphology.remove_small_holes(img, area_threshold=min_object_size)
                                   for img in segmented_chnl]
-                segmented_chnl = [morphology.remove_small_objects(morphology.label(img),
+                segmented_chnl = [morphology.remove_small_objects(morphology.label(img, connectivity=1),
                                   min_size=min_object_size) for img in segmented_chnl]
 
-            segmented_chnl = [morphology.label(img) for img in segmented_chnl]
+            segmented_chnl = [morphology.label(img, connectivity=1) for img in segmented_chnl]
             segmented_chnls.append(np.stack(segmented_chnl, axis=0).astype('uint8'))
 
         # save out the segmented stacks
