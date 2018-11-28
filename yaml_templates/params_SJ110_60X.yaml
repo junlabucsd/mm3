@@ -76,7 +76,9 @@ segment:
   second_opening_size: 1 # pixel size used in the second morphological opening
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
-  model_path: '/path/to/model.hdf5' # U-net model to use for segmentation
+  model_file: '/path/to/model.hdf5' # U-net model to use for segmentation
+  unet_shape: [256, 256] # must match image dimensions for training model
+  binary_threshold: 0.75 # number between 0 and 1 that dictates how to binarize U-net output
 
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
   # regions only less than this value down the channel from the closed end will be considered
