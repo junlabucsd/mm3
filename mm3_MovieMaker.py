@@ -13,6 +13,7 @@ import glob
 import math
 import subprocess as sp
 import numpy as np
+from skimage.external import tifffile as tiff
 from freetype import *
 import warnings
 
@@ -23,20 +24,20 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# This makes python look for modules in ./external_lib
-cmd_subfolder = os.path.realpath(os.path.abspath(
-                                 os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], "external_lib")))
-if cmd_subfolder not in sys.path:
-    sys.path.insert(0, cmd_subfolder)
+# # This makes python look for modules in ./external_lib
+# cmd_subfolder = os.path.realpath(os.path.abspath(
+#                                  os.path.join(os.path.split(inspect.getfile(
+#                                  inspect.currentframe()))[0], "external_lib")))
+# if cmd_subfolder not in sys.path:
+#     sys.path.insert(0, cmd_subfolder)
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0, parentdir)
 
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
+# # supress the warning this always gives
+# with warnings.catch_warnings():
+#     warnings.simplefilter("ignore")
+#     import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3

@@ -17,6 +17,7 @@ try:
 except:
     import pickle
 import numpy as np
+from skimage.external import tifffile as tiff
 import pims_nd2
 import warnings
 
@@ -27,17 +28,12 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# This makes python look for modules in ./external_lib
-cmd_subfolder = os.path.realpath(os.path.abspath(
+# This makes python look for modules in directory above this one
+mm3_dir = os.path.realpath(os.path.abspath(
                                  os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], "external_lib")))
-if cmd_subfolder not in sys.path:
-    sys.path.insert(0, cmd_subfolder)
-
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
+                                 inspect.currentframe()))[0], '..')))
+if mm3_dir not in sys.path:
+    sys.path.insert(0, mm3_dir)
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3

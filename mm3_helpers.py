@@ -34,6 +34,7 @@ from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
+from skimage.external import tifffile as tiff
 
 # deep learning
 import tensorflow as tf # ignore message about how tf was compiled
@@ -63,17 +64,12 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# This makes python look for modules in ./external_lib
-cmd_subfolder = os.path.realpath(os.path.abspath(
-                                 os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], "external_lib")))
-if cmd_subfolder not in sys.path:
-    sys.path.insert(0, cmd_subfolder)
-
-# supress the warning tifffile always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
+# # This makes python look for modules in ./external_lib
+# cmd_subfolder = os.path.realpath(os.path.abspath(
+#                                  os.path.join(os.path.split(inspect.getfile(
+#                                  inspect.currentframe()))[0], "external_lib")))
+# if cmd_subfolder not in sys.path:
+#     sys.path.insert(0, cmd_subfolder)
 
 ### functions ###########################################################
 # alert the use what is up
@@ -1697,7 +1693,7 @@ def segment_fov_unet(fov_id, specs, model):
 
     # process each stich group individually
     for s_grp in stitch_groups:
-        information('Processing channels: ' + ', '.join([str(p) for p in s_grp]) + ' with {} time points.'.format(timepoints))
+        information('Processing channels ' + ', '.join([str(p) for p in s_grp]) + ' with {} time points.'.format(timepoints))
         # load images and stich side by side
         imgs = [load_stack(fov_id, peak_id, color=params['phase_plane']) for peak_id in s_grp]
         imgs = np.concatenate(imgs, axis=2) # along x/cols

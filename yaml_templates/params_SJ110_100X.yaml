@@ -31,6 +31,8 @@ pxl2um: 0.065
 # Use these flags to control script specific processes and settings
 
 nd2ToTIFF:
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end: None
   number_of_rows : 1
   crop_ymin : # 0.05
   crop_ymax : # 0.95
