@@ -34,6 +34,7 @@ from skimage.filters import threshold_otsu # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
+from skimage.external import tifffile as tiff
 
 # deep learning
 import tensorflow as tf # ignore message about how tf was compiled
@@ -63,17 +64,12 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# This makes python look for modules in ./external_lib
-cmd_subfolder = os.path.realpath(os.path.abspath(
-                                 os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], "external_lib")))
-if cmd_subfolder not in sys.path:
-    sys.path.insert(0, cmd_subfolder)
-
-# supress the warning tifffile always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
+# # This makes python look for modules in ./external_lib
+# cmd_subfolder = os.path.realpath(os.path.abspath(
+#                                  os.path.join(os.path.split(inspect.getfile(
+#                                  inspect.currentframe()))[0], "external_lib")))
+# if cmd_subfolder not in sys.path:
+#     sys.path.insert(0, cmd_subfolder)
 
 ### functions ###########################################################
 # alert the use what is up
@@ -1611,7 +1607,7 @@ def segment_image(image):
         return np.zeros_like(image)
 
     # relabel now that small objects and labels on edges have been cleared
-    markers = morphology.label(cleared)
+    markers = morphology.label(cleared, connectivity=1)
 
     # just break if there is no label
     if np.amax(markers) == 0:
@@ -1667,7 +1663,8 @@ def segment_fov_unet(fov_id, specs, model):
 
     # load segmentation parameters
     min_object_size = params['segment']['min_object_size']
-    unet_shape = (256, 256) # This should be a parameter
+    unet_shape = params['segment']['unet_shape']
+    bin_threshold = params['segment']['binary_threshold']
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -1696,13 +1693,13 @@ def segment_fov_unet(fov_id, specs, model):
 
     # process each stich group individually
     for s_grp in stitch_groups:
-        information('Processing channels: ' + ', '.join([str(p) for p in s_grp]) + ' with {} time points.'.format(timepoints))
+        information('Processing channels ' + ', '.join([str(p) for p in s_grp]) + ' with {} time points.'.format(timepoints))
         # load images and stich side by side
         imgs = [load_stack(fov_id, peak_id, color=params['phase_plane']) for peak_id in s_grp]
         imgs = np.concatenate(imgs, axis=2) # along x/cols
 
         # if channel image is longer than Unet shape then trim it down
-        if chnl_shape[0] > 256:
+        if chnl_shape[0] > unet_shape[0]:
             imgs = imgs[:,:unet_shape[0],:]
         # information('Channel shape', chnl_shape)
 
@@ -1738,8 +1735,6 @@ def segment_fov_unet(fov_id, specs, model):
         predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
                                      pad[2][0]:unet_shape[1]-pad[2][1], 0]
 
-
-
         # pad back zeros to add on y that was cut off
         if chnl_shape[0] > unet_shape[0]:
             predictions = np.pad(predictions,
@@ -1747,9 +1742,9 @@ def segment_fov_unet(fov_id, specs, model):
                                  mode='constant') # defaults to 0
         # information('Prediction shape resolved', predictions.shape)
 
-        # binarized and label # the 0.99 should be a parameter ***
-        predictions[predictions >= 0.99] = 1
-        predictions[predictions < 0.99] = 0
+        # binarized and label
+        predictions[predictions >= bin_threshold] = 1
+        predictions[predictions < bin_threshold] = 0
 
         # split up images back into channels
         pred_chnls = np.split(predictions, len(s_grp), axis=2)
@@ -1768,10 +1763,10 @@ def segment_fov_unet(fov_id, specs, model):
                 warnings.simplefilter("ignore")
                 segmented_chnl = [morphology.remove_small_holes(img, area_threshold=min_object_size)
                                   for img in segmented_chnl]
-                segmented_chnl = [morphology.remove_small_objects(morphology.label(img),
+                segmented_chnl = [morphology.remove_small_objects(morphology.label(img, connectivity=1),
                                   min_size=min_object_size) for img in segmented_chnl]
 
-            segmented_chnl = [morphology.label(img) for img in segmented_chnl]
+            segmented_chnl = [morphology.label(img, connectivity=1) for img in segmented_chnl]
             segmented_chnls.append(np.stack(segmented_chnl, axis=0).astype('uint8'))
 
         # save out the segmented stacks
