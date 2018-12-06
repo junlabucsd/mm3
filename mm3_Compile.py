@@ -67,6 +67,8 @@ if __name__ == "__main__":
 
     # only analyze images up until this t point. Put in None otherwise
     t_end = p['compile']['t_end']
+    if t_end == 'None':
+        t_end = None
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
