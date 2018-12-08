@@ -377,6 +377,7 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # use previous specfile
     if namespace.specfile:

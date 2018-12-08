@@ -64,6 +64,7 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # only analyze images up until this t point. Put in None otherwise
     t_end = p['compile']['t_end']
