@@ -1666,6 +1666,9 @@ def segment_fov_unet(fov_id, specs, model):
     unet_shape = params['segment']['unet_shape']
     bin_threshold = params['segment']['binary_threshold']
 
+    # dictates how to deal with images longer than unet_shape
+    long_y_method = 'tile' # 'tile' or 'trim'
+
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
     # this assumes that all channels are the same size for this FOV, which they should
@@ -1697,23 +1700,52 @@ def segment_fov_unet(fov_id, specs, model):
         # load images and stich side by side
         imgs = [load_stack(fov_id, peak_id, color=params['phase_plane']) for peak_id in s_grp]
         imgs = np.concatenate(imgs, axis=2) # along x/cols
+        img_shape = imgs[0].shape
 
-        # if channel image is longer than Unet shape then trim it down
-        if chnl_shape[0] > unet_shape[0]:
-            imgs = imgs[:,:unet_shape[0],:]
-        # information('Channel shape', chnl_shape)
+        if chnl_shape[0] > unet_shape[0] and long_y_method == 'trim':
+            # if channel image is longer than Unet shape then trim it down
+            if chnl_shape[0] > unet_shape[0]:
+                imgs = imgs[:,:unet_shape[0],:]
+            # information('Channel shape', chnl_shape)
+            img_shape = imgs[0].shape # this is the new shape of stitched image
 
-        # pad
-        img_shape = imgs[0].shape # this is shape of stitched image
-        pad = ((0, 0),
-               (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
-                np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
-               (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
-                np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
-        imgs = np.pad(imgs, pad_width=pad, mode='edge')
+            pad = ((0, 0),
+                   (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
+                    np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
+                   (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
+                    np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
+
+        # if channel image is longer than Unet shape then tile it
+        elif chnl_shape[0] > unet_shape[0] and long_y_method == 'tile':
+            y_split_n = np.ceil(chnl_shape[0] / float(unet_shape[0])).astype(int)
+            y_split_height = unet_shape[0] * y_split_n
+
+            # pad y to an integer multiple of unet_shape and then split into even parts
+            # bias padding the open end of the channel
+            pad = ((0, 0),
+                   (0, y_split_height - img_shape[0]),
+                   (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
+                    np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
+
+        # pad evenly around the image if y length
+        else:
+            pad = ((0, 0),
+                   (np.ceil((unet_shape[0] - img_shape[0])/2.0).astype(int),
+                    np.floor((unet_shape[0] - img_shape[0])/2.0).astype(int)),
+                   (np.ceil((unet_shape[1] - img_shape[1])/2.0).astype(int),
+                    np.floor((unet_shape[1] - img_shape[1])/2.0).astype(int)))
+
+        imgs = np.pad(imgs, pad_width=pad, mode='constant')
         imgs = np.expand_dims(imgs, 4) # tf wants 4D array even for grayscale
-
         # information('Padded shape', img_shape, imgs.shape)
+
+        # if tiling, split images into y = unet shape and then tack on to time axis
+        if chnl_shape[0] > unet_shape[0] and long_y_method == 'tile':
+            # information('imgs shape', imgs.shape)
+            imgs_split_y = np.array_split(imgs, y_split_n, axis=1)
+            # information('imgs_split_y shape', imgs_split_y[0].shape)
+            imgs = np.concatenate(imgs_split_y, axis=0)
+            # information('imgs shape', imgs.shape)
 
         # set up image generator
         image_datagen = ImageDataGenerator()
@@ -1731,15 +1763,34 @@ def segment_fov_unet(fov_id, specs, model):
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
-        # remove padding
-        predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
-                                     pad[2][0]:unet_shape[1]-pad[2][1], 0]
+        # if the trim method was used, pad back zeros to add on y that was cut off
+        if chnl_shape[0] > unet_shape[0] and long_y_method == 'trim':
+            # remove padding.
+            predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
+                                         pad[2][0]:unet_shape[1]-pad[2][1], 0]
 
-        # pad back zeros to add on y that was cut off
-        if chnl_shape[0] > unet_shape[0]:
             predictions = np.pad(predictions,
                                  pad_width=((0,0), (0, chnl_shape[0] - unet_shape[0]), (0, 0)),
                                  mode='constant') # defaults to 0
+
+        elif chnl_shape[0] > unet_shape[0] and long_y_method == 'tile':
+            # information('predictions shape', predictions.shape)
+            # reconstruct image with height unet * y_split_n
+            # this is the reverse of the splitting and concatenation steps above
+            predictions = np.array_split(predictions, y_split_n, axis=0)
+            # information('predictions len and shape after split', len(predictions), predictions[0].shape)
+            predictions = np.concatenate(predictions, axis=1)
+            # information('predictions shape after cat', predictions.shape)
+
+            # remove padding.
+            predictions = predictions[:, 0:y_split_height-pad[1][1],
+                                         pad[2][0]:unet_shape[1]-pad[2][1], 0]
+
+        else:
+            # remove padding.
+            predictions = predictions[:, pad[1][0]:unet_shape[0]-pad[1][1],
+                                         pad[2][0]:unet_shape[1]-pad[2][1], 0]
+
         # information('Prediction shape resolved', predictions.shape)
 
         # binarized and label
@@ -1757,16 +1808,19 @@ def segment_fov_unet(fov_id, specs, model):
             # segmented_chnl = [morphology.binary_opening(img, morphology.square(1)) for
             #                   img in segmented_chnl]
             # remove any labels that touch the border
-            # segmented_chnl = [segmentation.clear_border(img) for img in segmented_chnl]
+            segmented_chnl = [segmentation.clear_border(img) for img in segmented_chnl]
             # remove regions and fill holes with size smaller than min_object_size
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                segmented_chnl = [morphology.remove_small_holes(img, area_threshold=min_object_size)
+                segmented_chnl = [morphology.remove_small_holes(img,
+                                  area_threshold=min_object_size)
                                   for img in segmented_chnl]
-                segmented_chnl = [morphology.remove_small_objects(morphology.label(img, connectivity=1),
-                                  min_size=min_object_size) for img in segmented_chnl]
+                segmented_chnl = [morphology.remove_small_objects(morphology.label(img,
+                                  connectivity=1), min_size=min_object_size) for img in segmented_chnl]
 
-            segmented_chnl = [morphology.label(img, connectivity=1) for img in segmented_chnl]
+            # label image and stack along time for saving
+            segmented_chnl = [morphology.label(img, connectivity=1) for img in
+                              segmented_chnl]
             segmented_chnls.append(np.stack(segmented_chnl, axis=0).astype('uint8'))
 
         # save out the segmented stacks
