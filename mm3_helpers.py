@@ -1687,6 +1687,10 @@ def segment_fov_unet(fov_id, specs, model):
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
 
+    if len(ana_peak_ids) == 0:
+        information('No peaks desginated for analysis for FOV {}.'.format(fov_id))
+        return
+
     # how many stitched images will we make?
     max_chnls = int(unet_shape[1] / chnl_shape[1]) # max channels per stich
     n_stitch = int(np.ceil(len(ana_peak_ids) / float(max_chnls))) # float div

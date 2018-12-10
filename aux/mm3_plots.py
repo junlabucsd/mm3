@@ -1486,13 +1486,15 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
     image_indicies = range(n_imgs)
 
     # Color map for good label colors
-    cmap = mpl.colors.ListedColormap(sns.husl_palette(100, h=0.5, l=.8, s=1))
-    cmap.set_under(color='black')
     vmin = 0.1 # values under this color go to black
-    vmax = image_data_seg.shape[1] # max y value
+    vmax = 100 # max y value
+    cmap = mpl.colors.ListedColormap(sns.husl_palette(vmax, h=0.5, l=.8, s=1))
+    cmap.set_under(color='black')
     # Trying to get the image size down
     figxsize = image_data_seg.shape[2] * n_imgs / 100.0
     figysize = image_data_seg.shape[1] / 100.0
+
+    tarstarvaa
 
     # plot the images in a series
     fig, axes = plt.subplots(ncols=n_imgs, nrows=1,
@@ -1513,11 +1515,14 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='sub_c1', f
 
         # make a new version of the segmented image where the
         # regions are relabeled by their y centroid position.
+        # scale it so it falls within 100.
         seg_relabeled = image_data_seg[i].copy()
         for region in regions_by_time[i]:
-            seg_relabeled[seg_relabeled == region.label] = region.centroid[0]
+            rescaled_color_index = int(region.centroid[0]/float(image_data_seg.shape[1])) * vmax
+            print(rescaled_color_index)
+            seg_relabeled[seg_relabeled == region.label] = rescaled_color_index
 
-        ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.25, vmin=vmin, vmax=vmax)
+        ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.25, vmin=vmin, vmax=100)
         ax[i].set_title(str(i + t_adj), color='white')
 
     # save just the segmented images
