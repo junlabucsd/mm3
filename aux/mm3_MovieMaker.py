@@ -288,7 +288,11 @@ if __name__ == "__main__":
                 continue
 
             image_data = tiff.imread(img) # get the image
-            image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
+
+            if len(image_data.shape) > 2:
+                image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
+            else:
+                image_data = image_data[:size_y, :size_x]
 
             # make phase stack
             if show_phase:
