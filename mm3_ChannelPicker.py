@@ -151,7 +151,7 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
     plt.close('all')
     mm3.information("Written FOV {}'s channels in {}".format(fov_id,fileout))
 
-    return specs
+    return
 
 # funtion which makes the UI plot
 def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
@@ -526,8 +526,8 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            specs = fov_plot_channels(fov_id, crosscorrs, specs,
-                                      outputdir=outputdir, phase_plane=p['phase_plane'])
+            fov_plot_channels(fov_id, crosscorrs, specs,
+                              outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
     with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
