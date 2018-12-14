@@ -2605,12 +2605,12 @@ def foci_analysis(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
