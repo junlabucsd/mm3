@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
-        with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving cell data.")
