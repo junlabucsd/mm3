@@ -67,6 +67,7 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # create segmenteation and cell data folder if they don't exist
     if not os.path.exists(p['seg_dir']) and p['output'] == 'TIFF':
@@ -142,7 +143,7 @@ if __name__ == "__main__":
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
-        with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving cell data.")

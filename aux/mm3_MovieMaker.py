@@ -24,20 +24,12 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# # This makes python look for modules in ./external_lib
-# cmd_subfolder = os.path.realpath(os.path.abspath(
-#                                  os.path.join(os.path.split(inspect.getfile(
-#                                  inspect.currentframe()))[0], "external_lib")))
-# if cmd_subfolder not in sys.path:
-#     sys.path.insert(0, cmd_subfolder)
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
-
-# # supress the warning this always gives
-# with warnings.catch_warnings():
-#     warnings.simplefilter("ignore")
-#     import tifffile as tiff
+# This makes python look for modules in directory above this one
+mm3_dir = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], '..')))
+if mm3_dir not in sys.path:
+    sys.path.insert(0, mm3_dir)
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
@@ -296,7 +288,11 @@ if __name__ == "__main__":
                 continue
 
             image_data = tiff.imread(img) # get the image
-            image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
+
+            if len(image_data.shape) > 2:
+                image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
+            else:
+                image_data = image_data[:size_y, :size_x]
 
             # make phase stack
             if show_phase:
