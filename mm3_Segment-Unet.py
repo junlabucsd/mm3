@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 # import modules
@@ -40,20 +40,20 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Segment.py',
                                      description='Segment cells and create lineages.')
-    parser.add_argument('-f', '--paramfile', type=file,
+    parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
-    parser.add_argument('-m', '--modelfile', type=file,
+    parser.add_argument('-m', '--modelfile', type=str,
                         required=False, help='Path to trained U-net model.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -67,7 +67,6 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
-    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # create segmenteation and cell data folder if they don't exist
     if not os.path.exists(p['seg_dir']) and p['output'] == 'TIFF':
@@ -80,6 +79,7 @@ if __name__ == "__main__":
 
     # load specs file
     specs = mm3.load_specs()
+    print(specs) # for debugging
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         mm3.information("Loading model...")
 
         if namespace.modelfile:
-            model_file_path = namespace.modelfile.name
+            model_file_path = namespace.modelfile
         else:
             model_file_path = p['segment']['model_file']
         # *** Need parameter for weights
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         mm3.information("Model loaded.")
 
         for fov_id in fov_id_list:
-            mm3.segment_fov_unet(fov_id, specs, model)
+            mm3.segment_fov_unet(fov_id, specs, model) # 20181218 - editing mm3_helpers.py to incorporate Jeremy's segmentation.
 
         mm3.information("Finished segmentation.")
 
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
-        with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving cell data.")

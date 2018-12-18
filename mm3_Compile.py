@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 # import modules
@@ -28,6 +28,18 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
+# This makes python look for modules in ./external_lib
+cmd_subfolder = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], "external_lib")))
+if cmd_subfolder not in sys.path:
+    sys.path.insert(0, cmd_subfolder)
+
+# supress the mm3.warning this always gives
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import tifffile as tiff
+
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
@@ -39,7 +51,7 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
                                      description='Identifies and slices out channels into individual TIFF stacks through time.')
-    parser.add_argument('-f', '--paramfile',  type=file,
+    parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
@@ -49,8 +61,8 @@ if __name__ == "__main__":
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -64,12 +76,9 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
-    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # only analyze images up until this t point. Put in None otherwise
     t_end = p['compile']['t_end']
-    if t_end == 'None':
-        t_end = None
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -148,7 +157,8 @@ if __name__ == "__main__":
         mm3.information('Image analyses pool finished, getting results.')
 
         # get results from the pool and put them in a dictionary
-        for fn, result in analyzed_imgs.iteritems():
+        for fn in analyzed_imgs.keys():
+            result = analyzed_imgs[fn]
             if result.successful():
                 analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
             else:
@@ -188,7 +198,7 @@ if __name__ == "__main__":
         mm3.information("Saving channel slices.")
 
         # do it by FOV. Not set up for multiprocessing
-        for fov, peaks in channel_masks.iteritems():
+        for fov, peaks in channel_masks.items():
 
             # skip fov if not in the group
             if user_spec_fovs and fov not in user_spec_fovs:

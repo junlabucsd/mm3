@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 # import modules
@@ -23,7 +23,7 @@ import matplotlib.gridspec as gridspec
 plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
-from skimage.transform import resize
+from scipy.misc import imresize
 import multiprocessing
 from multiprocessing import Pool
 import warnings
@@ -100,16 +100,14 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
         # plot the first image in each channel in top row
         ax=axhi
         ax.imshow(first_img,cmap=plt.cm.gray, interpolation='nearest')
-        ax.get_xaxis().set_ticks([])
-        ax.get_yaxis().set_ticks([])
+        ax.axis('off')
         ax.set_title(str(peak_id), fontsize = 12)
         if n == 0:
             ax.set_ylabel("first time point")
 
         # plot middle row using last time point with highlighting for empty/full
         ax=axmid
-        ax.get_xaxis().set_ticks([])
-        ax.get_yaxis().set_ticks([])
+        ax.axis('off')
         #ax.imshow(last_img,cmap=plt.cm.gray, interpolation='nearest')
         #H,W = last_img.shape
         #img = np.zeros((H,W,3))
@@ -145,13 +143,14 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
         else:
             ax.set_ylabel("time index, CC on X")
 
+
     fig.suptitle("FOV {:d}".format(fov_id),fontsize=14)
     fileout=os.path.join(outputdir,'fov_xy{:03d}.pdf'.format(fov_id))
     fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
     plt.close('all')
     mm3.information("Written FOV {}'s channels in {}".format(fov_id,fileout))
 
-    return
+    return specs
 
 # funtion which makes the UI plot
 def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
@@ -224,8 +223,13 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         if crosscorrs:
             peak_xc = crosscorrs[fov_id][peak_id] # get cross corr data from dict
 
-        # grab data from preloaded image dictionary
+        # load data for figure
+        # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+
+        # first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        # last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
         last_imgs.append(UI_images[fov_id][peak_id]['last']) # append for updating later
+        # del image_data # clear memory (maybe)
 
         # append an axis handle to ax list while adding a subplot to the figure which has a
         # column for each peak and 3 rows
@@ -236,10 +240,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
                       cmap=plt.cm.gray, interpolation='nearest')
         ax = format_channel_plot(ax, peak_id) # format axis and title
         if n == 1:
-            if p['channel_picker']['first_image'] == 1:
-                ax[-1].set_ylabel('first time point')
-            else:
-                ax[-1].set_ylabel('time point {}'.format(p['channel_picker']['first_image']))
+            ax[-1].set_ylabel("first time point")
 
         # plot middle row using last time point with highlighting for empty/full
         ax.append(fig.add_subplot(3, npeaks, n + npeaks))
@@ -256,10 +257,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         # format
         ax = format_channel_plot(ax, peak_id)
         if n == 1:
-            if p['channel_picker']['last_image'] == -1:
-                ax[-1].set_ylabel('last time point')
-            else:
-                ax[-1].set_ylabel('time point {}'.format(p['channel_picker']['last_image']))
+            ax[-1].set_ylabel("last time point")
 
         # finally plot the cross correlations a cross time
         ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
@@ -319,19 +317,12 @@ def preload_images(specs, fov_id_list):
         for peak_id in specs[fov_id].keys():
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
-            # rescale first and last image
-            output_shape = (image_data.shape[1] / 2, image_data.shape[2] / 2)
-            first_image = image_data[p['channel_picker']['first_image'],:,:]
-            UI_images[fov_id][peak_id]['first'] = resize(first_image,
-                                                         output_shape=output_shape,
-                                                         mode='constant',
-                                                         anti_aliasing=True)
-            last_image = image_data[p['channel_picker']['last_image'],:,:]
+             # phase image at t=0. Rescale intenstiy and also cut the size in half
+            first_image = p['channel_picker']['first_image']
+            UI_images[fov_id][peak_id]['first'] = imresize(image_data[first_image,:,:], 0.5)
+            last_image = p['channel_picker']['last_image']
             # phase image at end
-            UI_images[fov_id][peak_id]['last'] = resize(last_image,
-                                                        output_shape=output_shape,
-                                                        mode='constant',
-                                                        anti_aliasing=True)
+            UI_images[fov_id][peak_id]['last'] = imresize(image_data[last_image,:,:], 0.5)
 
     return UI_images
 
@@ -343,7 +334,7 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_ChannelPicker.py',
                                      description='Determines which channels should be analyzed, used as empties for subtraction, or ignored.')
-    parser.add_argument('-f', '--paramfile', type=file,
+    parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
@@ -355,15 +346,15 @@ if __name__ == "__main__":
                         required=False, help='Do channel picking manually.')
     parser.add_argument('-c', '--saved_cross_correlations', action='store_true',
                         required=False, help='Load cross correlation data instead of computing.')
-    parser.add_argument('-s', '--specfile', type=file,
+    parser.add_argument('-s', '--specfile', type=str,
                         required=False, help='Path to spec.yaml file.')
     namespace = parser.parse_args()
 
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -377,12 +368,13 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
-    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
+    else:
+        p['num_analyzers'] = 6
 
     # use previous specfile
     if namespace.specfile:
         try:
-            specfile = os.path.relpath(namespace.specfile.name)
+            specfile = os.path.relpath(namespace.specfile)
             if not os.path.isfile(specfile):
                 raise ValueError
         except ValueError:
@@ -464,8 +456,8 @@ if __name__ == "__main__":
             mm3.information("Finished cross correlations for FOV %d." % fov_id)
 
         # get results from the pool and put the results in the dictionary if succesful
-        for fov_id, peaks in crosscorrs.iteritems():
-            for peak_id, result in peaks.iteritems():
+        for fov_id, peaks in crosscorrs.items():
+            for peak_id, result in peaks.items():
                 if result.successful():
                     # put the results, with the average, and a guess if the channel
                     # is full into the dictionary
@@ -477,7 +469,7 @@ if __name__ == "__main__":
 
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
-        with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'w') as xcorrs_file:
+        with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'wb') as xcorrs_file:
             pickle.dump(crosscorrs, xcorrs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
@@ -526,8 +518,8 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            fov_plot_channels(fov_id, crosscorrs, specs,
-                              outputdir=outputdir, phase_plane=p['phase_plane'])
+            specs = fov_plot_channels(fov_id, crosscorrs, specs,
+                                      outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
     with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
