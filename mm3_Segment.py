@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python
 from __future__ import print_function
 
 # import modules
@@ -70,11 +70,13 @@ if __name__ == "__main__":
     if not os.path.exists(p['cell_dir']):
         os.makedirs(p['cell_dir'])
 
-    # set segmentation image name for saving and loading segmented images
-    p['seg_img'] = 'seg_otsu' # ideally this should be called seg_otsu
-
     # load specs file
-    specs = mm3.load_specs()
+    try:
+        with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
+    except:
+        mm3.warning('Could not load specs file.')
+        raise ValueError
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
@@ -83,11 +85,11 @@ if __name__ == "__main__":
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
-    mm3.information("Segmenting %d FOVs." % len(fov_id_list))
+    mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
     if p['segment']['do_segmentation']:
-        mm3.information("Segmenting channels using Otsu method.")
+        mm3.information("Segmenting channels.")
 
         for fov_id in fov_id_list:
             # determine which peaks are to be analyzed (those which have been subtracted)

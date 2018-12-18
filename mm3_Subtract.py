@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from __future__ import print_function
 
 # import modules
@@ -75,7 +75,6 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
-    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # which color channel with which to do subtraction
     if namespace.color:
