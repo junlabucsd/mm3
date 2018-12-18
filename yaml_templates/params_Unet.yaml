@@ -78,7 +78,7 @@ segment:
   trained_model_image_height: 256
   trained_model_image_width: 32  
 
-  model_file: '/home/wanglab/src/motherMachineSegger/cropped_trap_weights.hdf5'
+  model_file: 'weights/cropped_trap_weights.hdf5'
 
   batch_size: 210
   cell_class_threshold: 0.60
