@@ -1709,6 +1709,8 @@ def segment_fov_unet(fov_id, specs, model):
 
     for peak_id in ana_peak_ids:
 
+        print(peak_id) # debugging a shape error at some traps
+
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
         # pad image to correct size
         img_stack = np.pad(img_stack, 
