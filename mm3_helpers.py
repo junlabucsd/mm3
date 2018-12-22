@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
-from __future__ import print_function
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys # input, output, errors, and files
@@ -807,6 +808,10 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             # add attribute for peak_id, channel location
             h5g.attrs.create('peak_id', peak)
             h5g.attrs.create('channel_loc', channel_loc)
+
+            for i in range(len(channel_loc)):
+                for j in range(len(channel_loc[i])):
+                    channel_loc[i][j] = int(channel_loc[i][j])
 
             # slice out channel.
             # The function should recognize the shape length as 4 and cut all time points
