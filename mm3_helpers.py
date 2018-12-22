@@ -2897,7 +2897,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
 
     # Load fluorescent images and segmented images for this channel
     fl_stack = load_stack(fov_id, peak_id, color='sub_c2')
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # determine absolute time index
     times_all = []
@@ -2957,12 +2957,12 @@ def foci_analysis(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
@@ -3031,12 +3031,12 @@ def foci_analysis_pool(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
@@ -3362,7 +3362,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
     # Load data
     ring_stack = load_stack(fov_id, peak_id, color=ring_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3464,7 +3464,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
 
     # Load data
     fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3538,7 +3538,7 @@ def x_profile_analysis(fov_id, peak_id, Cells, profile_plane='sub_c2'):
 
     # Load data
     fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3642,7 +3642,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
 
     # Load data
     sub_stack = load_stack(fov_id, peak_id, color=plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
