@@ -84,7 +84,11 @@ segment:
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
   model_path: '/path/to/model.hdf5' # U-net model to use for segmentation
-  binary_threshold: 0.75 # number between 0 and 1 that dictates how to binarize U-net output
+  trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
+  trained_model_image_width: 32
+
+  batch_size: 210
+  cell_class_threshold: 0.60
 
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
   # regions only less than this value down the channel from the closed end will be considered

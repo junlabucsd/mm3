@@ -389,7 +389,7 @@ if __name__ == "__main__":
     elif p['compile']['do_channel_masks']:
         # only calculate channels masks from images before t_end in case it is specified
         if t_end:
-            analyzed_imgs = {fn : i_metadata for fn, i_metadata in analyzed_imgs.items() if
+            analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if
                              i_metadata['t'] <= t_end}
 
         # Uses channel mm3.information from the already processed image data
@@ -412,7 +412,7 @@ if __name__ == "__main__":
                 mm3.information("Loading images for FOV %03d." % fov)
 
                 # get filenames just for this fov along with the julian date of acquistion
-                send_to_write = [[k, v['t']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
+                send_to_write = [[k, v['t']] for k, v in six.iteritems(analyzed_imgs) if v['fov'] == fov]
 
                 # sort the filenames by jdn
                 send_to_write = sorted(send_to_write, key=lambda time: time[1])

@@ -403,7 +403,7 @@ if __name__ == "__main__":
     channel_masks = mm3.load_channel_masks()
 
     # make list of FOVs to process (keys of channel_mask file), but only if there are channels
-    fov_id_list = sorted([fov_id for fov_id, peaks in channel_masks.items() if peaks])
+    fov_id_list = sorted([fov_id for fov_id, peaks in six.iteritems(channel_masks) if peaks])
 
     # remove fovs if the user specified so
     if (len(user_spec_fovs) > 0):
@@ -456,8 +456,8 @@ if __name__ == "__main__":
             mm3.information("Finished cross correlations for FOV %d." % fov_id)
 
         # get results from the pool and put the results in the dictionary if succesful
-        for fov_id, peaks in crosscorrs.items():
-            for peak_id, result in peaks.items():
+        for fov_id, peaks in six.iteritems(crosscorrs):
+            for peak_id, result in six.iteritems(peaks):
                 if result.successful():
                     # put the results, with the average, and a guess if the channel
                     # is full into the dictionary
@@ -485,9 +485,9 @@ if __name__ == "__main__":
         # if there is cross corrs, use it. Otherwise, just make everything -1
         if crosscorrs:
             # update dictionary on initial guess from cross correlations
-            for fov_id, peaks in crosscorrs.items():
+            for fov_id, peaks in six.iteritems(crosscorrs):
                 specs[fov_id] = {}
-                for peak_id, xcorrs in peaks.items():
+                for peak_id, xcorrs in six.iteritems(peaks):
                     # update the guess incase the parameters file was changed
                     xcorrs['full'] = xcorrs['cc_avg'] < p['channel_picker']['channel_picking_threshold']
 
@@ -496,7 +496,7 @@ if __name__ == "__main__":
                     else: # default to don't analyze
                         specs[fov_id][peak_id] = -1
         else: # just set everything to 1 and go forward.
-            for fov_id, peaks in channel_masks.items():
+            for fov_id, peaks in six.iteritems(channel_masks):
                 specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
     else:
         mm3.information('Loading supplied specifiication file.')

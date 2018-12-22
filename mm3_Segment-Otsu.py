@@ -93,7 +93,7 @@ if __name__ == "__main__":
         for fov_id in fov_id_list:
             # determine which peaks are to be analyzed (those which have been subtracted)
             ana_peak_ids = []
-            for peak_id, spec in specs[fov_id].items():
+            for peak_id, spec in six.iteritems(specs[fov_id]):
                 if spec == 1: # 0 means it should be used for empty, -1 is ignore, 1 is analyzed
                     ana_peak_ids.append(peak_id)
             ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
