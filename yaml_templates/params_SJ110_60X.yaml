@@ -31,6 +31,8 @@ pxl2um: 0.108
 # Use these flags to control script specific processes and settings
 
 nd2ToTIFF:
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end: None
   number_of_rows : 1
   crop_ymin : # 0.05
   crop_ymax : # 0.95
@@ -45,12 +47,17 @@ compile:
   do_slicing : True
 
   t_end : # only analyze images up until this t point. Leave blank otherwise
+  find_channels_method: 'peaks' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use Unet or peaks to detect channels. Either 'peaks' or 'Unet'
+  model_file_traps: '/path/to/trapmodel/weights.hdf5'
   image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
   channel_width : 8 # width of channels in pixels
   channel_separation : 45 # peak-to-peak distance between channels in pixels
   channel_detection_snr : 1 # signal to noise ratio for channel detection
   channel_length_pad : 10 # pad for slicing out channels
   channel_width_pad : 10 # pad for slicing out channels
+  trap_crop_height: 256 # how tall Unet-cropped trap image stacks should be
+  trap_crop_width: 27 # how wide Unet-cropped trap image stacks should be
+  trap_area_threshold: 2000 # minimum area in px^2 for traps to be kept
 
 channel_picker:
   do_crosscorrs: True
@@ -77,6 +84,7 @@ segment:
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
   model_path: '/path/to/model.hdf5' # U-net model to use for segmentation
+  binary_threshold: 0.75 # number between 0 and 1 that dictates how to binarize U-net output
 
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
   # regions only less than this value down the channel from the closed end will be considered
