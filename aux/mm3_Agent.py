@@ -20,6 +20,7 @@ import numpy as np
 import warnings
 import h5py
 import signal
+from skimage.external import tifffile as tiff
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -34,11 +35,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3

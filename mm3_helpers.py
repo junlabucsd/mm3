@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
-from __future__ import print_function
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys # input, output, errors, and files
@@ -38,6 +39,7 @@ from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 from skimage import util, measure, transform, feature
+from skimage.external import tifffile as tiff
 
 # deep learning
 import tensorflow as tf # ignore message about how tf was compiled
@@ -67,18 +69,6 @@ cmd_folder = os.path.realpath(os.path.abspath(
                               os.path.split(inspect.getfile(inspect.currentframe()))[0]))
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
-
-# This makes python look for modules in ./external_lib
-cmd_subfolder = os.path.realpath(os.path.abspath(
-                                 os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], "external_lib")))
-if cmd_subfolder not in sys.path:
-    sys.path.insert(0, cmd_subfolder)
-
-# supress the warning tifffile always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 ### functions ###########################################################
 # alert the use what is up
@@ -236,7 +226,7 @@ def load_channel_masks():
     information("Loading channel masks dictionary.")
 
     try:
-        print(os.path.join(params['ana_dir'], 'channel_masks.pkl'))
+        information('Path: ', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
         with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
             channel_masks = pickle.load(cmask_file)
     except ValueError:
@@ -586,7 +576,7 @@ def make_time_table(analyzed_imgs):
     first_time = float('inf')
 
     # need to go through the data once to find the first time
-    for iname, idata in analyzed_imgs.items():
+    for iname, idata in six.iteritems(analyzed_imgs):
         if params['use_jd']:
             if idata['jd'] < first_time:
                 first_time = idata['jd']
@@ -598,7 +588,7 @@ def make_time_table(analyzed_imgs):
         if idata['fov'] not in time_table:
             time_table[idata['fov']] = {}
 
-    for iname, idata in analyzed_imgs.items():
+    for iname, idata in six.iteritems(analyzed_imgs):
         if params['use_jd']:
             # convert jd time to elapsed time in seconds
             t_in_seconds = np.around((idata['jd'] - first_time) * 24*60*60, decimals=0).astype('uint32')
@@ -618,28 +608,28 @@ def make_time_table(analyzed_imgs):
 
 # saves traps sliced via Unet
 def save_tiffs(imgDict, analyzed_imgs):
-    
+
     savePath = os.path.join(params['experiment_directory'],
                             params['analysis_directory'],
                             params['chnl_dir'])
-    
+
     img_names = [key for key in analyzed_imgs.keys()]
-    
+
     image_params = analyzed_imgs[img_names[0]]
     fov_id = image_params['fov']
     specs = {fov_id:{}}
-    
-    for peak,img in imgDict.items():
-    
-        img = img.astype('uint16')        
+
+    for peak,img in six.iteritems(imgDicts):
+
+        img = img.astype('uint16')
         if not os.path.isdir(savePath):
             os.mkdir(savePath)
         specs[fov_id][peak] = 1
 
         for planeNumber in image_params['planes']:
-            
+
             channel_filename = os.path.join(savePath, params['experiment_name'] + '_xy{0:0=3}_p{1:0=4}_c{2}.tif'.format(fov_id, peak, planeNumber))
-            
+
             io.imsave(channel_filename, img[:,:,:,int(planeNumber)-1])
 
     # Save out specs file in yaml format
@@ -691,7 +681,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
     image_fov_stack = np.stack(image_fov_stack, axis=0)
 
     # cut out the channels as per channel masks for this fov
-    for peak, channel_loc in channel_masks[fov_id].items():
+    for peak, channel_loc in six.iteritems(channel_masks[fov_id]):
         #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
         information('Slicing and saving channel peak %d.' % peak)
 
@@ -796,7 +786,7 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
                                   compression="gzip", shuffle=True, fletcher32=True)
 
         # cut out the channels as per channel masks for this fov
-        for peak, channel_loc in channel_masks[fov_id].items():
+        for peak, channel_loc in six.iteritems(channel_masks[fov_id]):
             #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
             information('Slicing and saving channel peak %d.' % peak)
 
@@ -806,6 +796,10 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             # add attribute for peak_id, channel location
             h5g.attrs.create('peak_id', peak)
             h5g.attrs.create('channel_loc', channel_loc)
+
+            for i in range(len(channel_loc)):
+                for j in range(len(channel_loc[i])):
+                    channel_loc[i][j] = int(channel_loc[i][j])
 
             # slice out channel.
             # The function should recognize the shape length as 4 and cut all time points
@@ -846,7 +840,7 @@ def get_weights(img, subImageNumber):
     return(weights)
 
 def imageConcatenatorFeatures(imgStack, subImageNumber = 64):
-    
+
     rowNumPerImage = int(np.sqrt(subImageNumber)) # here I'm assuming our large images are square, with equal number of crops in each dimension
     #print(rowNumPerImage)
     imageNum = int(imgStack.shape[0]/subImageNumber) # total number of sub-images divided by the number of sub-images in each original large image
@@ -854,13 +848,13 @@ def imageConcatenatorFeatures(imgStack, subImageNumber = 64):
     imageDims = int(np.sqrt(imgStack.shape[1]*imgStack.shape[2]*subImageNumber))
     featureNum = int(imgStack.shape[3])
     bigImg = np.zeros(shape=(imageNum, imageDims, imageDims, featureNum), dtype='float32') # create array to store reconstructed images
-    
+
     featureRowDicts = []
-    
+
     for j in range(featureNum):
-        
+
         rowDict = {}
-        
+
         for i in range(iterNum):
             baseNum = int(i*iterNum/imageNum)
             # concatenate columns of 256x256 images to build each 256x2048 row
@@ -871,7 +865,7 @@ def imageConcatenatorFeatures(imgStack, subImageNumber = 64):
         featureRowDicts.append(rowDict)
 
     for j in range(featureNum):
-    
+
         for i in range(imageNum):
             baseNum = int(i*rowNumPerImage)
             # concatenate appropriate 256x2048 rows to build a 2048x2048 image and place it into bigImg
@@ -879,24 +873,24 @@ def imageConcatenatorFeatures(imgStack, subImageNumber = 64):
                                             featureRowDicts[j][baseNum+2],featureRowDicts[j][baseNum+3]))#,
                                             #featureRowDicts[j][baseNum+4],featureRowDicts[j][baseNum+5],
                                             #featureRowDicts[j][baseNum+6],featureRowDicts[j][baseNum+7]))
-    
+
     return(bigImg)
 
 def imageConcatenatorFeatures2(imgStack, subImageNumber = 81):
-    
+
     rowNumPerImage = int(np.sqrt(subImageNumber)) # here I'm assuming our large images are square, with equal number of crops in each dimension
     imageNum = int(imgStack.shape[0]/subImageNumber) # total number of sub-images divided by the number of sub-images in each original large image
     iterNum = int(imageNum*rowNumPerImage)
     imageDims = int(np.sqrt(imgStack.shape[1]*imgStack.shape[2]*subImageNumber))
     featureNum = int(imgStack.shape[3])
     bigImg = np.zeros(shape=(imageNum, imageDims, imageDims, featureNum), dtype='float32') # create array to store reconstructed images
-    
+
     featureRowDicts = []
-    
+
     for j in range(featureNum):
-        
+
         rowDict = {}
-        
+
         for i in range(iterNum):
             baseNum = int(i*iterNum/imageNum)
             # concatenate columns of 256x256 images to build each 256x2048 row
@@ -908,7 +902,7 @@ def imageConcatenatorFeatures2(imgStack, subImageNumber = 81):
         featureRowDicts.append(rowDict)
 
     for j in range(featureNum):
-    
+
         for i in range(imageNum):
             baseNum = int(i*rowNumPerImage)
             # concatenate appropriate 256x2048 rows to build a 2048x2048 image and place it into bigImg
@@ -917,19 +911,19 @@ def imageConcatenatorFeatures2(imgStack, subImageNumber = 81):
                                             featureRowDicts[j][baseNum+4]))#,featureRowDicts[j][baseNum+5],
                                             #featureRowDicts[j][baseNum+6],featureRowDicts[j][baseNum+7],
                                             #featureRowDicts[j][baseNum+8]))
-    
+
     return(bigImg)
 
 def get_weights_array(arr=np.zeros((2048,2048)), shiftDistance=128, subImageNumber=64, padSubImageNumber=81):
-    
+
     originalImageWeights = get_weights(arr, subImageNumber=subImageNumber)
-    shiftLeftWeights = np.pad(originalImageWeights, pad_width=((0,0),(0,shiftDistance)), 
+    shiftLeftWeights = np.pad(originalImageWeights, pad_width=((0,0),(0,shiftDistance)),
                       mode='constant', constant_values=((0,0),(0,0)))[:,shiftDistance:]
-    shiftRightWeights = np.pad(originalImageWeights, pad_width=((0,0),(shiftDistance,0)), 
+    shiftRightWeights = np.pad(originalImageWeights, pad_width=((0,0),(shiftDistance,0)),
                       mode='constant', constant_values=((0,0),(0,0)))[:,:(-1*shiftDistance)]
-    shiftUpWeights = np.pad(originalImageWeights, pad_width=((0,shiftDistance),(0,0)), 
+    shiftUpWeights = np.pad(originalImageWeights, pad_width=((0,shiftDistance),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0)))[shiftDistance:,:]
-    shiftDownWeights = np.pad(originalImageWeights, pad_width=((shiftDistance,0),(0,0)), 
+    shiftDownWeights = np.pad(originalImageWeights, pad_width=((shiftDistance,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0)))[:(-1*shiftDistance),:]
     expandedImageWeights = get_weights(np.zeros((arr.shape[0]+2*shiftDistance,arr.shape[1]+2*shiftDistance)), subImageNumber=padSubImageNumber)[shiftDistance:-shiftDistance,shiftDistance:-shiftDistance]
 
@@ -940,70 +934,70 @@ def get_weights_array(arr=np.zeros((2048,2048)), shiftDistance=128, subImageNumb
 
 # predicts locations of channels in an image using deep learning model
 def get_frame_predictions(img,model,stackWeights, shiftDistance=256, subImageNumber=16, padSubImageNumber=25):
-    
+
     pred = predict_first_image_channels(img, model, shiftDistance=shiftDistance,
                                      subImageNumber=subImageNumber, padSubImageNumber=padSubImageNumber)[0,...]
-#     print(pred.shape)
+    # print(pred.shape)
 
     compositePrediction = np.average(pred, axis=3, weights=stackWeights)
-#     print(compositePrediction.shape)
+    # print(compositePrediction.shape)
 
     padSize = (compositePrediction.shape[0]-img.shape[0])//2
     compositePrediction = util.crop(compositePrediction,((padSize,padSize),
                                                         (padSize,padSize),
                                                         (0,0)))
-#     print(compositePrediction.shape)
-    
+    # print(compositePrediction.shape)
+
     return(compositePrediction)
 
-def predict_first_image_channels(img, model, 
-                              subImageNumber=16, padSubImageNumber=25, 
+def predict_first_image_channels(img, model,
+                              subImageNumber=16, padSubImageNumber=25,
                               shiftDistance=128, batchSize=1):
     imgSize = img.shape[0]
     padSize = (2048-imgSize)//2 # how much to pad on each side to get up to 2048x2048?
-    imgStack = np.pad(img, pad_width=((padSize,padSize),(padSize,padSize)), 
+    imgStack = np.pad(img, pad_width=((padSize,padSize),(padSize,padSize)),
                       mode='constant', constant_values=((0,0),(0,0))) # pad the images to make them 2048x2048
     # pad the stack by 128 pixels on each side to get complemetary crops that I can run the network on. This
     #    should help me fill in low-confidence regions where the crop boundaries were for the original image
-    imgStackExpand = np.pad(imgStack, pad_width=((shiftDistance,shiftDistance),(shiftDistance,shiftDistance)), 
+    imgStackExpand = np.pad(imgStack, pad_width=((shiftDistance,shiftDistance),(shiftDistance,shiftDistance)),
                             mode='constant', constant_values=((0,0),(0,0)))
-    imgStackShiftRight = np.pad(imgStack, pad_width=((0,0),(0,shiftDistance)), 
+    imgStackShiftRight = np.pad(imgStack, pad_width=((0,0),(0,shiftDistance)),
                                 mode='constant', constant_values=((0,0),(0,0)))[:,shiftDistance:]
-    imgStackShiftLeft = np.pad(imgStack, pad_width=((0,0),(shiftDistance,0)), 
+    imgStackShiftLeft = np.pad(imgStack, pad_width=((0,0),(shiftDistance,0)),
                                 mode='constant', constant_values=((0,0),(0,0)))[:,:-shiftDistance]
-    imgStackShiftDown = np.pad(imgStack, pad_width=((0,shiftDistance),(0,0)), 
+    imgStackShiftDown = np.pad(imgStack, pad_width=((0,shiftDistance),(0,0)),
                                mode='constant', constant_values=((0,0),(0,0)))[shiftDistance:,:]
-    imgStackShiftUp = np.pad(imgStack, pad_width=((shiftDistance,0),(0,0)), 
+    imgStackShiftUp = np.pad(imgStack, pad_width=((shiftDistance,0),(0,0)),
                                mode='constant', constant_values=((0,0),(0,0)))[:-shiftDistance,:]
     #print(imgStackShiftUp.shape)
 
     crops = tileImage(imgStack, subImageNumber=subImageNumber)
     crops = np.expand_dims(crops, -1)
     predictions = model.predict(crops)
-    
+
     prediction = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     #print(prediction.shape)
-    
+
     cropsExpand = tileImage(imgStackExpand, subImageNumber=padSubImageNumber)
     cropsExpand = np.expand_dims(cropsExpand, -1)
     predictions = model.predict(cropsExpand)
     predictionExpand = imageConcatenatorFeatures2(predictions, subImageNumber=padSubImageNumber)
     predictionExpand = util.crop(predictionExpand, ((0,0),(shiftDistance,shiftDistance),(shiftDistance,shiftDistance),(0,0)))
     #print(predictionExpand.shape)
-    
+
     cropsShiftLeft = tileImage(imgStackShiftLeft, subImageNumber=subImageNumber)
     cropsShiftLeft = np.expand_dims(cropsShiftLeft, -1)
     predictions = model.predict(cropsShiftLeft)
     predictionLeft = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
-    predictionLeft = np.pad(predictionLeft, pad_width=((0,0),(0,0),(0,shiftDistance),(0,0)), 
+    predictionLeft = np.pad(predictionLeft, pad_width=((0,0),(0,0),(0,shiftDistance),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,shiftDistance:,:]
     #print(predictionLeft.shape)
-    
+
     cropsShiftRight = tileImage(imgStackShiftRight, subImageNumber=subImageNumber)
     cropsShiftRight = np.expand_dims(cropsShiftRight, -1)
     predictions = model.predict(cropsShiftRight)
     predictionRight = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
-    predictionRight = np.pad(predictionRight, pad_width=((0,0),(0,0),(shiftDistance,0),(0,0)), 
+    predictionRight = np.pad(predictionRight, pad_width=((0,0),(0,0),(shiftDistance,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,:(-1*shiftDistance),:]
     #print(predictionRight.shape)
 
@@ -1012,7 +1006,7 @@ def predict_first_image_channels(img, model,
     cropsShiftUp = np.expand_dims(cropsShiftUp, -1)
     predictions = model.predict(cropsShiftUp)
     predictionUp = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
-    predictionUp = np.pad(predictionUp, pad_width=((0,0),(0,shiftDistance),(0,0),(0,0)), 
+    predictionUp = np.pad(predictionUp, pad_width=((0,0),(0,shiftDistance),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,shiftDistance:,:,:]
     #print(predictionUp.shape)
 
@@ -1020,19 +1014,19 @@ def predict_first_image_channels(img, model,
     cropsShiftDown = np.expand_dims(cropsShiftDown, -1)
     predictions = model.predict(cropsShiftDown)
     predictionDown = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
-    predictionDown = np.pad(predictionDown, pad_width=((0,0),(shiftDistance,0),(0,0),(0,0)), 
+    predictionDown = np.pad(predictionDown, pad_width=((0,0),(shiftDistance,0),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:(-1*shiftDistance),:,:]
     #print(predictionDown.shape)
-    
-    allPredictions = np.stack((prediction, predictionExpand, 
-                               predictionUp, predictionDown, 
+
+    allPredictions = np.stack((prediction, predictionExpand,
+                               predictionUp, predictionDown,
                                predictionLeft, predictionRight), axis=-1)
-    
+
     return(allPredictions)
 
 # takes initial U-net centroids for trap locations, and creats bounding boxes for each trap at the defined height and width
 def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000, trapWidth=27, trapHeight=256):
-    
+
     badTrapLabels = [reg.label for reg in trapProps if reg.area < trapAreaThreshold] # filter out small "trap" regions
     goodTraps = trapLabels.copy()
 
@@ -1055,7 +1049,7 @@ def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000,
             maxCol += 1
 
         coordArray = np.array([minRow,maxRow,minCol,maxCol])
-        
+
         # remove any traps at edges of image
         if np.any(coordArray > goodTraps.shape[0]):
             continue
@@ -1063,47 +1057,47 @@ def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000,
             continue
 
         trapBboxes.append((minRow,minCol,maxRow,maxCol))
-        
+
     return(trapBboxes)
 
 # this function performs image alignment as defined by the shifts passed as an argument
 def crop_traps(fileNames, trapProps, labelledTraps, bboxesDict, trap_align_metadata):
-    
+
     frameNum = trap_align_metadata['frame_count']
     channelNum = trap_align_metadata['plane_number']
-    trapImagesDict = {key:np.zeros((frameNum, 
-                                       trap_align_metadata['trap_height'], 
-                                       trap_align_metadata['trap_width'], 
+    trapImagesDict = {key:np.zeros((frameNum,
+                                       trap_align_metadata['trap_height'],
+                                       trap_align_metadata['trap_width'],
                                        channelNum)) for key in bboxesDict}
     trapClosedEndPxDict = {}
     flipImageDict = {}
     trapMask = labelledTraps
-    
+
     for frame in range(frameNum):
-        
+
         if (frame+1) % 20 == 0:
             print("Cropping trap regions for frame number {} of {}.".format(frame+1, frameNum))
-        
+
         imgPath = os.path.join(params['experiment_directory'],params['image_directory'],fileNames[frame])
         fullFrameImg = io.imread(imgPath)
         trapClosedEndPxDict[fileNames[frame]] = {key:{} for key in bboxesDict.keys()}
-                            
+
         for key in trapImagesDict.keys():
-            
+
             bbox = bboxesDict[key][frame]
             trapImagesDict[key][frame,:,:,:] = fullFrameImg[bbox[0]:bbox[2],bbox[1]:bbox[3],:]
-            
+
             #tmpImg = np.reshape(fullFrameImg[trapMask==key], (trapHeight,trapWidth,channelNum))
-            
+
             if frame == 0:
                 medianProfile = np.median(trapImagesDict[key][frame,:,:,0],axis=1) # get intensity of middle column of trap
                 maxIntensityRow = np.argmax(medianProfile)
-                
+
                 if maxIntensityRow > trap_align_metadata['trap_height']//2:
                     flipImageDict[key] = 0
                 else:
                     flipImageDict[key] = 1
-            
+
             if flipImageDict[key] == 1:
                 trapImagesDict[key][frame,:,:,:] = trapImagesDict[key][frame,::-1,:,:]
                 trapClosedEndPxDict[fileNames[frame]][key]['closed_end_px'] = bbox[0]
@@ -1112,17 +1106,17 @@ def crop_traps(fileNames, trapProps, labelledTraps, bboxesDict, trap_align_metad
                 trapClosedEndPxDict[fileNames[frame]][key]['closed_end_px'] = bbox[2]
                 trapClosedEndPxDict[fileNames[frame]][key]['open_end_px'] = bbox[0]
                 continue
-        
+
     return(trapImagesDict, trapClosedEndPxDict)
 
 # gets shifted bounding boxes to crop traps through time
 def shift_bounding_boxes(bboxesDict, shifts, imgSize):
     bboxesShiftDict = {}
-    
+
     for key in bboxesDict.keys():
         bboxesShiftDict[key] = []
         bboxes = bboxesDict[key]
-        
+
         for i in range(shifts.shape[0]):
 
             if i == 0:
@@ -1132,7 +1126,7 @@ def shift_bounding_boxes(bboxesDict, shifts, imgSize):
                 minCol = bboxes[1]+shifts[i,1]
                 maxRow = bboxes[2]+shifts[i,0]
                 maxCol = bboxes[3]+shifts[i,1]
-                bboxesShiftDict[key].append((minRow, 
+                bboxesShiftDict[key].append((minRow,
                                             minCol,
                                             maxRow,
                                             maxCol))
@@ -1144,7 +1138,7 @@ def shift_bounding_boxes(bboxesDict, shifts, imgSize):
                     print("channel {} removed: out of frame".format(key))
                     del bboxesShiftDict[key]
                     break
-        
+
     return(bboxesShiftDict)
 
 # finds the location of channels in a tif
@@ -1295,7 +1289,7 @@ def make_masks(analyzed_imgs):
             img_chnl_mask = np.zeros([image_rows, image_cols])
 
             # and add the channel mask to it
-            for chnl_peak, peak_ends in img_v['channels'].items():
+            for chnl_peak, peak_ends in six.iteritems(img_v['channels']):
                 # pull out the peak location and top and bottom location
                 # and expand by padding (more padding done later for width)
                 x1 = max(chnl_peak - crop_wp, 0)
@@ -1356,9 +1350,9 @@ def make_masks(analyzed_imgs):
     # update all channel masks to be the max size
     cm_copy = channel_masks.copy()
 
-    for fov, peaks in channel_masks.items():
+    for fov, peaks in six.iteritems(channel_masks):
         # f_id = int(fov)
-        for peak, chnl_mask in peaks.items():
+        for peak, chnl_mask in six.iteritems(peaks):
             # p_id = int(peak)
             # just add length to the open end (top of image, low column)
             if chnl_mask[0][1] - chnl_mask[0][0] !=  max_chnl_mask_len:
@@ -1547,7 +1541,7 @@ def average_empties_stack(fov_id, specs, color='c1', align=True):
 
     # get peak ids of empty channels for this fov
     empty_peak_ids = []
-    for peak_id, spec in specs[fov_id].items():
+    for peak_id, spec in six.iteritems(specs[fov_id]):
         if spec == 0: # 0 means it should be used for empty
             empty_peak_ids.append(peak_id)
     empty_peak_ids = sorted(empty_peak_ids) # sort for repeatability
@@ -1735,7 +1729,7 @@ def subtract_fov_stack(fov_id, specs, color='c1', method='phase'):
 
     # determine which peaks are to be analyzed
     ana_peak_ids = []
-    for peak_id, spec in specs[fov_id].items():
+    for peak_id, spec in six.iteritems(specs[fov_id]):
         if spec == 1: # 0 means it should be used for empty, -1 is ignore
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
@@ -1938,7 +1932,7 @@ def segment_chnl_stack(fov_id, peak_id):
     if params['output'] == 'TIFF':
         seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
         tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
-                    segmented_imgs.astype('uint16'), compress=4)
+                    segmented_imgs, compress=5)
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
@@ -2030,7 +2024,7 @@ def segment_image(image):
         return np.zeros_like(image)
 
     # relabel now that small objects and labels on edges have been cleared
-    markers = morphology.label(cleared)
+    markers = morphology.label(cleared, connectivity=1)
 
     # just break if there is no label
     if np.amax(markers) == 0:
@@ -2108,19 +2102,22 @@ def segment_fov_unet(fov_id, specs, model):
 
     # load segmentation parameters
     min_object_size = params['segment']['min_object_size']
-    unet_shape = (params['segment']['trained_model_image_height'], 
+    unet_shape = (params['segment']['trained_model_image_height'],
                   params['segment']['trained_model_image_width'])
+    cellClassThreshold = params['segment']['cell_class_threshold']
+    batch_size = params['segment']['batch_size']
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
     # this assumes that all channels are the same size for this FOV, which they should
-    for peak_id, spec in specs[fov_id].items(): # Modify this section to work in Jeremy's segmentation model
+    for peak_id, spec in six.iteritems(specs[fov_id]):
         if spec == 1:
             break # just break out with the current peak_id
+
     img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
-    
+
     half_width_pad = (unet_shape[1]-img_width)/2
     left_pad = int(np.floor(half_width_pad))
     right_pad = int(np.ceil(half_width_pad))
@@ -2129,22 +2126,20 @@ def segment_fov_unet(fov_id, specs, model):
     bottom_pad = int(np.ceil(half_height_pad))
 
     timepoints = img_stack.shape[0]
-    batch_size = params['segment']['batch_size']
 
     # dermine how many channels we have to analyze for this FOV
     ana_peak_ids = []
-    for peak_id, spec in specs[fov_id].items():
+    for peak_id, spec in six.iteritems(specs[fov_id]):
         if spec == 1:
             ana_peak_ids.append(peak_id)
     ana_peak_ids.sort() # sort for repeatability
 
     for peak_id in ana_peak_ids:
-
-        print(peak_id) # debugging a shape error at some traps
+        # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
         # pad image to correct size
-        img_stack = np.pad(img_stack, 
+        img_stack = np.pad(img_stack,
                            ((0,0),(top_pad,bottom_pad),(left_pad,right_pad)),
                            mode='reflect')
         img_stack = np.expand_dims(img_stack, -1)
@@ -2164,14 +2159,11 @@ def segment_fov_unet(fov_id, specs, model):
         predictions = predictions[:, top_pad:unet_shape[0]-bottom_pad,
                                      left_pad:unet_shape[1]-right_pad, 0]
 
-
-        # binarized and label # the 0.90 should be a parameter ***
-        cellClassThreshold = params['segment']['cell_class_threshold']
+        # binarized and label
         predictions[predictions >= cellClassThreshold] = 1
         predictions[predictions < cellClassThreshold] = 0
         predictions = predictions.astype('uint8')
 
-        # split up images back into channels
         segmented_imgs = np.zeros(predictions.shape)
         # process and label each frame of the channel
         for frame in range(segmented_imgs.shape[0]):
@@ -2219,7 +2211,7 @@ def make_lineages_fov(fov_id, specs):
     mm3.make_lineage_chnl_stack
     '''
     ana_peak_ids = [] # channels to be analyzed
-    for peak_id, spec in specs[fov_id].items():
+    for peak_id, spec in six.iteritems(specs[fov_id]):
         if spec == 1: # 1 means analyze
             ana_peak_ids.append(peak_id)
     ana_peak_ids = sorted(ana_peak_ids) # sort for repeatability
@@ -2350,7 +2342,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
             # go through the current leaf regions.
             # limit by the closest two current regions if there are three regions to the leaf
-            for leaf_id, region_links in leaf_region_map.items():
+            for leaf_id, region_links in six.iteritems(leaf_region_map):
                 if len(region_links) > 2:
                     closest_two_regions = sorted(region_links, key=lambda x: x[1])[:2]
                     # but sort by region order so top region is first
@@ -2372,7 +2364,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                             break
 
             ### iterate over the leaves, looking to see what regions connect to them.
-            for leaf_id, region_links in leaf_region_map.items():
+            for leaf_id, region_links in six.iteritems(leaf_region_map):
 
                 # if there is just one suggested descendant,
                 # see if it checks out and append the data
@@ -2896,7 +2888,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
 
     # Load fluorescent images and segmented images for this channel
     fl_stack = load_stack(fov_id, peak_id, color='sub_c2')
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # determine absolute time index
     times_all = []
@@ -2956,16 +2948,16 @@ def foci_analysis(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
-    for cell_id, cell in Cells.items():
+    for cell_id, cell in six.iteritems(Cells):
 
         information('Extracting foci information for %s.' % (cell_id))
 
@@ -3030,18 +3022,18 @@ def foci_analysis_pool(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg')
+    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
     # Load time table to determine first image index.
-    times_all = np.array(np.sort(time_table['time_table'][fov_id].keys()), np.int_)
+    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
     tN = times_all[-1] # last time index
 
     # call foci_cell for each cell object
     pool = Pool(processes=params['num_analyzers'])
-    [pool.apply_async(foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL)) for cell_id, cell in Cells.items()]
+    [pool.apply_async(foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL)) for cell_id, cell in six.iteritems(Cells)]
     pool.close()
     pool.join()
 
@@ -3361,7 +3353,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
 
     # Load data
     ring_stack = load_stack(fov_id, peak_id, color=ring_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3463,7 +3455,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
 
     # Load data
     fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3537,7 +3529,7 @@ def x_profile_analysis(fov_id, peak_id, Cells, profile_plane='sub_c2'):
 
     # Load data
     fl_stack = load_stack(fov_id, peak_id, color=profile_plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
@@ -3641,7 +3633,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
 
     # Load data
     sub_stack = load_stack(fov_id, peak_id, color=plane)
-    seg_stack = load_stack(fov_id, peak_id, color='seg')
+    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
     time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')

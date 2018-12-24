@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from __future__ import print_function
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys
@@ -19,6 +20,7 @@ import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
+from skimage.external import tifffile as tiff
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -33,11 +35,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
@@ -75,6 +72,7 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # which color channel with which to do subtraction
     if namespace.color:
