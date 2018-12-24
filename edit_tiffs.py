@@ -8,19 +8,14 @@ import numpy as np
 # import json
 import warnings
 from skimage import io
+from skimage.external import tifffile as tiff
 
-# takes images with name format "20181011_JDW3308_StagePosition01_Frame0205_Second61500_Channel1.tif" 
+# takes images with name format "20181011_JDW3308_StagePosition01_Frame0205_Second61500_Channel1.tif"
 #    and saves them as a multichannel stack in a subdirectory called "TIFF"
 #    with name format "20181011_JDW3308_t0205xy01.tif"
 
 # SO, I need to update my alignImages.ipynb in motherMachineSegger
 #     and mm3_Compile.py to accept these saved multichannel stacks
-
-sys.path.insert(0, '/Users/jt/code/mm3/external_lib')
-# supress the warning tifffile always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # functions for printing
 def warning(*objs):

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from __future__ import print_function
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys
@@ -42,9 +43,9 @@ if __name__ == "__main__":
                                      description='Segment cells and create lineages.')
     parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
-    parser.add_argument('-o', '--fov',  type=str,
+    parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
-    parser.add_argument('-j', '--nproc',  type=int,
+    parser.add_argument('-j', '--nproc', type=int,
                         required=False, help='Number of processors to use.')
     parser.add_argument('-m', '--modelfile', type=str,
                         required=False, help='Path to trained U-net model.')
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # create segmenteation and cell data folder if they don't exist
     if not os.path.exists(p['seg_dir']) and p['output'] == 'TIFF':
@@ -79,7 +81,7 @@ if __name__ == "__main__":
 
     # load specs file
     specs = mm3.load_specs()
-    print(specs) # for debugging
+    # print(specs) # for debugging
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
@@ -143,7 +145,7 @@ if __name__ == "__main__":
 
         # Just the complete cells, those with mother and daugther
         # This is a dictionary of cell objects.
-        with open(os.path.join(p['cell_dir'],'complete_cells.pkl'), 'wb') as cell_file:
+        with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
             pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving cell data.")

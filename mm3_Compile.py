@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from __future__ import print_function
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys
@@ -11,6 +12,7 @@ import yaml
 import glob
 import re
 from skimage import io, measure, morphology
+from skimage.external import tifffile as tiff
 from scipy import stats
 from pprint import pprint # for human readable file output
 try:
@@ -38,11 +40,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-
-# supress the mm3.warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
@@ -82,9 +79,12 @@ if __name__ == "__main__":
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # only analyze images up until this t point. Put in None otherwise
     t_end = p['compile']['t_end']
+    if t_end == 'None':
+        t_end = None
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -142,28 +142,28 @@ if __name__ == "__main__":
             mm3.warning('No TIFF files found')
 
         if p['compile']['find_channels_method'] == 'peaks':
-    
+
             # initialize pool for analyzing image metadata
             pool = Pool(p['num_analyzers'])
-    
+
             # loop over images and get information
             for fn in found_files:
                 # get_params gets the image metadata and puts it in analyzed_imgs dictionary
                 # for each file name. True means look for channels
-    
+
                 # This is the non-parallelized version (useful for debug)
                 # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
-    
+
                 # Parallelized
                 analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
-    
+
             mm3.information('Waiting for image analysis pool to be finished.')
-    
+
             pool.close() # tells the process nothing more will be added.
             pool.join() # blocks script until everything has been processed and workers exit
 
             mm3.information('Image analyses pool finished, getting results.')
-    
+
             # get results from the pool and put them in a dictionary
             for fn in analyzed_imgs.keys():
                 result = analyzed_imgs[fn]
@@ -178,7 +178,7 @@ if __name__ == "__main__":
 
             # load model to pass to algorithm
             mm3.information("Loading model...")
-    
+
             if namespace.modelfile:
                 model_file_path = namespace.modelfile
             else:
@@ -188,42 +188,42 @@ if __name__ == "__main__":
                                       custom_objects={'tversky_loss': mm3.tversky_loss,
                                                       'cce_tversky_loss': mm3.cce_tversky_loss})
             mm3.information("Model loaded.")
-            
+
             # initialize pool for getting image metadata
             #pool = Pool(p['num_analyzers'])
-    
+
             # loop over images and get information
             for fn in found_files:
                 # get_params gets the image metadata and puts it in analyzed_imgs dictionary
                 # for each file name. Won't look for channels, just gets the metadata for later use by Unet
-    
+
                 # This is the non-parallelized version (useful for debug)
                 analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
-    
+
                 # Parallelized
                 #analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn))
-    
+
             mm3.information('Waiting for image metadata pool to be finished.')
             #print(analyzed_imgs) # uncomment for debug
             #pool.close() # tells the process nothing more will be added.
             #pool.join() # blocks script until everything has been processed and workers exit
 
             mm3.information('Image metadata pool finished, getting results.')
-            
+
             # get results from the pool and put them in a dictionary
-            
+
             #for fn in analyzed_imgs.keys():
             #    result = analyzed_imgs[fn]
             #    if result.successful():
             #        analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
             #    else:
             #        analyzed_imgs[fn] = False # put a false there if it's bad
-            
+
             # set up some variables for Unet and image aligment/cropping
-            
+
             file_names = [key for key in analyzed_imgs.keys()]
             file_names.sort() # sort the file names by time
-            
+
             #print(analyzed_imgs)
             trap_align_metadata = {'first_frame_name': file_names[0],
                                 'frame_count': len(analyzed_imgs),
@@ -234,22 +234,22 @@ if __name__ == "__main__":
                                 'phase_plane_index': p['moviemaker']['phase_plane_index'],
                                 'shift_distance': 256,
                                 'full_frame_size': 2048}
-            
+
             dilator = np.ones((1,300))
-            
+
             # create weights for taking weighted mean of several runs of Unet over various crops of the first image in the series. This helps remove "blind spots" from the neural network at the edges of each crop of the original image.
-            stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'], 
+            stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'],
                                          subImageNumber=16, padSubImageNumber=25)[0,...]
             # print(stackWeights.shape) #uncomment for debugging
-            
+
             # get prediction of where traps are located in first image
             imgPath = os.path.join(p['experiment_directory'],p['image_directory'],trap_align_metadata['first_frame_name'])
             img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
-            
+
             # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
             print("Predicting trap locations for first frame.")
             first_frame_trap_prediction = mm3.get_frame_predictions(img,model,stack_weights,trap_align_metadata['shift_distance'],subImageNumber=16,padSubImageNumber=25)
-            
+
             # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
             class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
 
@@ -258,10 +258,10 @@ if __name__ == "__main__":
             trap_props = measure.regionprops(trap_labels)
 
             trap_area_threshold = p['compile']['trap_area_threshold']
-            trap_bboxes = mm3.get_frame_trap_bounding_boxes(trap_labels, 
-                                                                   trap_props, 
+            trap_bboxes = mm3.get_frame_trap_bounding_boxes(trap_labels,
+                                                                   trap_props,
                                                                    trapAreaThreshold=trap_area_threshold,
-                                                                   trapWidth=trap_align_metadata['trap_width'], 
+                                                                   trapWidth=trap_align_metadata['trap_width'],
                                                                    trapHeight=trap_align_metadata['trap_height'])
 
             # create boolean array to contain filtered, correctly-shaped trap bounding boxes
@@ -280,7 +280,7 @@ if __name__ == "__main__":
             # get centroids for each "trap region" identified in first frame
             centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))
             # print(centroids)
-            
+
             # test whether we could crop a (512,512) square from each "trap region", with the centroids as the centers of the crops, withoug going out-of-bounds
             top_test = centroids[:,0]-256 > 0
             bottom_test = centroids[:,0]+256 < dilated_trap_labels.shape[0]
@@ -300,7 +300,7 @@ if __name__ == "__main__":
                 align_region_stack[frame,:,:,0] = frame_img[centroid[0]-256:centroid[0]+256,
                                                          centroid[1]-256:centroid[1]+256]
 
-                
+
             # run model on all frames
             batch_size=15 # should be a parameter in yaml file
             print("Predicting trap regions for (512,512) slice through all frames.")
@@ -315,10 +315,10 @@ if __name__ == "__main__":
                 frame_trap_labels = measure.label(align_traps[frame,:,:])
                 frame_trap_props = measure.regionprops(frame_trap_labels)
 
-                trap_bboxes = mm3.get_frame_trap_bounding_boxes(frame_trap_labels, 
-                                                                   frame_trap_props, 
+                trap_bboxes = mm3.get_frame_trap_bounding_boxes(frame_trap_labels,
+                                                                   frame_trap_props,
                                                                    trapAreaThreshold=trap_area_threshold,
-                                                                   trapWidth=trap_align_metadata['trap_width'], 
+                                                                   trapWidth=trap_align_metadata['trap_width'],
                                                                    trapHeight=trap_align_metadata['trap_height'])
 
                 for i,bbox in enumerate(trap_bboxes):
@@ -352,7 +352,7 @@ if __name__ == "__main__":
             shifts = np.mean(align_centroids - align_centroids[0,:,:], axis=1)
             #print(shifts.shape)
             integer_shifts = np.round(shifts).astype('int16')
-            
+
             good_trap_bboxes_dict = {}
             for trap in good_trap_props:
                 good_trap_bboxes_dict[trap.label] = trap.bbox
@@ -360,7 +360,7 @@ if __name__ == "__main__":
             bbox_shift_dict = mm3.shift_bounding_boxes(good_trap_bboxes_dict, integer_shifts, img.shape[0])
 
             trap_images_dict, trap_closed_end_px_dict = mm3.crop_traps(file_names, good_trap_props, good_trap_labels, bbox_shift_dict, trap_align_metadata)
-            
+
             for fn in file_names:
                 analyzed_imgs[fn]['channels'] = trap_closed_end_px_dict[fn]
 
@@ -386,7 +386,7 @@ if __name__ == "__main__":
     elif p['compile']['do_channel_masks']:
         # only calculate channels masks from images before t_end in case it is specified
         if t_end:
-            analyzed_imgs = {fn : i_metadata for fn, i_metadata in analyzed_imgs.items() if
+            analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if
                              i_metadata['t'] <= t_end}
 
         # Uses channel mm3.information from the already processed image data
@@ -396,11 +396,11 @@ if __name__ == "__main__":
     if p['compile']['do_slicing']:
 
         mm3.information("Saving channel slices.")
-        
+
         if p['compile']['find_channels_method'] == 'peaks':
 
             # do it by FOV. Not set up for multiprocessing
-            for fov, peaks in channel_masks.items():
+            for fov, peaks in six.iteritems(channel_masks):
 
                 # skip fov if not in the group
                 if user_spec_fovs and fov not in user_spec_fovs:
@@ -409,7 +409,7 @@ if __name__ == "__main__":
                 mm3.information("Loading images for FOV %03d." % fov)
 
                 # get filenames just for this fov along with the julian date of acquistion
-                send_to_write = [[k, v['t']] for k, v in analyzed_imgs.items() if v['fov'] == fov]
+                send_to_write = [[k, v['t']] for k, v in six.iteritems(analyzed_imgs) if v['fov'] == fov]
 
                 # sort the filenames by jdn
                 send_to_write = sorted(send_to_write, key=lambda time: time[1])
@@ -421,13 +421,13 @@ if __name__ == "__main__":
                 elif p['output'] == 'HDF5':
                     # Or write it to hdf5
                     mm3.hdf5_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
-                    
+
         elif p['compile']['find_channels_method'] == 'Unet':
-                
+
             if p['output'] == "TIFF":
-                
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
-                    mm3.save_tiffs(trap_images_dict, analyzed_imgs)   
+                    mm3.save_tiffs(trap_images_dict, analyzed_imgs)
 
         mm3.information("Channel slices saved.")

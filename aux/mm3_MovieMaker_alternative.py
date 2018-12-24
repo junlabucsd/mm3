@@ -6,6 +6,7 @@ import numpy as np
 import time
 import shutil
 import scipy.io as spio
+from skimage.external import tifffile as tiff
 import re
 import subprocess as sp
 from freetype import *
@@ -19,9 +20,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 import mm3_helpers
 from mm3_helpers import get_fov, get_time, information
