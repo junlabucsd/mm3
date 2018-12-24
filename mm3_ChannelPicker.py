@@ -25,6 +25,7 @@ plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
 from scipy.misc import imresize
+from skimage.external import tifffile as tiff
 import multiprocessing
 from multiprocessing import Pool
 import warnings
@@ -43,11 +44,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
@@ -523,7 +519,12 @@ if __name__ == "__main__":
                                       outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
-    with open(os.path.join(ana_dir,"specs.yaml"), 'w') as specs_file:
-        yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    if not os.path.isfile(os.path.join(ana_dir, 'specs.yaml')):
+        with open(os.path.join(ana_dir, 'specs.yaml'), 'w') as specs_file:
+            yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    else:
+        mm3.warning('specs.yaml file already exists in analysis folder. Saving to specs_1.pkl')
+        with open(os.path.join(ana_dir, 'specs_1.yaml'), 'w') as specs_file:
+            yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
 
-    mm3.information("Finished.")
+    mm3.information('Finished.')

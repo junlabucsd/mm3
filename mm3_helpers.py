@@ -70,18 +70,6 @@ cmd_folder = os.path.realpath(os.path.abspath(
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
 
-# # This makes python look for modules in ./external_lib
-# cmd_subfolder = os.path.realpath(os.path.abspath(
-#                                  os.path.join(os.path.split(inspect.getfile(
-#                                  inspect.currentframe()))[0], "external_lib")))
-# if cmd_subfolder not in sys.path:
-#     sys.path.insert(0, cmd_subfolder)
-#
-# # supress the warning tifffile always gives
-# with warnings.catch_warnings():
-#     warnings.simplefilter("ignore")
-#     import tifffile as tiff
-
 ### functions ###########################################################
 # alert the use what is up
 
@@ -1944,7 +1932,7 @@ def segment_chnl_stack(fov_id, peak_id):
     if params['output'] == 'TIFF':
         seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
         tiff.imsave(os.path.join(params['seg_dir'],seg_filename),
-                    segmented_imgs.astype('uint16'), compress=4)
+                    segmented_imgs, compress=5)
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')

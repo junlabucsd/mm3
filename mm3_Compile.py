@@ -12,6 +12,7 @@ import yaml
 import glob
 import re
 from skimage import io, measure, morphology
+from skimage.external import tifffile as tiff
 from scipy import stats
 from pprint import pprint # for human readable file output
 try:
@@ -39,11 +40,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], "external_lib")))
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
-
-# supress the mm3.warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
 
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
