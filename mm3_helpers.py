@@ -2105,6 +2105,7 @@ def segment_fov_unet(fov_id, specs, model):
     unet_shape = (params['segment']['trained_model_image_height'],
                   params['segment']['trained_model_image_width'])
     cellClassThreshold = params['segment']['cell_class_threshold']
+    batch_size = params['segment']['batch_size']
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2125,7 +2126,6 @@ def segment_fov_unet(fov_id, specs, model):
     bottom_pad = int(np.ceil(half_height_pad))
 
     timepoints = img_stack.shape[0]
-    batch_size = params['segment']['batch_size']
 
     # dermine how many channels we have to analyze for this FOV
     ana_peak_ids = []
@@ -2135,8 +2135,7 @@ def segment_fov_unet(fov_id, specs, model):
     ana_peak_ids.sort() # sort for repeatability
 
     for peak_id in ana_peak_ids:
-
-        print(peak_id) # debugging a shape error at some traps
+        # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
         # pad image to correct size
@@ -2165,7 +2164,6 @@ def segment_fov_unet(fov_id, specs, model):
         predictions[predictions < cellClassThreshold] = 0
         predictions = predictions.astype('uint8')
 
-        # split up images back into channels
         segmented_imgs = np.zeros(predictions.shape)
         # process and label each frame of the channel
         for frame in range(segmented_imgs.shape[0]):
