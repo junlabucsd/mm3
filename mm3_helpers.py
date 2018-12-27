@@ -2569,8 +2569,8 @@ class Cell():
         # delta is here for convenience
         self.delta = self.sd - self.sb
 
-        # generation time. Use more accurate times but round them to integer minutes
-        self.tau = np.around((self.abs_times[-1] - self.abs_times[0]) / 60.0)
+        # generation time. Use more accurate times and convert to minutes
+        self.tau = (self.abs_times[-1] - self.abs_times[0]) / 60.0
 
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
