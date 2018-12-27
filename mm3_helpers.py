@@ -2294,7 +2294,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     cell_leaves = [] # cell ids of the current leaves of the growing lineage tree
 
     # go through regions by timepoint and build lineages
-    # timepoints start at 1, like the original images
+    # timepoints start with the index of the first image
     for t, regions in enumerate(regions_by_time, start=start_time_index):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
@@ -2520,6 +2520,7 @@ class Cell():
         self.tau = None
         self.elong_rate = None
         self.septum_position = None
+        self.width = None
 
     def grow(self, region, t):
         '''Append data from a region to this cell.
@@ -2596,6 +2597,9 @@ class Cell():
         # compared to the total size
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
 
+        # calculate single width over cell's life
+        self.width = np.mean(self.widths_w_div)
+
         # convert data to smaller floats. No need for float64
         # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
         convert_to = 'float16' # numpy datatype to convert to
@@ -2606,6 +2610,7 @@ class Cell():
         self.elong_rate = self.elong_rate.astype(convert_to)
         self.tau = self.tau.astype(convert_to)
         self.septum_position = self.septum_position.astype(convert_to)
+        self.width = self.width.astype(convert_to)
 
         self.lengths = [length.astype(convert_to) for length in self.lengths]
         self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
