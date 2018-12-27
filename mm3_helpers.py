@@ -1248,7 +1248,7 @@ def make_masks(analyzed_imgs):
 
     # declare temp variables from yaml parameter dict.
     crop_wp = int(params['compile']['channel_width_pad'] + params['compile']['channel_width']/2)
-    chan_lp = params['compile']['channel_length_pad']
+    chan_lp = int(params['compile']['channel_length_pad'])
 
     #intiaize dictionary
     channel_masks = {}
@@ -1272,7 +1272,7 @@ def make_masks(analyzed_imgs):
     max_chnl_mask_len = 0
     max_chnl_mask_wid = 0
 
-    # for each fov make a channel_mask dictionary from consensus mask for each fov
+    # for each fov make a channel_mask dictionary from consensus mask
     for fov in fovs:
         # initialize a the dict and consensus mask
         channel_masks_1fov = {} # dict which holds channel masks {peak : [[y1, y2],[x1,x2]],...}
@@ -1303,7 +1303,7 @@ def make_masks(analyzed_imgs):
             # add it to the consensus mask
             consensus_mask += img_chnl_mask
 
-        # average the consensus mask
+        # Normalize concensus mask between 0 and 1.
         consensus_mask = consensus_mask.astype('float32') / float(np.amax(consensus_mask))
 
         # threshhold and homogenize each channel mask within the mask, label them
@@ -1329,7 +1329,7 @@ def make_masks(analyzed_imgs):
             # if their channels contain this median value to match up
             channel_id = int(np.median(np.where(poscols)[0]))
 
-            # store the edge locations of the channel mask in the dictionary
+            # store the edge locations of the channel mask in the dictionary. Will be ints
             min_row = np.min(np.where(posrows)[0])
             max_row = np.max(np.where(posrows)[0])
             min_col = np.min(np.where(poscols)[0])
@@ -1361,11 +1361,11 @@ def make_masks(analyzed_imgs):
             if chnl_mask[1][1] - chnl_mask[1][0] != max_chnl_mask_wid:
                 wid_diff = max_chnl_mask_wid - (chnl_mask[1][1] - chnl_mask[1][0])
                 if wid_diff % 2 == 0:
-                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - wid_diff/2, 0)
-                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + wid_diff/2, image_cols - 1)
+                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - wid_diff/2, 0))
+                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + wid_diff/2, image_cols - 1))
                 else:
-                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
-                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
+                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - (wid_diff-1)/2, 0))
+                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1))
 
 
     #save the channel mask dictionary to a pickle and a text file
