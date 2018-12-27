@@ -685,12 +685,13 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
         information('Slicing and saving channel peak %d.' % peak)
 
+        # channel masks should only contain ints, but you can use this for hard fix
+        # for i in range(len(channel_loc)):
+        #     for j in range(len(channel_loc[i])):
+        #         channel_loc[i][j] = int(channel_loc[i][j])
+
         # slice out channel.
         # The function should recognize the shape length as 4 and cut all time points
-        for i in range(len(channel_loc)):
-            for j in range(len(channel_loc[i])):
-                channel_loc[i][j] = int(channel_loc[i][j])
-
         channel_stack = cut_slice(image_fov_stack, channel_loc)
 
         # save a different time stack for all colors
@@ -797,9 +798,10 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             h5g.attrs.create('peak_id', peak)
             h5g.attrs.create('channel_loc', channel_loc)
 
-            for i in range(len(channel_loc)):
-                for j in range(len(channel_loc[i])):
-                    channel_loc[i][j] = int(channel_loc[i][j])
+            # channel masks should only contain ints, but you can use this for a hard fix
+            # for i in range(len(channel_loc)):
+            #     for j in range(len(channel_loc[i])):
+            #         channel_loc[i][j] = int(channel_loc[i][j])
 
             # slice out channel.
             # The function should recognize the shape length as 4 and cut all time points
