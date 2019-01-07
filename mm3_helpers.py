@@ -541,8 +541,8 @@ def get_tif_metadata_filename(tif):
     mm3_Compile.get_tif_params
 
     '''
-    idata = {'fov' : get_fov(tif.fname), # fov id
-             't' : get_time(tif.fname), # time point
+    idata = {'fov' : get_fov(tif.filename), # fov id
+             't' : get_time(tif.filename), # time point
              'jd' : None, # absolute julian time
              'x' : None, # x position on stage [um]
              'y' : None} # y position on stage [um]
@@ -619,7 +619,7 @@ def save_tiffs(imgDict, analyzed_imgs):
     fov_id = image_params['fov']
     specs = {fov_id:{}}
 
-    for peak,img in six.iteritems(imgDicts):
+    for peak,img in six.iteritems(imgDict):
 
         img = img.astype('uint16')
         if not os.path.isdir(savePath):
