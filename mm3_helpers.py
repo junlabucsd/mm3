@@ -2327,7 +2327,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             # go through regions, they will come off in Y position order
             for r, region in enumerate(regions):
                 # create tuple which is cell_id of closest leaf, distance
-                current_closest = (None, float('inf')) 
+                current_closest = (None, float('inf'))
 
                 # check this region against all positions of all current leaf regions,
                 # find the closest one in y.
@@ -2390,6 +2390,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     # 2 if the second region is the cell, and the first is trash
                     # or 0 if it cannot be determined.
                     check_division_result = check_division(Cells[leaf_id], region1, region2)
+
                     if check_division_result == 3:
                         # create two new cells and divide the mother
                         daughter1_id = create_cell_id(region1, t, peak_id, fov_id)
