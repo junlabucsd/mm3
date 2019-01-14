@@ -152,6 +152,105 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
 
     return specs
 
+def fov_CNN_plot_channels(fov_id, predictionDict, specs, outputdir='.', phase_plane='c1'):
+    '''
+    Creates a plot with the channels with guesses for empties and full channels.
+    The plot is saved in PDF format.
+
+    Parameters
+    fov_id : str
+        file name of the hdf5 file name in originals
+    predictionDict : dictionary
+        dictionary for cross correlation values for all fovs.
+    specs: dictionary
+        dictionary for channal assignment (Analyze/Don't Analyze/Background).
+
+    '''
+
+    mm3.information("Plotting channels for FOV %d." % fov_id)
+
+    # set up figure for user assited choosing
+    n_peaks = len(specs[fov_id].keys())
+    axw=1
+    axh=4*axw
+    nrows=3
+    ncols=int(n_peaks)
+    fig = plt.figure(num='none', facecolor='w',figsize=(ncols*axw,nrows*axh))
+    gs = gridspec.GridSpec(nrows,ncols,wspace=0.5,hspace=0.1,top=0.90)
+
+    # plot the peaks peak by peak using sorted list
+    sorted_peaks = sorted([peak_id for peak_id in specs[fov_id].keys()])
+    npeaks = len(sorted_peaks)
+
+    for n, peak_id in enumerate(sorted_peaks):
+        if predictionDict:
+            predictions = predictionDict[fov_id][peak_id] # get predictions array
+
+        # load data for figure
+        image_data = mm3.load_stack(fov_id, peak_id, color=phase_plane)
+
+        first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
+
+        # append an axis handle to ax list while adding a subplot to the figure which has a
+        axhi = fig.add_subplot(gs[0,n])
+        axmid = fig.add_subplot(gs[1,n])
+        axlo = fig.add_subplot(gs[2,n])
+
+        # plot the first image in each channel in top row
+        ax=axhi
+        ax.imshow(first_img,cmap=plt.cm.gray, interpolation='nearest')
+        ax.axis('off')
+        ax.set_title(str(peak_id), fontsize = 12)
+        if n == 0:
+            ax.set_ylabel("first time point")
+
+        # plot middle row using last time point with highlighting for empty/full
+        ax=axmid
+        ax.axis('off')
+        #ax.imshow(last_img,cmap=plt.cm.gray, interpolation='nearest')
+        #H,W = last_img.shape
+        #img = np.zeros((H,W,3))
+        if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
+            #img[:,:,1]=last_img
+            cmap=plt.cm.Greens_r
+        elif specs[fov_id][peak_id] == 0: # 0 means reference, show blue
+            #img[:,:,2]=last_img
+            cmap=plt.cm.Blues_r
+        else: # otherwise show red, means don't analyze
+            #img[:,:,0]=last_img
+            cmap=plt.cm.Reds_r
+        ax.imshow(last_img,cmap=cmap, interpolation='nearest')
+
+        # format
+        if n == 0:
+            ax.set_ylabel("last time point")
+
+        # finally plot the prediction values as horizontal bar chart
+        ax=axlo
+        if predictionDict:
+            ax.barh(range(len(predictions)), predictions)
+            #ax.vlines(x=p['channel_picker']['channel_picking_threshold'], ymin=-1, ymax=5, linestyles='dashed',colors='red')
+            ax.set_title('p', fontsize = 8)
+        else:
+            ax.plot(np.zeros(10), range(10))
+
+        ax.set_xlim((0,1)) # set limits to (0,1)
+        #ax.get_xaxis().set_ticks([])
+        if not n == 0:
+            ax.get_yaxis().set_ticks([])
+        else:
+            ax.set_yticklabels(labels=["","Good","Empty","Out-of-focus","Defective"])
+            ax.set_ylabel("CNN prediction category")
+
+    fig.suptitle("FOV {:d}".format(fov_id),fontsize=14)
+    fileout=os.path.join(outputdir,'fov_xy{:03d}.pdf'.format(fov_id))
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    mm3.information("Written FOV {}'s channels in {}".format(fov_id,fileout))
+
+    return specs
+
 # funtion which makes the UI plot
 def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     '''Creates a plot with the channels with guesses for empties and full channels,
@@ -404,15 +503,17 @@ def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
         ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
         if predictionDict:
             ax[-1].barh(range(len(predictions)), predictions)
-            ax[-1].set_title('CNN predictions', fontsize = 8)
+            #ax[-1].vlines(x=p['channel_picker']['channel_picking_threshold'], ymin=-1, ymax=5, linestyles='dashed',colors='red')
+            ax[-1].set_title('p', fontsize = 8)
         else:
             ax[-1].plot(np.zeros(10), range(10))
 
         ax[-1].set_xlim((0,1)) # set limits to (0,1)
-        ax[-1].get_xaxis().set_ticks([])
+        #ax[-1].get_xaxis().set_ticks([])
         if not n == 1:
             ax[-1].get_yaxis().set_ticks([])
         else:
+            ax[-1].set_yticklabels(labels=["","Good","Empty","Out-of-focus","Defective"])
             ax[-1].set_ylabel("CNN prediction category")
 
     # show the plot finally
@@ -740,8 +841,12 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            specs = fov_plot_channels(fov_id, crosscorrs, specs,
-                                      outputdir=outputdir, phase_plane=p['phase_plane'])
+            if crosscorrs:
+                specs = fov_plot_channels(fov_id, crosscorrs, specs,
+                                          outputdir=outputdir, phase_plane=p['phase_plane'])
+            elif do_CNN:
+                specs = fov_CNN_plot_channels(fov_id, predictionDict, specs, 
+                                              outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
     if not os.path.isfile(os.path.join(ana_dir, 'specs.yaml')):
