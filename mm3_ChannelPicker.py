@@ -293,8 +293,8 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
 
     return specs
 
-# function to plot U-net derived trap classifications
-def fov_choose_channels_UI(fov_id, predictions, specs, UI_images):
+# function to plot CNN-derived trap classifications
+def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
     '''Creates a plot with the channels with guesses for empties and full channels,
     and requires the user to choose which channels to use for analysis and which to
     average for empties and subtraction.
@@ -361,8 +361,8 @@ def fov_choose_channels_UI(fov_id, predictions, specs, UI_images):
     last_imgs = [] # list that holds last images for updating figure
 
     for n, peak_id in enumerate(sorted_peaks, start=1):
-        if predictions:
-            peak_xc = predictions[n,:] # get cross corr data from dict
+        if predictionDict:
+            predictions = predictionDict[fov_id][peak_id] # get predictions array
 
         # load data for figure
         # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
@@ -400,21 +400,20 @@ def fov_choose_channels_UI(fov_id, predictions, specs, UI_images):
         if n == 1:
             ax[-1].set_ylabel("last time point")
 
-        # finally plot the cross correlations a cross time
+        # finally plot the prediction values as horizontal bar chart
         ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
-        if predictions: # don't try to plot if it's not there.
-            ccs = peak_xc # array of predicted values
-            ax[-1].plot(ccs, range(len(ccs)))
-            ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+        if predictionDict:
+            ax[-1].barh(range(len(predictions)), predictions)
+            ax[-1].set_title('CNN predictions', fontsize = 8)
         else:
             ax[-1].plot(np.zeros(10), range(10))
 
-        ax[-1].set_xlim((0.8,1))
+        ax[-1].set_xlim((0,1)) # set limits to (0,1)
         ax[-1].get_xaxis().set_ticks([])
         if not n == 1:
             ax[-1].get_yaxis().set_ticks([])
         else:
-            ax[-1].set_ylabel("time index, CC on X")
+            ax[-1].set_ylabel("CNN prediction category")
 
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
@@ -530,7 +529,7 @@ if __name__ == "__main__":
     else:
         do_crosscorrs = p['channel_picker']['do_crosscorrs']
 
-    do_Unet = p['channel_picker']['do_Unet']
+    do_CNN = p['channel_picker']['do_CNN']
 
     # set interactive flag
     if namespace.noninteractive:
@@ -568,34 +567,56 @@ if __name__ == "__main__":
             crosscorrs = None
             mm3.information('Precalculated cross-correlations not found.')
 
-    if do_Unet:
+    if do_CNN:
+        # a nested dict to hold predictions per channel per fov.
+        predictionDict = {}
 
-        mm3.information('Inferring good, empty, and defective traps using U-net.')
-        mm3.information('Loading model ....')
+        for fov_id in fov_id_list:
 
-        # read in model for inference of empty vs good traps
-        model_file_path = p['channel_picker']['channel_picker_model_file']
-        model = models.load_model(model_file_path)
+            predictionDict[fov_id] = {}
 
-        mm3.information("Model loaded.")
+            mm3.information('Inferring good, empty, and defective traps using CNN.')
+            mm3.information('Loading model ....')
 
-        # get list of tiff file names
-        tiff_file_names = glob.glob(os.path.join(chnl_dir, "*_c1.tif"))
-        tiff_file_names.sort()
+            # read in model for inference of empty vs good traps
+            model_file_path = p['channel_picker']['channel_picker_model_file']
+            model = models.load_model(model_file_path)
 
-        # parameters to pass to custom image generator class, TrapKymographPredictionDataGenerator
-        params = {'dim': (210,256),
-                  'batch_size': 40,
-                  'n_classes': 4,
-                  'n_channels': 1,
-                  'shuffle': False}
-        # set up the image data generator
-        channel_image_generator = mm3.TrapKymographPredictionDataGenerator(tiff_file_names, **params)
+            mm3.information("Model loaded.")
 
-        # run the model
-        predictions = model.predict_generator(channel_image_generator)
-        # round predictions to integer
-        predictions = np.rint(predictions)
+            # get list of tiff file names
+            tiff_file_names = glob.glob(os.path.join(chnl_dir, "*xy{:0=3}*_c1.tif".format(fov_id)))
+            tiff_file_names.sort()
+            #print(len(tiff_file_names)) # uncomment for debugging
+
+            # parameters to pass to custom image generator class, TrapKymographPredictionDataGenerator
+            params = {'dim': (210,256),
+                      'batch_size': 40,
+                      'n_classes': 4,
+                      'n_channels': 1,
+                      'shuffle': False}
+            # set up the image data generator
+            channel_image_generator = mm3.TrapKymographPredictionDataGenerator(tiff_file_names, **params)
+
+            # run the model
+            predictions = model.predict_generator(channel_image_generator)
+            #print(predictions.shape)
+            predictions = predictions[:len(tiff_file_names),:]
+            #print(predictions.shape)
+
+            # assign each prediction to the proper fov_id, peak_id in predictions dict
+            for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
+                # put prediction array into dictionary
+                #print(i, peak_id) # uncomment for debugging
+                predictionDict[fov_id][peak_id] = predictions[i,:]
+
+        # write predictions to pickle and text
+        mm3.information("Writing channel picking predictions file.")
+        with open(os.path.join(ana_dir,"channel_picker_CNN_results.pkl"), 'wb') as preds_file:
+            pickle.dump(predictionDict, preds_file, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(ana_dir,"channel_picker_CNN_results.txt"), 'w') as preds_file:
+            pprint(predictionDict, stream=preds_file)
+        mm3.information("Wrote channel picking predictions files.")
 
     else:
         # a nested dict to hold cross corrs per channel per fov.
@@ -669,9 +690,9 @@ if __name__ == "__main__":
                         specs[fov_id][peak_id] = 1
                     else: # default to don't analyze
                         specs[fov_id][peak_id] = -1
-        elif do_Unet:
+        elif do_CNN:
 
-            # update dictionary with inference from Unet
+            # update dictionary with inference from CNN
             for i in range(predictions.shape[0]):
                 tiff_name = tiff_file_names[i]
                 # print(tiff_name) # uncomment for debugging
@@ -681,12 +702,14 @@ if __name__ == "__main__":
                     specs[fov_id] = {}
 
                 peak_id = int(tiff_name.split("_")[-2][1:])
-                prediction = np.argmax(predictions[i,:]) # get index with maximum prediction
+                #prediction = np.argmax(predictions[i,:]) # get index with maximum prediction
 
-                if prediction == 0:
+                if predictions[i,0] > p['channel_picker']['channel_picking_threshold']:
                     specs[fov_id][peak_id] = 1
                 else:
                     specs[fov_id][peak_id] = -1
+
+            #pprint(specs) # uncomment for debugging
 
         else: # just set everything to 1 and go forward.
 
@@ -705,7 +728,12 @@ if __name__ == "__main__":
         mm3.information('Starting channel picking.')
         # go through the fovs again, same as above
         for fov_id in fov_id_list:
-            specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
+
+            if crosscorrs:
+                specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
+            elif do_CNN:
+                specs = fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
+
     else:
         pass
         outputdir = os.path.join(ana_dir, "fovs")

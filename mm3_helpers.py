@@ -1378,6 +1378,56 @@ def make_masks(analyzed_imgs):
 
     return cm_copy
 
+# get each fov_id, peak_id, frame's mask bounding box from bounding boxes arrived at by convolutional neural network
+def make_channel_masks_CNN(bboxes_dict):
+    '''
+    The keys in this dictionary are peak_ids and the values of each is an array of shape (frameNumber,2,2):
+    Each frameNumber's 2x2 slice of the array represents the given peak_id's [[minrow, maxrow],[mincol, maxcol]].
+
+    One important consequence of these function is that the channel ids and the size of the
+    channel slices are decided now. Updates to mask must coordinate with these values.
+
+    Parameters
+    analyzed_imgs : dict
+        image information created by get_params
+
+    Returns
+    channel_masks : dict
+        dictionary of consensus channel masks.
+
+    Called By
+    mm3_Compile.py
+
+    Calls
+    '''
+    
+    # initialize the new channel_masks dict
+    channel_masks = {}
+
+    # reorder elements of tuples in bboxes_dict to match [[minrow, maxrow], [mincol, maxcol]] convention above
+    peak_ids = [peak_id for peak_id in bboxes_dict.keys()]
+    peak_ids.sort()
+
+    bbox_array = np.zeros((len(bboxes_dict[peak_ids[0]]),2,2), dtype='uint16')
+    for peak_id in peak_ids:
+        # get each frame's bounding boxes for the given peak_id
+        frame_bboxes = bboxes_dict[peak_id]
+        
+        for frame_index in range(len(frame_bboxes)):
+            # replace the values in bbox_array with the proper ones from frame_bboxes
+            minrow = frame_bboxes[frame_index][0]
+            maxrow = frame_bboxes[frame_index][2]
+            mincol = frame_bboxes[frame_index][1]
+            maxcol = frame_bboxes[frame_index][3]
+            bbox_array[frame_index,0,0] = minrow
+            bbox_array[frame_index,0,1] = maxrow
+            bbox_array[frame_index,1,0] = mincol
+            bbox_array[frame_index,1,1] = maxcol
+
+        channel_masks[peak_id] = bbox_array
+
+    return(channel_masks)
+
 ### functions about trimming, padding, and manipulating images
 
 # define function for flipping the images on an FOV by FOV basis
@@ -2215,7 +2265,7 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
 
     def __len__(self):
         'Denotes the number of batches per epoch'
-        return int(np.floor(len(self.list_fileNames) / self.batch_size))
+        return int(np.ceil(len(self.list_fileNames) / self.batch_size))
 
     def __getitem__(self, index):
         'Generate one batch of data'
