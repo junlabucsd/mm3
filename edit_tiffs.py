@@ -30,7 +30,7 @@ if __name__ == '__main__':
     # define variables here
     source_dir = sys.argv[1]
     dest_dir = os.path.join(source_dir,'TIFF')
-    file_prefix = '20181011_JDW3308' # prefix for output images
+    file_prefix = '20190110_JDW3411' # prefix for output images
 
     if not os.path.exists(dest_dir):
         os.makedirs(dest_dir)

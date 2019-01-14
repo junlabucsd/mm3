@@ -9,6 +9,7 @@ import time
 import inspect
 import argparse
 import yaml
+import glob
 from pprint import pprint # for human readable file output
 try:
     import cPickle as pickle
@@ -30,6 +31,8 @@ import multiprocessing
 from multiprocessing import Pool
 import warnings
 import h5py
+
+from tensorflow.python.keras import models
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -290,6 +293,148 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
 
     return specs
 
+# function to plot U-net derived trap classifications
+def fov_choose_channels_UI(fov_id, predictions, specs, UI_images):
+    '''Creates a plot with the channels with guesses for empties and full channels,
+    and requires the user to choose which channels to use for analysis and which to
+    average for empties and subtraction.
+
+    Parameters
+    fov_file : str
+        file name of the hdf5 file name in originals
+    fov_xcorrs : dictionary
+        dictionary for cross correlation values for all fovs.
+
+    Returns
+    bgdr_peaks : list
+        list of peak id's (int) of channels to be used for subtraction
+    spec_file_pkl : pickle file
+        saves the lists cell_peaks, bgrd_peaks, and drop_peaks to a pkl file
+
+    '''
+
+    mm3.information("Starting channel picking for FOV %d." % fov_id)
+
+    # define functions here so they have access to variables
+    # for UI. change specification of channel
+    def onclick_cells(event):
+        try:
+            peak_id = int(event.inaxes.get_title())
+        except AttributeError:
+            return
+
+        # reset image to be updated based on user clicks
+        ax_id = sorted_peaks.index(peak_id) * 3 + 1
+        new_img = last_imgs[sorted_peaks.index(peak_id)]
+        ax[ax_id].imshow(new_img, cmap=plt.cm.gray, interpolation='nearest')
+
+        # if it says analyze, change to empty
+        if specs[fov_id][peak_id] == 1:
+            specs[fov_id][peak_id] = 0
+            ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array*0.1, ones_array)), alpha=0.25)
+            #mm3.information("peak %d now set to empty." % peak_id)
+
+        # if it says empty, change to don't analyze
+        elif specs[fov_id][peak_id] == 0:
+            specs[fov_id][peak_id] = -1
+            ax[ax_id].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
+            #mm3.information("peak %d now set to ignore." % peak_id)
+
+        # if it says don't analyze, change to analyze
+        elif specs[fov_id][peak_id] == -1:
+            specs[fov_id][peak_id] = 1
+            ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
+            #mm3.information("peak %d now set to analyze." % peak_id)
+
+        plt.draw()
+        return
+
+    # set up figure for user assited choosing
+    n_peaks = len(specs[fov_id].keys())
+    fig = plt.figure(figsize=(int(n_peaks/2), 12))
+    fig.set_size_inches(int(n_peaks/2),12)
+    ax = [] # for axis handles
+
+    # plot the peaks peak by peak using sorted list
+    sorted_peaks = sorted([peak_id for peak_id in specs[fov_id].keys()])
+    npeaks = len(sorted_peaks)
+    last_imgs = [] # list that holds last images for updating figure
+
+    for n, peak_id in enumerate(sorted_peaks, start=1):
+        if predictions:
+            peak_xc = predictions[n,:] # get cross corr data from dict
+
+        # load data for figure
+        # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
+
+        # first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        # last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
+        last_imgs.append(UI_images[fov_id][peak_id]['last']) # append for updating later
+        # del image_data # clear memory (maybe)
+
+        # append an axis handle to ax list while adding a subplot to the figure which has a
+        # column for each peak and 3 rows
+
+        # plot the first image in each channel in top row
+        ax.append(fig.add_subplot(3, npeaks, n))
+        ax[-1].imshow(UI_images[fov_id][peak_id]['first'],
+                      cmap=plt.cm.gray, interpolation='nearest')
+        ax = format_channel_plot(ax, peak_id) # format axis and title
+        if n == 1:
+            ax[-1].set_ylabel("first time point")
+
+        # plot middle row using last time point with highlighting for empty/full
+        ax.append(fig.add_subplot(3, npeaks, n + npeaks))
+        ax[-1].imshow(UI_images[fov_id][peak_id]['last'],
+                      cmap=plt.cm.gray, interpolation='nearest')
+
+        # color image based on if it is thought empty or full
+        ones_array = np.ones_like(UI_images[fov_id][peak_id]['last'])
+        if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
+            ax[-1].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
+        else: # otherwise show red, means don't analyze
+            ax[-1].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
+
+        # format
+        ax = format_channel_plot(ax, peak_id)
+        if n == 1:
+            ax[-1].set_ylabel("last time point")
+
+        # finally plot the cross correlations a cross time
+        ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
+        if predictions: # don't try to plot if it's not there.
+            ccs = peak_xc # array of predicted values
+            ax[-1].plot(ccs, range(len(ccs)))
+            ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+        else:
+            ax[-1].plot(np.zeros(10), range(10))
+
+        ax[-1].set_xlim((0.8,1))
+        ax[-1].get_xaxis().set_ticks([])
+        if not n == 1:
+            ax[-1].get_yaxis().set_ticks([])
+        else:
+            ax[-1].set_ylabel("time index, CC on X")
+
+    # show the plot finally
+    fig.suptitle("FOV %d" % fov_id)
+
+    # enter user input
+    # ask the user to correct cell/nocell calls
+    cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
+    # matplotlib has difefrent behavior for interactions in different versions.
+    if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        plt.show(block=False)
+        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
+    else:
+        print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
+        plt.show(block=True)
+    fig.canvas.mpl_disconnect(cells_handler)
+    plt.close()
+
+    return specs
+
+
 # function for better formatting of channel plot
 def format_channel_plot(ax, peak_id):
     '''Removes axis and puts peak as title from plot for channels'''
@@ -385,6 +530,8 @@ if __name__ == "__main__":
     else:
         do_crosscorrs = p['channel_picker']['do_crosscorrs']
 
+    do_Unet = p['channel_picker']['do_Unet']
+
     # set interactive flag
     if namespace.noninteractive:
         interactive = False
@@ -411,6 +558,7 @@ if __name__ == "__main__":
     ### Cross correlations ########################################################################
     # load precalculated ones if indicated
     if not do_crosscorrs:
+
         mm3.information('Loading precalculated cross-correlations.')
 
         try:
@@ -419,6 +567,35 @@ if __name__ == "__main__":
         except:
             crosscorrs = None
             mm3.information('Precalculated cross-correlations not found.')
+
+    if do_Unet:
+
+        mm3.information('Inferring good, empty, and defective traps using U-net.')
+        mm3.information('Loading model ....')
+
+        # read in model for inference of empty vs good traps
+        model_file_path = p['channel_picker']['channel_picker_model_file']
+        model = models.load_model(model_file_path)
+
+        mm3.information("Model loaded.")
+
+        # get list of tiff file names
+        tiff_file_names = glob.glob(os.path.join(chnl_dir, "*_c1.tif"))
+        tiff_file_names.sort()
+
+        # parameters to pass to custom image generator class, TrapKymographPredictionDataGenerator
+        params = {'dim': (210,256),
+                  'batch_size': 40,
+                  'n_classes': 4,
+                  'n_channels': 1,
+                  'shuffle': False}
+        # set up the image data generator
+        channel_image_generator = mm3.TrapKymographPredictionDataGenerator(tiff_file_names, **params)
+
+        # run the model
+        predictions = model.predict_generator(channel_image_generator)
+        # round predictions to integer
+        predictions = np.rint(predictions)
 
     else:
         # a nested dict to hold cross corrs per channel per fov.
@@ -492,7 +669,27 @@ if __name__ == "__main__":
                         specs[fov_id][peak_id] = 1
                     else: # default to don't analyze
                         specs[fov_id][peak_id] = -1
+        elif do_Unet:
+
+            # update dictionary with inference from Unet
+            for i in range(predictions.shape[0]):
+                tiff_name = tiff_file_names[i]
+                # print(tiff_name) # uncomment for debugging
+                fov_id = int(tiff_name.split("_")[-3][2:])
+
+                if i == 0: # set up the dictionary if this is the first time through the fov
+                    specs[fov_id] = {}
+
+                peak_id = int(tiff_name.split("_")[-2][1:])
+                prediction = np.argmax(predictions[i,:]) # get index with maximum prediction
+
+                if prediction == 0:
+                    specs[fov_id][peak_id] = 1
+                else:
+                    specs[fov_id][peak_id] = -1
+
         else: # just set everything to 1 and go forward.
+
             for fov_id, peaks in six.iteritems(channel_masks):
                 specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
     else:
@@ -523,7 +720,7 @@ if __name__ == "__main__":
         with open(os.path.join(ana_dir, 'specs.yaml'), 'w') as specs_file:
             yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
     else:
-        mm3.warning('specs.yaml file already exists in analysis folder. Saving to specs_1.pkl')
+        mm3.warning('specs.yaml file already exists in analysis folder. Saving to specs_1.yaml')
         with open(os.path.join(ana_dir, 'specs_1.yaml'), 'w') as specs_file:
             yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
 
