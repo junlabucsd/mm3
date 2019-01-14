@@ -46,6 +46,7 @@ import tensorflow as tf # ignore message about how tf was compiled
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import models
 from tensorflow.python.keras import losses
+from tensorflow.python.keras import utils
 from tensorflow.python.keras import backend as K
 
 # Parralelization modules
@@ -633,9 +634,8 @@ def save_tiffs(imgDict, analyzed_imgs):
             io.imsave(channel_filename, img[:,:,:,int(planeNumber)-1])
 
     # Save out specs file in yaml format
-    with open(os.path.join(params['experiment_directory'],
-                            params['analysis_directory'],"specs.yaml"), 'w') as specs_file:
-        yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    #with open(os.path.join(params['experiment_directory'], params['analysis_directory'],"specs.yaml"), 'w') as specs_file:
+    #    yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
 
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
@@ -2198,6 +2198,57 @@ def segment_fov_unet(fov_id, specs, model):
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return
+
+# class for image generation for classifying traps as good, empty, out-of-focus, or defective
+class TrapKymographPredictionDataGenerator(utils.Sequence):
+    'Generates data for Keras'
+    def __init__(self, list_fileNames, batch_size=32, dim=(32,32,32), n_channels=1,
+                 n_classes=10, shuffle=False):
+        'Initialization'
+        self.dim = dim
+        self.batch_size = batch_size
+        self.list_fileNames = list_fileNames
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.floor(len(self.list_fileNames) / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        list_fileNames_temp = [self.list_fileNames[k] for k in indexes]
+
+        # Generate data
+        X = self.__data_generation(list_fileNames_temp)
+
+        return X
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.list_fileNames))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_fileNames_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.empty((self.batch_size, *self.dim, self.n_channels))
+
+        # Generate data
+        for i, fName in enumerate(list_fileNames_temp):
+            # Store sample
+            tmpImg = io.imread(fName)
+            X[i,] = np.expand_dims(tmpImg[:,:,tmpImg.shape[-1]//2], axis=-1)
+
+        return X
+
 
 # finds lineages for all peaks in a fov
 def make_lineages_fov(fov_id, specs):
