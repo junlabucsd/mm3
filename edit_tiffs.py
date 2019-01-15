@@ -40,7 +40,7 @@ if __name__ == '__main__':
     source_files = [file_path.split('/')[-1] for file_path in source_files]
 
     # cropping
-    t_crop = [None, None] # in the first 30 frames the image moves by more than 1 channel spacing
+    t_crop = [None, 307] # in the first 30 frames the image moves by more than 1 channel spacing
     y_crop = [None, None]
     x_crop = [None, None]
 
