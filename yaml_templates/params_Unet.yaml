@@ -3,7 +3,7 @@
 experiment_name: '20190110_JDW3411'
 
 # root directory for the experiment.
-experiment_directory: '/home/wanglab/Users_local/Jeremy/Imaging/20190110/20190110_JDW3411_StagePosition01'
+experiment_directory: '/home/wanglab/elon_musk/current/Users/Jeremy/Imaging/20190110'
 
 # subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
@@ -29,6 +29,14 @@ pxl2um: 0.105
 
 ### process control ############################################################
 # Use these flags to control script specific processes and settings
+
+metamorphToTIFF:
+  file_name_filters: ["BF","mKO","HcRed"]
+  x_crop: [None, None]
+  y_crop: [None, None]
+  t_crop: [None, 307]
+  seconds_between_frames: 240
+  strain_name: 'JDW3411'
 
 nd2ToTIFF:
   number_of_rows : 1
