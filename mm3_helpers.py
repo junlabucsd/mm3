@@ -46,6 +46,7 @@ import tensorflow as tf # ignore message about how tf was compiled
 from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras import models
 from tensorflow.python.keras import losses
+from tensorflow.python.keras import utils
 from tensorflow.python.keras import backend as K
 
 # Parralelization modules
@@ -541,11 +542,11 @@ def get_tif_metadata_filename(tif):
     mm3_Compile.get_tif_params
 
     '''
-    idata = {'fov' : get_fov(tif.fname), # fov id
-             't' : get_time(tif.fname), # time point
-             'jd' : None, # absolute julian time
-             'x' : None, # x position on stage [um]
-             'y' : None} # y position on stage [um]
+    idata = {'fov' : get_fov(tif.filename), # fov id
+             't' : get_time(tif.filename), # time point
+             'jd' : -1 * 0.0, # absolute julian time
+             'x' : -1 * 0.0, # x position on stage [um]
+             'y' : -1 * 0.0} # y position on stage [um]
 
     return idata
 
@@ -607,35 +608,25 @@ def make_time_table(analyzed_imgs):
     return time_table
 
 # saves traps sliced via Unet
-def save_tiffs(imgDict, analyzed_imgs):
+def save_tiffs(imgDict, analyzed_imgs, fov_id):
 
     savePath = os.path.join(params['experiment_directory'],
                             params['analysis_directory'],
                             params['chnl_dir'])
-
     img_names = [key for key in analyzed_imgs.keys()]
-
     image_params = analyzed_imgs[img_names[0]]
-    fov_id = image_params['fov']
-    specs = {fov_id:{}}
 
-    for peak,img in six.iteritems(imgDicts):
+    for peak,img in six.iteritems(imgDict):
 
         img = img.astype('uint16')
         if not os.path.isdir(savePath):
             os.mkdir(savePath)
-        specs[fov_id][peak] = 1
 
         for planeNumber in image_params['planes']:
 
             channel_filename = os.path.join(savePath, params['experiment_name'] + '_xy{0:0=3}_p{1:0=4}_c{2}.tif'.format(fov_id, peak, planeNumber))
-
             io.imsave(channel_filename, img[:,:,:,int(planeNumber)-1])
 
-    # Save out specs file in yaml format
-    with open(os.path.join(params['experiment_directory'],
-                            params['analysis_directory'],"specs.yaml"), 'w') as specs_file:
-        yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
 
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
@@ -703,7 +694,92 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
 
     return
 
-# same thing but do it for hdf5
+# saves traps sliced via Unet to an hdf5 file
+def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
+    '''Writes out 4D stacks of images to an HDF5 file.
+
+    Called by
+    mm3_Compile.py
+    '''
+
+    savePath = params['hdf5_dir']
+
+    if not os.path.isdir(savePath):
+        os.mkdir(savePath)
+
+    img_times = [analyzed_imgs[key]['t'] for key in img_names]
+    img_jds = [analyzed_imgs[key]['jd'] for key in img_names]
+    fov_ids = [analyzed_imgs[key]['fov'] for key in img_names]
+
+    # get image_params from first image from current fov
+    image_params = analyzed_imgs[img_names[0]]
+
+    # establish some variables for hdf5 attributes
+    fov_id = image_params['fov']
+    x_loc = image_params['x']
+    y_loc = image_params['y']
+    image_shape = image_params['shape']
+    image_planes = image_params['planes']
+
+    fov_channel_masks = channel_masks[fov_id]
+        
+    with h5py.File(os.path.join(savePath,'{}_xy{:0=2}.hdf5'.format(params['experiment_name'],fov_id)), 'w', libver='earliest') as h5f:
+
+        # add in metadata for this FOV
+        # these attributes should be common for all channel
+        h5f.attrs.create('fov_id', fov_id)
+        h5f.attrs.create('stage_x_loc', x_loc)
+        h5f.attrs.create('stage_y_loc', y_loc)
+        h5f.attrs.create('image_shape', image_shape)
+        # encoding is because HDF5 has problems with numpy unicode
+        h5f.attrs.create('planes', [plane.encode('utf8') for plane in image_planes])
+        h5f.attrs.create('peaks', sorted([key for key in imgDict.keys()]))
+
+        # this is for things that change across time, for these create a dataset
+        img_names = np.asarray(img_names)
+        img_names = np.expand_dims(img_names, 1)
+        img_names = img_names.astype('S100')
+        h5ds = h5f.create_dataset(u'filenames', data=img_names,
+                                  chunks=True, maxshape=(None, 1), dtype='S100',
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times', data=np.expand_dims(img_times, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
+        h5ds = h5f.create_dataset(u'times_jd', data=np.expand_dims(img_jds, 1),
+                                  chunks=True, maxshape=(None, 1),
+                                  compression="gzip", shuffle=True, fletcher32=True)
+
+        # cut out the channels as per channel masks for this fov
+        for peak,channel_stack in six.iteritems(imgDict):
+    
+            channel_stack = channel_stack.astype('uint16')
+            # create group for this trap
+            h5g = h5f.create_group('channel_%04d' % peak)
+
+            # add attribute for peak_id, channel location
+            # add attribute for peak_id, channel location
+            h5g.attrs.create('peak_id', peak)
+            channel_loc = fov_channel_masks[peak]
+            h5g.attrs.create('channel_loc', channel_loc)
+
+            # save a different dataset for all colors
+            for color_index in range(channel_stack.shape[3]):
+    
+                # create the dataset for the image. Review docs for these options.
+                h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
+                                data=channel_stack[:,:,:,color_index],
+                                chunks=(1, channel_stack.shape[1], channel_stack.shape[2]),
+                                maxshape=(None, channel_stack.shape[1], channel_stack.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+
+                # h5ds.attrs.create('plane', image_planes[color_index].encode('utf8'))
+
+                # write the data even though we have more to write (free up memory)
+                h5f.flush()
+
+    return
+
+# same thing as tiff_stack_slice_and_write but do it for hdf5
 def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
     '''Writes out 4D stacks of TIFF images to an HDF5 file.
 
@@ -1377,6 +1453,56 @@ def make_masks(analyzed_imgs):
     information("Channel masks saved.")
 
     return cm_copy
+
+# get each fov_id, peak_id, frame's mask bounding box from bounding boxes arrived at by convolutional neural network
+def make_channel_masks_CNN(bboxes_dict):
+    '''
+    The keys in this dictionary are peak_ids and the values of each is an array of shape (frameNumber,2,2):
+    Each frameNumber's 2x2 slice of the array represents the given peak_id's [[minrow, maxrow],[mincol, maxcol]].
+
+    One important consequence of these function is that the channel ids and the size of the
+    channel slices are decided now. Updates to mask must coordinate with these values.
+
+    Parameters
+    analyzed_imgs : dict
+        image information created by get_params
+
+    Returns
+    channel_masks : dict
+        dictionary of consensus channel masks.
+
+    Called By
+    mm3_Compile.py
+
+    Calls
+    '''
+    
+    # initialize the new channel_masks dict
+    channel_masks = {}
+
+    # reorder elements of tuples in bboxes_dict to match [[minrow, maxrow], [mincol, maxcol]] convention above
+    peak_ids = [peak_id for peak_id in bboxes_dict.keys()]
+    peak_ids.sort()
+
+    bbox_array = np.zeros((len(bboxes_dict[peak_ids[0]]),2,2), dtype='uint16')
+    for peak_id in peak_ids:
+        # get each frame's bounding boxes for the given peak_id
+        frame_bboxes = bboxes_dict[peak_id]
+        
+        for frame_index in range(len(frame_bboxes)):
+            # replace the values in bbox_array with the proper ones from frame_bboxes
+            minrow = frame_bboxes[frame_index][0]
+            maxrow = frame_bboxes[frame_index][2]
+            mincol = frame_bboxes[frame_index][1]
+            maxcol = frame_bboxes[frame_index][3]
+            bbox_array[frame_index,0,0] = minrow
+            bbox_array[frame_index,0,1] = maxrow
+            bbox_array[frame_index,1,0] = mincol
+            bbox_array[frame_index,1,1] = maxcol
+
+        channel_masks[peak_id] = bbox_array
+
+    return(channel_masks)
 
 ### functions about trimming, padding, and manipulating images
 
@@ -2198,6 +2324,57 @@ def segment_fov_unet(fov_id, specs, model):
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return
+
+# class for image generation for classifying traps as good, empty, out-of-focus, or defective
+class TrapKymographPredictionDataGenerator(utils.Sequence):
+    'Generates data for Keras'
+    def __init__(self, list_fileNames, batch_size=32, dim=(32,32,32), n_channels=1,
+                 n_classes=10, shuffle=False):
+        'Initialization'
+        self.dim = dim
+        self.batch_size = batch_size
+        self.list_fileNames = list_fileNames
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.shuffle = shuffle
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.ceil(len(self.list_fileNames) / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        list_fileNames_temp = [self.list_fileNames[k] for k in indexes]
+
+        # Generate data
+        X = self.__data_generation(list_fileNames_temp)
+
+        return X
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(len(self.list_fileNames))
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, list_fileNames_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.empty((self.batch_size, *self.dim, self.n_channels))
+
+        # Generate data
+        for i, fName in enumerate(list_fileNames_temp):
+            # Store sample
+            tmpImg = io.imread(fName)
+            X[i,] = np.expand_dims(tmpImg[:,:,tmpImg.shape[-1]//2], axis=-1)
+
+        return X
+
 
 # finds lineages for all peaks in a fov
 def make_lineages_fov(fov_id, specs):
