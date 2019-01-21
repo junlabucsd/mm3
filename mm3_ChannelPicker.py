@@ -798,7 +798,6 @@ if __name__ == "__main__":
             # update dictionary with inference from CNN
 
             for fov_id, peakPredictionsDict in six.iteritems(predictionDict):
-                print(fov_id)
                 fov_id = int(fov_id)
                 specs[fov_id] = {}
                 for peak_id, predictions in six.iteritems(peakPredictionsDict):
@@ -844,7 +843,6 @@ if __name__ == "__main__":
             elif do_CNN:
                 specs = fov_CNN_plot_channels(fov_id, predictionDict, specs, 
                                               outputdir=outputdir, phase_plane=p['phase_plane'])
-                print(specs)
 
     # Save out specs file in yaml format
     if not os.path.isfile(os.path.join(ana_dir, 'specs.yaml')):
