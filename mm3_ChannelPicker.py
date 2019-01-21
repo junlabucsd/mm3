@@ -555,6 +555,7 @@ def preload_images(specs, fov_id_list):
     UI_images = {}
 
     for fov_id in fov_id_list:
+        mm.information("Preloading images for fov_id {}.".format(fov_id))
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
@@ -651,7 +652,7 @@ if __name__ == "__main__":
 
     # remove fovs if the user specified so
     if (len(user_spec_fovs) > 0):
-        fov_id_list = [fov for fov in fov_id_list if fov in user_spec_fovs]
+        fov_id_list = [int(fov) for fov in fov_id_list if fov in user_spec_fovs]
 
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
@@ -672,18 +673,19 @@ if __name__ == "__main__":
         # a nested dict to hold predictions per channel per fov.
         predictionDict = {}
 
+        mm3.information('Loading model ....')
+
+        # read in model for inference of empty vs good traps
+        model_file_path = p['channel_picker']['channel_picker_model_file']
+        model = models.load_model(model_file_path)
+
+        mm3.information("Model loaded.")
+
         for fov_id in fov_id_list:
 
             predictionDict[fov_id] = {}
 
-            mm3.information('Inferring good, empty, and defective traps using CNN.')
-            mm3.information('Loading model ....')
-
-            # read in model for inference of empty vs good traps
-            model_file_path = p['channel_picker']['channel_picker_model_file']
-            model = models.load_model(model_file_path)
-
-            mm3.information("Model loaded.")
+            mm3.information('Inferring good, empty, and defective traps on fov_id {} using CNN.'.format(fov_id))
 
             # get list of tiff file names
             tiff_file_names = glob.glob(os.path.join(chnl_dir, "*xy{:0=3}*_c1.tif".format(fov_id)))
@@ -794,21 +796,17 @@ if __name__ == "__main__":
         elif do_CNN:
 
             # update dictionary with inference from CNN
-            for i in range(predictions.shape[0]):
-                tiff_name = tiff_file_names[i]
-                # print(tiff_name) # uncomment for debugging
-                fov_id = int(tiff_name.split("_")[-3][2:])
 
-                if i == 0: # set up the dictionary if this is the first time through the fov
-                    specs[fov_id] = {}
+            for fov_id, peakPredictionsDict in six.iteritems(predictionDict):
+                print(fov_id)
+                fov_id = int(fov_id)
+                specs[fov_id] = {}
+                for peak_id, predictions in six.iteritems(peakPredictionsDict):
 
-                peak_id = int(tiff_name.split("_")[-2][1:])
-                #prediction = np.argmax(predictions[i,:]) # get index with maximum prediction
-
-                if predictions[i,0] > p['channel_picker']['channel_picking_threshold']:
-                    specs[fov_id][peak_id] = 1
-                else:
-                    specs[fov_id][peak_id] = -1
+                    if predictions[0] > p['channel_picker']['channel_picking_threshold']:
+                        specs[fov_id][peak_id] = 1
+                    else:
+                        specs[fov_id][peak_id] = -1
 
             #pprint(specs) # uncomment for debugging
 
@@ -836,7 +834,6 @@ if __name__ == "__main__":
                 specs = fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
 
     else:
-        pass
         outputdir = os.path.join(ana_dir, "fovs")
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
@@ -847,6 +844,7 @@ if __name__ == "__main__":
             elif do_CNN:
                 specs = fov_CNN_plot_channels(fov_id, predictionDict, specs, 
                                               outputdir=outputdir, phase_plane=p['phase_plane'])
+                print(specs)
 
     # Save out specs file in yaml format
     if not os.path.isfile(os.path.join(ana_dir, 'specs.yaml')):
