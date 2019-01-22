@@ -1,9 +1,9 @@
 # Refer to the .yaml parameters file walkthrough in the git repository wiki
 # Name your experiment
-experiment_name: '20181011_JDW3308'
+experiment_name: '20190110_JDW3411'
 
 # root directory for the experiment.
-experiment_directory: '/home/wanglab/Users_local/Jeremy/Imaging/20181011/original_images/20181011_JDW3308_StagePosition01'
+experiment_directory: '/home/wanglab/Users_local/Jeremy/Imaging/20190110/'
 
 # subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
@@ -17,7 +17,10 @@ TIFF_source: 'other'
 
 # indicate if you want to save out to TIFFs, or use HDF5 to save image data.
 # HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
-output: 'TIFF' # 'HDF5'
+output: 'HDF5' # 'TIFF'
+
+# indicate if you are debugging
+debug: False
 
 # indicate which color channel (plane) has the phase images. Used by channel picker
 phase_plane: 'c1'
@@ -29,6 +32,14 @@ pxl2um: 0.105
 
 ### process control ############################################################
 # Use these flags to control script specific processes and settings
+
+metamorphToTIFF:
+  file_name_filters: ["BF","mKO","HcRed"]
+  x_crop: [None, None]
+  y_crop: [None, None]
+  t_crop: [None, 307]
+  seconds_between_frames: 240
+  strain_name: 'JDW3411'
 
 nd2ToTIFF:
   number_of_rows : 1
@@ -45,8 +56,8 @@ compile:
   do_slicing : True
 
   t_end : # only analyze images up until this t point. Leave blank otherwise
-  find_channels_method: 'Unet' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use Unet or peaks to detect channels. Either 'peaks' or 'Unet'
-  model_file_traps: '/home/wanglab/src/motherMachineSeggerWeights/feature_weights_512x512.hdf5'
+  find_channels_method: 'Unet' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
+  model_file_traps: '/home/wanglab/src/mm3/weights/feature_weights_512x512.hdf5'
   image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
   channel_width : 10 # width of channels in pixels
   channel_separation : 45 # peak-to-peak distance between channels in pixels
@@ -56,14 +67,17 @@ compile:
   trap_crop_height: 256 # how tall Unet-cropped trap image stacks should be
   trap_crop_width: 27 # how wide Unet-cropped trap image stacks should be
   trap_area_threshold: 2000 # minimum area in px^2 for traps to be kept
+  channel_prediction_batch_size: 15 # batch_size for how many (512,512) images to predict traps for at a time
 
 channel_picker:
-  do_crosscorrs: True
+  do_crosscorrs: False
+  do_CNN: True
   interactive : True
 
   first_image : 1 # image index to show on top row
   last_image : -1 # image index to show on middle row
-  channel_picking_threshold: 0.97 # threshold for calling empty/full channels
+  channel_picking_threshold: 0.9 # threshold for calling empty/full channels
+  channel_picker_model_file: '/home/wanglab/src/mm3/weights/empties_weights.hdf5'
 
 subtract:
   do_empties: True
@@ -81,7 +95,7 @@ segment:
   second_opening_size: 1 # pixel size used in the second morphological opening
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
   trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
-  trained_model_image_width: 32 #
+  trained_model_image_width: 32 # 
 
   model_file: '/home/wanglab/src/mm3/weights/cropped_trap_weights.hdf5'
 
