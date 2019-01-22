@@ -25,6 +25,8 @@ import numpy as np
 import warnings
 import h5py
 
+from matplotlib import pyplot as plt
+
 from tensorflow.python.keras import models
 
 # user modules
@@ -223,146 +225,248 @@ if __name__ == "__main__":
 
             file_names = [key for key in analyzed_imgs.keys()]
             file_names.sort() # sort the file names by time
+            file_names = np.asarray(file_names)
+            fov_ids = [analyzed_imgs[key]['fov'] for key in analyzed_imgs.keys()]
 
-            #print(analyzed_imgs)
-            trap_align_metadata = {'first_frame_name': file_names[0],
-                                'frame_count': len(analyzed_imgs),
-                                'plane_number': len(analyzed_imgs[fn]['planes']),
-                                'trap_height': p['compile']['trap_crop_height'],
-                                'trap_width': p['compile']['trap_crop_width'],
-                                'phase_plane': p['phase_plane'],
-                                'phase_plane_index': p['moviemaker']['phase_plane_index'],
-                                'shift_distance': 256,
-                                'full_frame_size': 2048}
+            unique_fov_ids = np.unique(fov_ids)
 
-            dilator = np.ones((1,300))
+            if p['compile']['do_channel_masks']:
+                channel_masks = {}
 
-            # create weights for taking weighted mean of several runs of Unet over various crops of the first image in the series. This helps remove "blind spots" from the neural network at the edges of each crop of the original image.
-            stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'],
-                                         subImageNumber=16, padSubImageNumber=25)[0,...]
-            # print(stackWeights.shape) #uncomment for debugging
+            for fov_id in unique_fov_ids:
 
-            # get prediction of where traps are located in first image
-            imgPath = os.path.join(p['experiment_directory'],p['image_directory'],trap_align_metadata['first_frame_name'])
-            img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
+                mm3.information('Performing trap segmentation for fov_id: {}'.format(fov_id))
 
-            # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
-            print("Predicting trap locations for first frame.")
-            first_frame_trap_prediction = mm3.get_frame_predictions(img,model,stack_weights,trap_align_metadata['shift_distance'],subImageNumber=16,padSubImageNumber=25)
+                #print(analyzed_imgs)
+                fov_indices = np.where(fov_ids == fov_id)[0]
+                # print(fov_indices)
+                fov_file_names = [file_names[idx] for idx in fov_indices]
+                trap_align_metadata = {'first_frame_name': fov_file_names[0],
+                                    'frame_count': len(fov_file_names),
+                                    'plane_number': len(analyzed_imgs[fn]['planes']),
+                                    'trap_height': p['compile']['trap_crop_height'],
+                                    'trap_width': p['compile']['trap_crop_width'],
+                                    'phase_plane': p['phase_plane'],
+                                    'phase_plane_index': p['moviemaker']['phase_plane_index'],
+                                    'shift_distance': 256,
+                                    'full_frame_size': 2048}
 
-            # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
-            class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
+                dilator = np.ones((1,300))
 
-            traps = class_predictions == 0 # returns boolean array where our intial guesses at trap locations are True
-            trap_labels = measure.label(traps)
-            trap_props = measure.regionprops(trap_labels)
+                # create weights for taking weighted mean of several runs of Unet over various crops of the first image in the series. This helps remove "blind spots" from the neural network at the edges of each crop of the original image.
+                stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'],
+                                             subImageNumber=16, padSubImageNumber=25)[0,...]
+                # print(stackWeights.shape) #uncomment for debugging
 
-            trap_area_threshold = p['compile']['trap_area_threshold']
-            trap_bboxes = mm3.get_frame_trap_bounding_boxes(trap_labels,
+                # get prediction of where traps are located in first image
+                imgPath = os.path.join(p['experiment_directory'],p['image_directory'],trap_align_metadata['first_frame_name'])
+                img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
+
+                # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
+                print("Predicting trap locations for first frame.")
+                first_frame_trap_prediction = mm3.get_frame_predictions(img,model,stack_weights,trap_align_metadata['shift_distance'],subImageNumber=16,padSubImageNumber=25)
+
+                # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
+                class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
+
+                traps = class_predictions == 0 # returns boolean array where our intial guesses at trap locations are True
+                trap_labels = measure.label(traps)
+                trap_props = measure.regionprops(trap_labels)
+
+                trap_area_threshold = p['compile']['trap_area_threshold']
+                trap_bboxes = mm3.get_frame_trap_bounding_boxes(trap_labels,
                                                                    trap_props,
                                                                    trapAreaThreshold=trap_area_threshold,
                                                                    trapWidth=trap_align_metadata['trap_width'],
                                                                    trapHeight=trap_align_metadata['trap_height'])
 
-            # create boolean array to contain filtered, correctly-shaped trap bounding boxes
-            first_frame_trap_mask = np.zeros(traps.shape)
-            for i,bbox in enumerate(trap_bboxes):
-                first_frame_trap_mask[bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
-
-            good_trap_labels = measure.label(first_frame_trap_mask)
-            good_trap_props = measure.regionprops(good_trap_labels)
-
-            # widen the traps to merge them into "trap regions" above and below the central trough
-            dilated_traps = morphology.dilation(first_frame_trap_mask, dilator)
-
-            dilated_trap_labels = measure.label(dilated_traps)
-            dilated_trap_props = measure.regionprops(dilated_trap_labels)
-            # get centroids for each "trap region" identified in first frame
-            centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))
-            # print(centroids)
-
-            # test whether we could crop a (512,512) square from each "trap region", with the centroids as the centers of the crops, withoug going out-of-bounds
-            top_test = centroids[:,0]-256 > 0
-            bottom_test = centroids[:,0]+256 < dilated_trap_labels.shape[0]
-            test_array = np.stack((top_test,bottom_test))
-
-            # get the index of the first identified "trap region" that we can get our (512,512) crop from, use that centroid for nucleus of cropping a stack of phase images with shape (frame_number,512,512,1) from all images in series
-            good_trap_region_index = np.where(np.all(test_array, axis=1))[0][0]
-            centroid = centroids[good_trap_region_index,:].astype('uint16')
-
-            # get the (frame_number,512,512,1)-sized stack for image aligment
-            align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
-
-            for frame,fn in enumerate(file_names):
-                imgPath = os.path.join(p['experiment_directory'],p['image_directory'],fn)
-                frame_img = io.imread(imgPath)
-                frame_img = frame_img[:,:,trap_align_metadata['phase_plane_index']]
-                align_region_stack[frame,:,:,0] = frame_img[centroid[0]-256:centroid[0]+256,
-                                                         centroid[1]-256:centroid[1]+256]
-
-
-            # run model on all frames
-            batch_size=15 # should be a parameter in yaml file
-            print("Predicting trap regions for (512,512) slice through all frames.")
-            align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
-            # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.
-            align_region_class_predictions = np.argmax(align_region_predictions, axis=3)
-            # get boolean array where trap predictions are True
-            align_traps = align_region_class_predictions == 0
-            # allocate array to store filtered traps over time
-            align_trap_mask_stack = np.zeros(align_traps.shape)
-            for frame in range(trap_align_metadata['frame_count']):
-                frame_trap_labels = measure.label(align_traps[frame,:,:])
-                frame_trap_props = measure.regionprops(frame_trap_labels)
-
-                trap_bboxes = mm3.get_frame_trap_bounding_boxes(frame_trap_labels,
-                                                                   frame_trap_props,
-                                                                   trapAreaThreshold=trap_area_threshold,
-                                                                   trapWidth=trap_align_metadata['trap_width'],
-                                                                   trapHeight=trap_align_metadata['trap_height'])
-
+                # create boolean array to contain filtered, correctly-shaped trap bounding boxes
+                first_frame_trap_mask = np.zeros(traps.shape)
                 for i,bbox in enumerate(trap_bboxes):
-                    align_trap_mask_stack[frame,bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
+                    first_frame_trap_mask[bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
 
-            labelled_align_trap_mask_stack = measure.label(align_trap_mask_stack)
+                good_trap_labels = measure.label(first_frame_trap_mask)
+                good_trap_props = measure.regionprops(good_trap_labels)
 
-            align_trap_props = measure.regionprops(labelled_align_trap_mask_stack)
+                # widen the traps to merge them into "trap regions" above and below the central trough
+                dilated_traps = morphology.dilation(first_frame_trap_mask, dilator)
 
-            areas = np.array([trap.area for trap in align_trap_props])
-            labels = [trap.label for trap in align_trap_props]
-            good_align_trap_props = []
-            bad_align_trap_props = []
-            mode_area = stats.mode(areas)[0]
+                if p['debug']:
+                    io.imshow(dilated_traps);
+                    plt.title('Dilated trap masks');
+                    plt.show();
 
-            for trap in align_trap_props:
-                if trap.area != mode_area:
-                    bad_align_trap_props.append(trap.label)
-                else:
-                    good_align_trap_props.append(trap)
+                dilated_trap_labels = measure.label(dilated_traps)
+                dilated_trap_props = measure.regionprops(dilated_trap_labels)
+                # filter merged trap regions by area
+                areas = [reg.area for reg in dilated_trap_props]
+                labels = [reg.label for reg in dilated_trap_props]
 
-            for label in bad_align_trap_props:
-                labelled_align_trap_mask_stack[labelled_align_trap_mask_stack == label] = 0
+                for idx,area in enumerate(areas):
+                    if area < p['compile']['merged_trap_region_area_threshold']:
+                        
+                        label = labels[idx]
+                        dilated_traps[dilated_trap_labels == label] = 0
 
-            align_centroids = []
-            for frame in range(trap_align_metadata['frame_count']):
-                align_centroids.append([reg.centroid for reg in measure.regionprops(labelled_align_trap_mask_stack[frame,:,:])])
+                dilated_trap_labels = measure.label(dilated_traps)
+                dilated_trap_props = measure.regionprops(dilated_trap_labels)
 
-            align_centroids = np.asarray(align_centroids)
-            # print(alignCentroids.shape)
-            shifts = np.mean(align_centroids - align_centroids[0,:,:], axis=1)
-            #print(shifts.shape)
-            integer_shifts = np.round(shifts).astype('int16')
+                if p['debug']:
+                    io.imshow(dilated_traps);
+                    plt.title("Area-filtered dilated traps");
+                    plt.show();
 
-            good_trap_bboxes_dict = {}
-            for trap in good_trap_props:
-                good_trap_bboxes_dict[trap.label] = trap.bbox
+                # get centroids for each "trap region" identified in first frame
+                centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))
+                # print(centroids)
 
-            bbox_shift_dict = mm3.shift_bounding_boxes(good_trap_bboxes_dict, integer_shifts, img.shape[0])
+                # test whether we could crop a (512,512) square from each "trap region", with the centroids as the centers of the crops, withoug going out-of-bounds
+                top_test = centroids[:,0]-256 > 0
+                bottom_test = centroids[:,0]+256 < dilated_trap_labels.shape[0]
+                test_array = np.stack((top_test,bottom_test))
 
-            trap_images_dict, trap_closed_end_px_dict = mm3.crop_traps(file_names, good_trap_props, good_trap_labels, bbox_shift_dict, trap_align_metadata)
+                # get the index of the first identified "trap region" that we can get our (512,512) crop from, use that centroid for nucleus of cropping a stack of phase images with shape (frame_number,512,512,1) from all images in series
+                good_trap_region_index = np.where(np.all(test_array, axis=1))[0][0]
+                centroid = centroids[good_trap_region_index,:].astype('uint16')
+                if p['debug']:
+                    print(centroid)
+                
+                # get the (frame_number,512,512,1)-sized stack for image aligment
+                align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
 
-            for fn in file_names:
-                analyzed_imgs[fn]['channels'] = trap_closed_end_px_dict[fn]
+                for frame,fn in enumerate(fov_file_names):
+                    imgPath = os.path.join(p['experiment_directory'],p['image_directory'],fn)
+                    frame_img = io.imread(imgPath)
+                    frame_img = frame_img[:,:,trap_align_metadata['phase_plane_index']]
+                    align_region_stack[frame,:,:,0] = frame_img[centroid[0]-256:centroid[0]+256,
+                                                             centroid[1]-256:centroid[1]+256]
+
+                if p['debug']:
+                    colNum = 10
+                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+
+                    for pltIdx in range(colNum):
+                        ax[pltIdx].imshow(align_region_stack[pltIdx*10,:,:,0])
+
+                    plt.title('Alignment stack images');
+                    plt.show();
+
+                # run model on all frames
+                batch_size=p['compile']['channel_prediction_batch_size']
+                mm3.information("Predicting trap regions for (512,512) slice through all frames.")
+                align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
+                # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.
+                align_region_class_predictions = np.argmax(align_region_predictions, axis=3)
+
+                if p['debug']:
+                    colNum = 10
+                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+
+                    for pltIdx in range(colNum):
+                        ax[pltIdx].imshow(align_region_class_predictions[pltIdx*10,:,:])
+
+                    plt.title('Alignment stack predictions');
+                    plt.show();
+
+                # get boolean array where trap predictions are True
+                align_traps = align_region_class_predictions == 0
+
+                if p['debug']:
+                    colNum = 10
+                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+
+                    for pltIdx in range(colNum):
+                        ax[pltIdx].imshow(align_traps[pltIdx*10,:,:])
+
+                    plt.title('Alignment trap masks');
+                    plt.show();
+
+                # allocate array to store filtered traps over time
+                align_trap_mask_stack = np.zeros(align_traps.shape)
+                for frame in range(trap_align_metadata['frame_count']):
+                    frame_trap_labels = measure.label(align_traps[frame,:,:])
+                    frame_trap_props = measure.regionprops(frame_trap_labels)
+
+                    trap_bboxes = mm3.get_frame_trap_bounding_boxes(frame_trap_labels,
+                                                                    frame_trap_props,
+                                                                    trapAreaThreshold=trap_area_threshold,
+                                                                    trapWidth=trap_align_metadata['trap_width'],
+                                                                    trapHeight=trap_align_metadata['trap_height'])
+
+                    for i,bbox in enumerate(trap_bboxes):
+                        align_trap_mask_stack[frame,bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
+
+                if p['debug']:
+                    colNum = 10
+                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+
+                    for pltIdx in range(colNum):
+                        ax[pltIdx].imshow(align_trap_mask_stack[pltIdx*20,:,:])
+
+                    plt.title('Filtered alignment trap masks');
+                    plt.show();
+
+                labelled_align_trap_mask_stack = measure.label(align_trap_mask_stack)
+
+                align_trap_props = measure.regionprops(labelled_align_trap_mask_stack)
+
+                areas = np.array([trap.area for trap in align_trap_props])
+                labels = [trap.label for trap in align_trap_props]
+                good_align_trap_props = []
+                bad_align_trap_props = []
+                #mode_area = stats.mode(areas)[0]
+                expected_area = trap_align_metadata['trap_width'] * trap_align_metadata['trap_height'] * trap_align_metadata['frame_count']
+
+                if p['debug']:
+                    pprint(areas)
+                    print(mode_area)
+
+                for trap in align_trap_props:
+                    if trap.area != expected_area:
+                        bad_align_trap_props.append(trap.label)
+                    else:
+                        good_align_trap_props.append(trap)
+
+                for label in bad_align_trap_props:
+                    labelled_align_trap_mask_stack[labelled_align_trap_mask_stack == label] = 0
+
+                align_centroids = []
+                for frame in range(trap_align_metadata['frame_count']):
+                    align_centroids.append([reg.centroid for reg in measure.regionprops(labelled_align_trap_mask_stack[frame,:,:])])
+                
+                align_centroids = np.asarray(align_centroids)
+                shifts = np.mean(align_centroids - align_centroids[0,:,:], axis=1)
+                integer_shifts = np.round(shifts).astype('int16')
+
+                good_trap_bboxes_dict = {}
+                for trap in good_trap_props:
+                    good_trap_bboxes_dict[trap.label] = trap.bbox
+
+                # pprint(good_trap_bboxes_dict) # uncomment for debugging
+                bbox_shift_dict = mm3.shift_bounding_boxes(good_trap_bboxes_dict, integer_shifts, img.shape[0])
+                # pprint(bbox_shift_dict) # uncomment for debugging
+
+                trap_images_fov_dict, trap_closed_end_px_dict = mm3.crop_traps(fov_file_names, good_trap_props, good_trap_labels, bbox_shift_dict, trap_align_metadata)
+
+                for fn in fov_file_names:
+                    analyzed_imgs[fn]['channels'] = trap_closed_end_px_dict[fn]
+
+                if p['compile']['do_channel_masks']:
+                    fov_channel_masks = mm3.make_channel_masks_CNN(bbox_shift_dict)
+                    channel_masks[fov_id] = fov_channel_masks
+                    # pprint(channel_masks) # uncomment for debugging
+
+                if p['compile']['do_slicing']:
+
+                    if p['output'] == "TIFF":
+
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            mm3.save_tiffs(trap_images_fov_dict, analyzed_imgs, fov_id)
+
+                    elif p['output'] == "HDF5":
+                        # Or write it to hdf5
+                        mm3.save_hdf5(trap_images_fov_dict, fov_file_names, analyzed_imgs, fov_id, channel_masks)
 
         # save metadata to a .pkl and a human readable txt file
         mm3.information('Saving metadata from analyzed images...')
@@ -384,13 +488,23 @@ if __name__ == "__main__":
         channel_masks = mm3.load_channel_masks()
 
     elif p['compile']['do_channel_masks']:
-        # only calculate channels masks from images before t_end in case it is specified
-        if t_end:
-            analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if
-                             i_metadata['t'] <= t_end}
 
-        # Uses channel mm3.information from the already processed image data
-        channel_masks = mm3.make_masks(analyzed_imgs)
+        if p['compile']['find_channels_method'] == 'peaks':
+            # only calculate channels masks from images before t_end in case it is specified
+            if t_end:
+                analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if
+                                 i_metadata['t'] <= t_end}
+
+            # Uses channel mm3.information from the already processed image data
+            channel_masks = mm3.make_masks(analyzed_imgs)
+
+        elif p['compile']['find_channels_method'] == 'Unet':
+
+            #save the channel mask dictionary to a pickle and a text file
+            with open(os.path.join(p['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
+                pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
+            with open(os.path.join(p['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
+                pprint(channel_masks, stream=cmask_file)
 
     ### Slice and write TIFF files into channels ###################################################
     if p['compile']['do_slicing']:
@@ -422,12 +536,4 @@ if __name__ == "__main__":
                     # Or write it to hdf5
                     mm3.hdf5_stack_slice_and_write(send_to_write, channel_masks, analyzed_imgs)
 
-        elif p['compile']['find_channels_method'] == 'Unet':
-
-            if p['output'] == "TIFF":
-
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    mm3.save_tiffs(trap_images_dict, analyzed_imgs)
-
-        mm3.information("Channel slices saved.")
+            mm3.information("Channel slices saved.")

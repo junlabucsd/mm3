@@ -1,5 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 from __future__ import print_function
+import six
 
 # import modules
 import sys
@@ -21,8 +22,11 @@ from scipy.io import savemat
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
                           os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+mm3_helper_folder = os.path.join(cmd_folder, '..')
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
+if mm3_helper_folder not in sys.path:
+    sys.path.insert(0, mm3_helper_folder)
 
 # This makes python look for modules in ./external_lib
 cmd_subfolder = os.path.realpath(os.path.abspath(
@@ -70,12 +74,13 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # loads and returns
 
     # load specs file
-    specs = mm3.load_specs()
+    with open(os.path.join(p['ana_dir'],'specs.yaml'), 'r') as specs_file:
+        specs = yaml.safe_load(specs_file)
 
     # load cell data dict.
     if pklfile == None:
         pklfile = os.path.join(p['cell_dir'],'complete_cells.pkl')
-    with open(pklfile, 'r') as cell_file:
+    with open(pklfile, 'rb') as cell_file:
         Cells = pickle.load(cell_file)
 
     ### Filters you may want to apply
@@ -206,15 +211,15 @@ if __name__ == "__main__":
         Cells_by_peak = mm3.organize_cells_by_channel(Cells, specs)
 
         # each channel is processed individually
-        for fov_id, peaks in Cells_by_peak.items():
+        for fov_id, peaks in six.iteritems(Cells_by_peak):
             # channel id start. 10 == 1. Should add 10 floor to tens place each new channel
             channel_id = 10
-            for peak_id, Cells in sorted(peaks.items()):
+            for peak_id, Cells in sorted(six.iteritems(peaks)):
 
                 # Go through cells and find root cells
                 root_cells = []
 
-                for cell_id, Cell in Cells.items():
+                for cell_id, Cell in six.iteritems(Cells):
                     # see if the parent is in the list of all cells
                     if Cell.parent not in Cells.keys():
                         root_cells.append(cell_id) # if so it is a root cell
