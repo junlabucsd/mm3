@@ -298,6 +298,24 @@ if __name__ == "__main__":
 
                 dilated_trap_labels = measure.label(dilated_traps)
                 dilated_trap_props = measure.regionprops(dilated_trap_labels)
+                # filter merged trap regions by area
+                areas = [reg.area for reg in dilated_trap_props]
+                labels = [reg.label for reg in dilated_trap_props]
+
+                for idx,area in enumerate(areas):
+                    if area < p['compile']['merged_trap_region_area_threshold']:
+                        
+                        label = labels[idx]
+                        dilated_traps[dilated_trap_labels == label] = 0
+
+                dilated_trap_labels = measure.label(dilated_traps)
+                dilated_trap_props = measure.regionprops(dilated_trap_labels)
+
+                if p['debug']:
+                    io.imshow(dilated_traps);
+                    plt.title("Area-filtered dilated traps");
+                    plt.show();
+
                 # get centroids for each "trap region" identified in first frame
                 centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))
                 # print(centroids)

@@ -101,6 +101,7 @@ def init_mm3_helpers(param_file_path):
     params['sub_dir'] = os.path.join(params['ana_dir'], 'subtracted')
     params['seg_dir'] = os.path.join(params['ana_dir'], 'segmented')
     params['cell_dir'] = os.path.join(params['ana_dir'], 'cell_data')
+    params['track_dir'] = os.path.join(params['ana_dir'], 'tracking')
 
     # use jd time in image metadata to make time table. Set to false if no jd time
     if params['TIFF_source'] == 'elements' or params['TIFF_source'] == 'nd2ToTIFF':
