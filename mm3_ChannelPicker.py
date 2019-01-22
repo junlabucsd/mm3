@@ -555,7 +555,7 @@ def preload_images(specs, fov_id_list):
     UI_images = {}
 
     for fov_id in fov_id_list:
-        mm.information("Preloading images for fov_id {}.".format(fov_id))
+        mm3.information("Preloading images for fov_id {}.".format(fov_id))
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
