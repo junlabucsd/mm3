@@ -1164,10 +1164,10 @@ def find_channel_locs(image_data):
     # Detect peaks in the x projection (i.e. find the channels)
     projection_x = image_data.sum(axis=0).astype(np.int32)
     # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
-    # convolving it with a wave. here the wave is the default wave used by the algorithm
+    # convolving it with a wave. here the wave is the default Mexican hat wave
     # but the minimum signal to noise ratio is specified
-    peaks = find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
-                                 min_snr=chan_snr)
+    # *** The range here should be a parameter or changed to a fraction.
+    peaks = find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5), min_snr=chan_snr)
 
     # If the left-most peak position is within half of a channel separation,
     # discard the channel from the list.
@@ -1209,6 +1209,7 @@ def find_channel_locs(image_data):
 
         # check if these values make sense. If so, use them. If not, use default
         # make sure lenght is not 30 pixels bigger or smaller than default
+        # *** This 15 should probably be a parameter or at least changed to a fraction.
         if slice_length + 15 < default_length or slice_length - 15 > default_length:
             continue
         # make sure ends are greater than 15 pixels from image edge
