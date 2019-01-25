@@ -79,11 +79,11 @@ segment:
 
   OTSU_threshold: 1.0 # readjusting the OTSU method in fold change
   first_opening_size: 2 # pixel size used in the first morphological opening
-  distance_threshold: 2 # pixel distance to be zeroed. Can be float. 
+  distance_threshold: 2 # pixel distance to be zeroed. Can be float.
   second_opening_size: 1 # pixel size used in the second morphological opening
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
-  model_path: '/path/to/model.hdf5' # U-net model to use for segmentation
+  model_file: '/path/to/model.hdf5' # U-net model to use for segmentation
   trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
   trained_model_image_width: 32
 
