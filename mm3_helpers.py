@@ -2274,7 +2274,7 @@ def segment_fov_unet(fov_id, specs, model):
         # pad image to correct size
         img_stack = np.pad(img_stack,
                            ((0,0),(top_pad,bottom_pad),(left_pad,right_pad)),
-                           mode='reflect')
+                           mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
         image_datagen = ImageDataGenerator()
@@ -2301,10 +2301,13 @@ def segment_fov_unet(fov_id, specs, model):
             segmented_imgs = np.zeros(predictions.shape)
             # process and label each frame of the channel
             for frame in range(segmented_imgs.shape[0]):
-                # get rid of small objects
-                # predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                # get rid of small holes
+                predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                # get rid of small objects.
                 predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
-
+                # remove labels which touch the boarder
+                predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+                # relabel now
                 segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
 
         else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
