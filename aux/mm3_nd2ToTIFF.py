@@ -128,6 +128,8 @@ if __name__ == "__main__":
             # last time index is before the actual time index. Ignore it.
             if (p['nd2ToTIFF']['image_start'] < 1):
                 p['nd2ToTIFF']['image_start'] = 1
+            if p['nd2ToTIFF']['image_end'] == 'None':
+                p['nd2ToTIFF']['image_end'] = False
             if p['nd2ToTIFF']['image_end']:
                 if len(nd2f) > 1 and len(nd2f) < p['nd2ToTIFF']['image_end']:
                     p['nd2ToTIFF']['image_end'] = len(nd2f)

@@ -2235,6 +2235,8 @@ def segment_fov_unet(fov_id, specs, model):
     unet_shape = (params['segment']['trained_model_image_height'],
                   params['segment']['trained_model_image_width'])
     cellClassThreshold = params['segment']['cell_class_threshold']
+    if cellClassThreshold == 'None': # yaml imports None as a string
+        cellClassThreshold = False
     batch_size = params['segment']['batch_size']
 
     ### determine stitching of images.
@@ -2265,6 +2267,7 @@ def segment_fov_unet(fov_id, specs, model):
     ana_peak_ids.sort() # sort for repeatability
 
     for peak_id in ana_peak_ids:
+        information('Segmenting peak {}.'.format(peak_id))
         # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
@@ -2289,20 +2292,26 @@ def segment_fov_unet(fov_id, specs, model):
         predictions = predictions[:, top_pad:unet_shape[0]-bottom_pad,
                                      left_pad:unet_shape[1]-right_pad, 0]
 
-        # binarized and label
-        predictions[predictions >= cellClassThreshold] = 1
-        predictions[predictions < cellClassThreshold] = 0
-        predictions = predictions.astype('uint8')
+        # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
+        if cellClassThreshold:
+            predictions[predictions >= cellClassThreshold] = 1
+            predictions[predictions < cellClassThreshold] = 0
+            predictions = predictions.astype('uint8')
 
-        segmented_imgs = np.zeros(predictions.shape)
-        # process and label each frame of the channel
-        for frame in range(segmented_imgs.shape[0]):
-            # get rid of small objects
-            # predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-            predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
+            segmented_imgs = np.zeros(predictions.shape)
+            # process and label each frame of the channel
+            for frame in range(segmented_imgs.shape[0]):
+                # get rid of small objects
+                # predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
 
-            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
 
+        else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
+            information('Converting predictions to grayscale.')
+            segmented_imgs = np.around(predictions * 255)
+
+        # both binary and grayscale can be 8bit
         segmented_imgs = segmented_imgs.astype('uint8')
 
         # save out the segmented stacks
@@ -2369,7 +2378,7 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
     def __data_generation(self, list_fileNames_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        X = np.zeros((self.batch_size, *self.dim, self.n_channels))
+        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) *** fix
 
         # Generate data
         for i, fName in enumerate(list_fileNames_temp):
