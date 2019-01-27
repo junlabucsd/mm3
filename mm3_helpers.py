@@ -228,7 +228,7 @@ def load_channel_masks():
     information("Loading channel masks dictionary.")
 
     try:
-        information('Path: ', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
+        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
         with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
             channel_masks = pickle.load(cmask_file)
     except ValueError:

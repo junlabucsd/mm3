@@ -571,7 +571,7 @@ def preload_images(specs, fov_id_list):
 
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
-    '''mm3_ChannelPicker.py allows the user to identify full and empty channelsself.
+    '''mm3_ChannelPicker.py allows the user to identify full and empty channels.
     '''
 
     # set switches and parameters
@@ -657,18 +657,6 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
-    # load precalculated ones if indicated
-    if not do_crosscorrs:
-
-        mm3.information('Loading precalculated cross-correlations.')
-
-        try:
-            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
-                crosscorrs = pickle.load(xcorrs_file)
-        except:
-            crosscorrs = None
-            mm3.information('Precalculated cross-correlations not found.')
-
     if do_CNN:
         # a nested dict to hold predictions per channel per fov.
         predictionDict = {}
@@ -721,7 +709,7 @@ if __name__ == "__main__":
             pprint(predictionDict, stream=preds_file)
         mm3.information("Wrote channel picking predictions files.")
 
-    else:
+    elif do_crosscorrs:
         # a nested dict to hold cross corrs per channel per fov.
         crosscorrs = {}
 
@@ -772,6 +760,16 @@ if __name__ == "__main__":
         with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")
+
+    # try to load previously calculated cross correlations
+    else:
+        mm3.information('Loading precalculated cross-correlations.')
+        try:
+            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
+                crosscorrs = pickle.load(xcorrs_file)
+        except:
+            crosscorrs = None
+            mm3.information('Precalculated cross-correlations not found.')
 
     ### User selection (channel picking) #####################################################
     if specfile == None:
@@ -841,7 +839,7 @@ if __name__ == "__main__":
                 specs = fov_plot_channels(fov_id, crosscorrs, specs,
                                           outputdir=outputdir, phase_plane=p['phase_plane'])
             elif do_CNN:
-                specs = fov_CNN_plot_channels(fov_id, predictionDict, specs, 
+                specs = fov_CNN_plot_channels(fov_id, predictionDict, specs,
                                               outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
