@@ -2369,7 +2369,7 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
     def __data_generation(self, list_fileNames_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) ***
+        X = np.zeros((self.batch_size, *self.dim, self.n_channels))
 
         # Generate data
         for i, fName in enumerate(list_fileNames_temp):
