@@ -2249,15 +2249,37 @@ def segment_fov_unet(fov_id, specs, model):
     img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
+    # timepoints = img_stack.shape[0]
 
-    half_width_pad = (unet_shape[1]-img_width)/2
-    left_pad = int(np.floor(half_width_pad))
-    right_pad = int(np.ceil(half_width_pad))
-    half_height_pad = (unet_shape[0]-img_height)/2
-    top_pad = int(np.floor(half_height_pad))
-    bottom_pad = int(np.ceil(half_height_pad))
+    # make pads (if image is smaller than unet shape) or trim if larger
+    pad_img_stack = False
+    trim_img_stack = False
 
-    timepoints = img_stack.shape[0]
+    # height
+    if img_height <= unet_shape[0]:
+        half_height_pad = (unet_shape[0]-img_height)/2
+        top_pad = int(np.floor(half_height_pad))
+        bottom_pad = int(np.ceil(half_height_pad))
+        pad_img_stack = True
+        bottom_trim = 0
+    else:
+        top_pad = 0
+        bottom_pad = 0
+        bottom_trim = img_height - unet_shape[0]
+        trim_img_stack = True
+
+    # width
+    if img_width <= unet_shape[1]:
+        half_width_pad = (unet_shape[1]-img_width)/2
+        left_pad = int(np.floor(half_width_pad))
+        right_pad = int(np.ceil(half_width_pad))
+        pad_img_stack = True
+        right_trim = 0
+    else:
+        left_pad = 0
+        right_pad = 0
+        right_trim = img_width - unet_shape[1]
+        trim_img_stack = True
 
     # determine how many channels we have to analyze for this FOV
     ana_peak_ids = []
@@ -2271,11 +2293,17 @@ def segment_fov_unet(fov_id, specs, model):
         # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
+
         # pad image to correct size
-        img_stack = np.pad(img_stack,
-                           ((0,0),(top_pad,bottom_pad),(left_pad,right_pad)),
-                           mode='constant')
-        img_stack = np.expand_dims(img_stack, -1)
+        if pad_img_stack:
+            img_stack = np.pad(img_stack,
+                               ((0,0),(top_pad,bottom_pad),(left_pad,right_pad)),
+                               mode='constant')
+
+        if trim_img_stack: # trim from botom and right (not centered)
+            img_stack = img_stack[:, 0:unet_shape[0], 0:unet_shape[1]]
+
+        img_stack = np.expand_dims(img_stack, -1) # tf wants 4D image stack
         # set up image generator
         image_datagen = ImageDataGenerator()
         image_generator = image_datagen.flow(x=img_stack,
@@ -2286,11 +2314,18 @@ def segment_fov_unet(fov_id, specs, model):
         predict_args = dict(use_multiprocessing=False,
                             verbose=1)
         predictions = model.predict_generator(image_generator, **predict_args)
+        predictions = predictions[:,:,:,0] # get rid of 4t dimension
 
         # post processing
-        # remove padding
-        predictions = predictions[:, top_pad:unet_shape[0]-bottom_pad,
-                                     left_pad:unet_shape[1]-right_pad, 0]
+        # remove padding or add back trim if necessary
+        if pad_img_stack:
+            predictions = predictions[:, top_pad:unet_shape[0]-bottom_pad,
+                                         left_pad:unet_shape[1]-right_pad]
+
+        if trim_img_stack:
+            predictions = np.pad(predictions,
+                                 ((0,0),(0,bottom_trim),(0,right_trim)),
+                                 mode='constant')
 
         # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
         if cellClassThreshold:
