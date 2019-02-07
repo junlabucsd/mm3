@@ -555,7 +555,7 @@ def preload_images(specs, fov_id_list):
     UI_images = {}
 
     for fov_id in fov_id_list:
-        mm3.information("Preloading images for fov_id {}.".format(fov_id))
+        mm3.information("Preloading images for FOV {}.".format(fov_id))
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
@@ -810,7 +810,7 @@ if __name__ == "__main__":
         else: # just set everything to 1 and go forward.
 
             for fov_id, peaks in six.iteritems(channel_masks):
-                specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
+                specs[fov_id] = {peak_id: -1 for peak_id in peaks.keys()}
     else:
         mm3.information('Loading supplied specifiication file.')
         with open(specfile, 'r') as fin:
