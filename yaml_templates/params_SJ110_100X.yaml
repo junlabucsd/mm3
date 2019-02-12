@@ -12,7 +12,7 @@ image_directory: 'TIFF/'
 analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to
-# retrieve metadata. Choices are 'elements' or 'nd2ToTIFF'
+# retrieve metadata. Choices are 'elements', 'nd2ToTIFF', or 'other'
 TIFF_source: 'nd2ToTIFF'
 
 # indicate if you want to save out to TIFFs, or use HDF5 to save image data.
