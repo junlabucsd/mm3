@@ -2347,7 +2347,7 @@ def segment_fov_unet(fov_id, specs, model):
 
         else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
             information('Converting predictions to grayscale.')
-            segmented_imgs = np.around(predictions * 255)
+            segmented_imgs = np.around(predictions * 100)
 
         # both binary and grayscale can be 8bit
         segmented_imgs = segmented_imgs.astype('uint8')
