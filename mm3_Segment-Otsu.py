@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=file,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
     namespace = parser.parse_args()
