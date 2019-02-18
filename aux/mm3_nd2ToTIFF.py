@@ -50,7 +50,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=file,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-3", etc.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -63,7 +63,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 

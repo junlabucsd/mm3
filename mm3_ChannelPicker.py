@@ -534,7 +534,6 @@ def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
 
     return specs
 
-
 # function for better formatting of channel plot
 def format_channel_plot(ax, peak_id):
     '''Removes axis and puts peak as title from plot for channels'''
@@ -604,7 +603,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 

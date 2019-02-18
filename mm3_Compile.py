@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
     parser.add_argument('-m', '--modelfile', type=str,
@@ -74,7 +74,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 
@@ -304,7 +308,7 @@ if __name__ == "__main__":
 
                 for idx,area in enumerate(areas):
                     if area < p['compile']['merged_trap_region_area_threshold']:
-                        
+
                         label = labels[idx]
                         dilated_traps[dilated_trap_labels == label] = 0
 
@@ -330,7 +334,7 @@ if __name__ == "__main__":
                 centroid = centroids[good_trap_region_index,:].astype('uint16')
                 if p['debug']:
                     print(centroid)
-                
+
                 # get the (frame_number,512,512,1)-sized stack for image aligment
                 align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
 
@@ -433,7 +437,7 @@ if __name__ == "__main__":
                 align_centroids = []
                 for frame in range(trap_align_metadata['frame_count']):
                     align_centroids.append([reg.centroid for reg in measure.regionprops(labelled_align_trap_mask_stack[frame,:,:])])
-                
+
                 align_centroids = np.asarray(align_centroids)
                 shifts = np.mean(align_centroids - align_centroids[0,:,:], axis=1)
                 integer_shifts = np.round(shifts).astype('int16')
