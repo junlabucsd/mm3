@@ -23,6 +23,7 @@ import traceback # for error messaging
 import warnings # error messaging
 import copy # not sure this is needed
 import h5py # working with HDF5 files
+import cv2 # for curating segmentation results for making new training data
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
@@ -2214,36 +2215,7 @@ def cce_tversky_loss(y_true, y_pred):
     loss = losses.categorical_crossentropy(y_true, y_pred) + tversky_loss(y_true, y_pred)
     return loss
 
-def segment_fov_unet(fov_id, specs, model):
-    '''
-    Segments the channels from one fov using the U-net CNN modelself. It batches channels together by stiching them into one image. It then splits them up again to save the segmented masks.
-
-    Parameters
-    ----------
-    fov_id : int
-    specs : dict
-    model : TensorFlow model
-    '''
-
-    information('Segmenting FOV {} with U-net.'.format(fov_id))
-
-    # load segmentation parameters
-    min_object_size = params['segment']['min_object_size']
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
-    cellClassThreshold = params['segment']['cell_class_threshold']
-    batch_size = params['segment']['batch_size']
-
-    ### determine stitching of images.
-    # need channel shape, specifically the width. load first for example
-    # this assumes that all channels are the same size for this FOV, which they should
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            break # just break out with the current peak_id
-
-    img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
-    img_height = img_stack.shape[1]
-    img_width = img_stack.shape[2]
+def get_pad_distances(unet_shape, img_height, img_width):
 
     half_width_pad = (unet_shape[1]-img_width)/2
     left_pad = int(np.floor(half_width_pad))
@@ -2252,14 +2224,111 @@ def segment_fov_unet(fov_id, specs, model):
     top_pad = int(np.floor(half_height_pad))
     bottom_pad = int(np.ceil(half_height_pad))
 
-    timepoints = img_stack.shape[0]
+    return(half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad)
 
-    # dermine how many channels we have to analyze for this FOV
-    ana_peak_ids = []
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            ana_peak_ids.append(peak_id)
-    ana_peak_ids.sort() # sort for repeatability
+# mouse callback function for interactive curation of segmentation results and saving to training directory
+def draw_interactive(event,x,y,flags,param):
+    global drawing,mode
+    #drawing,mode,ix,iy,mask = param
+    mask = param
+
+    if event == cv2.EVENT_LBUTTONDOWN:
+        drawing = True
+
+    elif event == cv2.EVENT_MOUSEMOVE:
+        if drawing == True:
+            if mode == True:
+                cv2.circle(mask,(x,y),1,0,-1)
+            else:
+                cv2.circle(mask,(x,y),1,255,-1)
+
+    elif event == cv2.EVENT_LBUTTONUP:
+        drawing = False
+        if mode == True:
+            cv2.circle(mask,(x,y),1,0,-1)
+        else:
+            cv2.circle(mask,(x,y),1,255,-1)
+
+
+def curate_training_data(training_dir,segmented_imgs,img_stack,fov_id,peak_id):
+    global drawing,mode
+    # present image and corresponding segmentation for manual curation and saving to specific location
+    k = False
+
+    mask_dir = os.path.join(training_dir, 'masks/cells')
+    if not os.path.isdir(mask_dir):
+        os.makedirs(mask_dir)
+    img_dir = os.path.join(training_dir, 'images/cells')
+    if not os.path.isdir(img_dir):
+        os.makedirs(img_dir)
+
+    for frame in range(segmented_imgs.shape[0]):
+
+        drawing = False
+        mode = True
+
+        if k:
+            if k == ord('c'): # with line below, wait for 'c' key to cancel training data generation
+                break
+            elif k == ord('n'):
+                break
+
+        mask = segmented_imgs[frame,:,:]
+        mask = mask.astype('uint8')*255
+
+        img = img_stack[frame,:,:,0]
+        windowImg = img/np.max(img)
+
+        cv2.namedWindow('image',cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('image',600,900)
+        cv2.namedWindow('mask',cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('mask',600,900)
+        cv2.setMouseCallback('mask',draw_interactive,mask)
+
+        while(1):
+
+            mask_name = os.path.join(mask_dir, '{}_xy{:0=3}_p{:0=4}_t{:0=5}.tif'.format(params['experiment_name'],fov_id,peak_id,frame))
+            img_name = os.path.join(img_dir, '{}_xy{:0=3}_p{:0=4}_t{:0=5}.tif'.format(params['experiment_name'],fov_id,peak_id,frame))
+
+            if os.path.isfile(mask_name): # check if file has already been saved to training_dir
+                break # if the file is there, break this while loop, and move on the next frame in for loop
+
+            cv2.imshow('image',windowImg)
+            cv2.imshow('mask',mask)
+            k = cv2.waitKey(0) & 0xFF
+            if k == ord('v'): # wait for 'v' key to draw white
+                mode = False
+            if k == ord('b'): # wait for 'b' key to draw black
+                mode = True
+            if k == 27:         # wait for ESC key to exit
+                break
+            elif k == ord('s'): # wait for 's' key to save and exit
+                mask[mask>0] = 1 # relabel mask pixels to 0 or 1 for training data
+                cv2.imwrite(mask_name,mask)
+                cv2.imwrite(img_name,img)
+                break
+            elif k == ord('n'): # wait for 'n' key to skip to next peak_id
+                break
+            elif k == ord('c'): # wait for 'c' key to cancel training data generation
+                break
+            elif k == ord('f'): # wait for 'f' key to skip to next frame
+                break
+            if cv2.getWindowProperty('image',1) == -1: # TO DO: cancel segmentation/curation if user hits "x" button
+                break
+            if cv2.getWindowProperty('mask',1) == -1: # TO DO: cancel segmentation/curation if user hits "x" button
+                break
+
+        cv2.destroyAllWindows()
+
+    return(k)
+
+
+
+def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_training_data=False, training_dir=None):
+
+    batch_size = params['segment']['batch_size']
+    cellClassThreshold = params['segment']['cell_class_threshold']
+    min_object_size = params['segment']['min_object_size']
 
     for peak_id in ana_peak_ids:
         # print(peak_id) # debugging a shape error at some traps
@@ -2267,7 +2336,7 @@ def segment_fov_unet(fov_id, specs, model):
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
         # pad image to correct size
         img_stack = np.pad(img_stack,
-                           ((0,0),(top_pad,bottom_pad),(left_pad,right_pad)),
+                           ((0,0),(pad_dict['top'],pad_dict['bottom']),(pad_dict['left'],pad_dict['right'])),
                            mode='reflect')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
@@ -2283,48 +2352,101 @@ def segment_fov_unet(fov_id, specs, model):
 
         # post processing
         # remove padding
-        predictions = predictions[:, top_pad:unet_shape[0]-bottom_pad,
-                                     left_pad:unet_shape[1]-right_pad, 0]
+        predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
+                                     pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
 
         # binarized and label
         predictions[predictions >= cellClassThreshold] = 1
         predictions[predictions < cellClassThreshold] = 0
         predictions = predictions.astype('uint8')
 
-        segmented_imgs = np.zeros(predictions.shape)
+        segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
         # process and label each frame of the channel
         for frame in range(segmented_imgs.shape[0]):
             # get rid of small objects
-            # predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-            predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
 
-            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
+            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
+            segmented_imgs[frame,:,:] = morphology.remove_small_objects(segmented_imgs[frame,:,:], min_size=min_object_size)
 
-        segmented_imgs = segmented_imgs.astype('uint8')
+        if not make_training_data:
+            # save out the segmented stacks
+            if params['output'] == 'TIFF':
+                seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
+                tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
+                                segmented_imgs, compress=4)
 
-        # save out the segmented stacks
-        if params['output'] == 'TIFF':
-            seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
-            tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
-                            segmented_imgs, compress=4)
+            if params['output'] == 'HDF5':
+                h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
+                # put segmented channel in correct group
+                h5g = h5f['channel_%04d' % peak_id]
+                # delete the dataset if it exists (important for debug)
+                if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
+                    del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
 
-        if params['output'] == 'HDF5':
-            h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
-            # put segmented channel in correct group
-            h5g = h5f['channel_%04d' % peak_id]
-            # delete the dataset if it exists (important for debug)
-            if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
-                del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
+                h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
+                                    data=segmented_imgs,
+                                    chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                    maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                    compression="gzip", shuffle=True, fletcher32=True)
+                h5f.close()
 
-            h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
-                                data=segmented_imgs,
-                                chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                compression="gzip", shuffle=True, fletcher32=True)
-            h5f.close()
+        elif make_training_data:
+            # call function for manually curating segmentation results and saving to training directory
+            k = curate_training_data(training_dir,segmented_imgs,img_stack,fov_id,peak_id)
+            if k == ord('c'):
+                return(k)
+            elif k == ord('n'):
+                continue
+
+
+def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_dir=None):
+    '''
+    Segments the channels from one fov using the U-net CNN modelself. It batches channels together by stiching them into one image. It then splits them up again to save the segmented masks.
+
+    Parameters
+    ----------
+    fov_id : int
+    specs : dict
+    model : TensorFlow model
+    '''
+
+    information('Segmenting FOV {} with U-net.'.format(fov_id))
+
+    # load segmentation parameters
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
+
+    ### determine stitching of images.
+    # need channel shape, specifically the width. load first for example
+    # this assumes that all channels are the same size for this FOV, which they should
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            break # just break out with the current peak_id
+
+    img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
+    img_height = img_stack.shape[1]
+    img_width = img_stack.shape[2]
+
+    half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
+    pad_dict = {'top':top_pad,
+               'bottom':bottom_pad,
+               'right':right_pad,
+               'left':left_pad}
+
+    timepoints = img_stack.shape[0]
+
+    # dermine how many channels we have to analyze for this FOV
+    ana_peak_ids = []
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids.sort() # sort for repeatability
+
+    k = segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_training_data, training_dir)
 
     information("Finished segmentation for FOV {}.".format(fov_id))
-    return
+    return(k)
+
 
 # class for image generation for classifying traps as good, empty, out-of-focus, or defective
 class TrapKymographPredictionDataGenerator(utils.Sequence):
