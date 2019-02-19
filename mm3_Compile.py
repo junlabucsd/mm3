@@ -318,7 +318,8 @@ if __name__ == "__main__":
 
                 # get centroids for each "trap region" identified in first frame
                 centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))
-                # print(centroids)
+                if p['debug']:
+                    print(centroids)
 
                 # test whether we could crop a (512,512) square from each "trap region", with the centroids as the centers of the crops, withoug going out-of-bounds
                 top_test = centroids[:,0]-256 > 0
@@ -326,7 +327,11 @@ if __name__ == "__main__":
                 test_array = np.stack((top_test,bottom_test))
 
                 # get the index of the first identified "trap region" that we can get our (512,512) crop from, use that centroid for nucleus of cropping a stack of phase images with shape (frame_number,512,512,1) from all images in series
-                good_trap_region_index = np.where(np.all(test_array, axis=1))[0][0]
+                if p['debug']:
+                    print(test_array)
+                    print(np.all(test_array,axis=0))
+                
+                good_trap_region_index = np.where(np.all(test_array, axis=0))[0][0]
                 centroid = centroids[good_trap_region_index,:].astype('uint16')
                 if p['debug']:
                     print(centroid)
@@ -401,7 +406,7 @@ if __name__ == "__main__":
                     fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
 
                     for pltIdx in range(colNum):
-                        ax[pltIdx].imshow(align_trap_mask_stack[pltIdx*20,:,:])
+                        ax[pltIdx].imshow(align_trap_mask_stack[pltIdx*10,:,:])
 
                     plt.title('Filtered alignment trap masks');
                     plt.show();
@@ -419,7 +424,7 @@ if __name__ == "__main__":
 
                 if p['debug']:
                     pprint(areas)
-                    print(mode_area)
+                    print(expected_area)
 
                 for trap in align_trap_props:
                     if trap.area != expected_area:
