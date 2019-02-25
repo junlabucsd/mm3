@@ -48,6 +48,7 @@ from tensorflow.python.keras import models
 from tensorflow.python.keras import losses
 from tensorflow.python.keras import utils
 from tensorflow.python.keras import backend as K
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # supress warnings
 
 # Parralelization modules
 import multiprocessing
