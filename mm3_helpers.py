@@ -2341,7 +2341,7 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
         # pad image to correct size
         img_stack = np.pad(img_stack,
                            ((0,0),(pad_dict['top'],pad_dict['bottom']),(pad_dict['left'],pad_dict['right'])),
-                           mode='reflect')
+                           mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
         image_datagen = ImageDataGenerator()
@@ -2431,7 +2431,7 @@ def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_di
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
 
-    half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
+    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
     pad_dict = {'top':top_pad,
                'bottom':bottom_pad,
                'right':right_pad,
@@ -2450,7 +2450,6 @@ def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_di
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return(k)
-
 
 # class for image generation for classifying traps as good, empty, out-of-focus, or defective
 class TrapKymographPredictionDataGenerator(utils.Sequence):
