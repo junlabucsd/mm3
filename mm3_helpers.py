@@ -2330,6 +2330,8 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
 
     batch_size = params['segment']['batch_size']
     cellClassThreshold = params['segment']['cell_class_threshold']
+    if cellClassThreshold == 'None': # yaml imports None as a string
+        cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
 
     for peak_id in ana_peak_ids:
@@ -2360,18 +2362,30 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
         predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
                                      pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
 
-        # binarized and label
-        predictions[predictions >= cellClassThreshold] = 1
-        predictions[predictions < cellClassThreshold] = 0
-        predictions = predictions.astype('uint8')
+        # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
+        if cellClassThreshold:
+            predictions[predictions >= cellClassThreshold] = 1
+            predictions[predictions < cellClassThreshold] = 0
+            predictions = predictions.astype('uint8')
 
-        segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
-        # process and label each frame of the channel
-        for frame in range(segmented_imgs.shape[0]):
-            # get rid of small objects
+            segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
+            # process and label each frame of the channel
+            for frame in range(segmented_imgs.shape[0]):
+                # get rid of small holes
+                predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                # get rid of small objects.
+                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
+                # remove labels which touch the boarder
+                predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+                # relabel now
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
 
-            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
-            segmented_imgs[frame,:,:] = morphology.remove_small_objects(segmented_imgs[frame,:,:], min_size=min_object_size)
+        else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
+            information('Converting predictions to grayscale.')
+            segmented_imgs = np.around(predictions * 100)
+
+        # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
+        segmented_imgs = segmented_imgs.astype('uint8')
 
         if not make_training_data:
             # save out the segmented stacks
