@@ -116,7 +116,7 @@ if __name__ == "__main__":
         mm3.information("Model loaded.")
 
         for fov_id in fov_id_list:
-            k = mm3.segment_fov_unet(fov_id, specs, model, make_training_data=True, training_dir=p['training_dir']) # 20181218 - editing mm3_helpers.py to incorporate Jeremy's segmentation.
+            k = mm3.segment_fov_unet(fov_id, specs, model, make_training_data=True, training_dir=p['training_dir'])
             if k:
                 if k == ord('c'):
                     break
@@ -126,4 +126,3 @@ if __name__ == "__main__":
                 sys.exit()
 
         mm3.information("Finished segmentation.")
-
