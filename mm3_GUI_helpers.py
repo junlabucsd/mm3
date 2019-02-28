@@ -268,6 +268,7 @@ class MaskTransparencyWidget(QWidget):
                         self.lastPoint = event.pos()
                         self.update()
 
+
         def mouseReleaseEvent(self, event):
                 if event.button == Qt.LeftButton:
                         self.drawing = False

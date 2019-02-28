@@ -2231,103 +2231,7 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
     return(half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad)
 
-# mouse callback function for interactive curation of segmentation results and saving to training directory
-def draw_interactive(event,x,y,flags,param):
-    global drawing,mode
-    #drawing,mode,ix,iy,mask = param
-    mask = param
-
-    if event == cv2.EVENT_LBUTTONDOWN:
-        drawing = True
-
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if drawing == True:
-            if mode == True:
-                cv2.circle(mask,(x,y),1,0,-1)
-            else:
-                cv2.circle(mask,(x,y),1,255,-1)
-
-    elif event == cv2.EVENT_LBUTTONUP:
-        drawing = False
-        if mode == True:
-            cv2.circle(mask,(x,y),1,0,-1)
-        else:
-            cv2.circle(mask,(x,y),1,255,-1)
-
-
-def curate_training_data(training_dir,segmented_imgs,img_stack,fov_id,peak_id):
-    global drawing,mode
-    # present image and corresponding segmentation for manual curation and saving to specific location
-    k = False
-
-    mask_dir = os.path.join(training_dir, 'masks/cells')
-    if not os.path.isdir(mask_dir):
-        os.makedirs(mask_dir)
-    img_dir = os.path.join(training_dir, 'images/cells')
-    if not os.path.isdir(img_dir):
-        os.makedirs(img_dir)
-
-    for frame in range(segmented_imgs.shape[0]):
-
-        drawing = False
-        mode = True
-
-        if k:
-            if k == ord('c'): # with line below, wait for 'c' key to cancel training data generation
-                break
-            elif k == ord('n'):
-                break
-
-        mask = segmented_imgs[frame,:,:]
-        mask = mask.astype('uint8')*255
-
-        img = img_stack[frame,:,:,0]
-        windowImg = img/np.max(img)
-
-        cv2.namedWindow('image',cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('image',600,900)
-        cv2.namedWindow('mask',cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('mask',600,900)
-        cv2.setMouseCallback('mask',draw_interactive,mask)
-
-        while(1):
-
-            mask_name = os.path.join(mask_dir, '{}_xy{:0=3}_p{:0=4}_t{:0=5}.tif'.format(params['experiment_name'],fov_id,peak_id,frame))
-            img_name = os.path.join(img_dir, '{}_xy{:0=3}_p{:0=4}_t{:0=5}.tif'.format(params['experiment_name'],fov_id,peak_id,frame))
-
-            if os.path.isfile(mask_name): # check if file has already been saved to training_dir
-                break # if the file is there, break this while loop, and move on the next frame in for loop
-
-            cv2.imshow('image',windowImg)
-            cv2.imshow('mask',mask)
-            k = cv2.waitKey(0) & 0xFF
-            if k == ord('v'): # wait for 'v' key to draw white
-                mode = False
-            if k == ord('b'): # wait for 'b' key to draw black
-                mode = True
-            if k == 27:         # wait for ESC key to exit
-                break
-            elif k == ord('s'): # wait for 's' key to save and exit
-                mask[mask>0] = 1 # relabel mask pixels to 0 or 1 for training data
-                cv2.imwrite(mask_name,mask)
-                cv2.imwrite(img_name,img)
-                break
-            elif k == ord('n'): # wait for 'n' key to skip to next peak_id
-                break
-            elif k == ord('c'): # wait for 'c' key to cancel training data generation
-                break
-            elif k == ord('f'): # wait for 'f' key to skip to next frame
-                break
-            if cv2.getWindowProperty('image',1) == -1: # TO DO: cancel segmentation/curation if user hits "x" button
-                break
-            if cv2.getWindowProperty('mask',1) == -1: # TO DO: cancel segmentation/curation if user hits "x" button
-                break
-
-        cv2.destroyAllWindows()
-
-    return(k)
-
-def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_training_data=False, training_dir=None):
+def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     batch_size = params['segment']['batch_size']
     cellClassThreshold = params['segment']['cell_class_threshold']
@@ -2389,35 +2293,26 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
         # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
         segmented_imgs = segmented_imgs.astype('uint8')
 
-        if not make_training_data:
-            # save out the segmented stacks
-            if params['output'] == 'TIFF':
-                seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
-                tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
-                                segmented_imgs, compress=4)
+        # save out the segmented stacks
+        if params['output'] == 'TIFF':
+            seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
+            tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
+                            segmented_imgs, compress=4)
 
-            if params['output'] == 'HDF5':
-                h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
-                # put segmented channel in correct group
-                h5g = h5f['channel_%04d' % peak_id]
-                # delete the dataset if it exists (important for debug)
-                if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
-                    del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
+        if params['output'] == 'HDF5':
+            h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
+            # put segmented channel in correct group
+            h5g = h5f['channel_%04d' % peak_id]
+            # delete the dataset if it exists (important for debug)
+            if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
+                del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
 
-                h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
-                                    data=segmented_imgs,
-                                    chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                    maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                    compression="gzip", shuffle=True, fletcher32=True)
-                h5f.close()
-
-        elif make_training_data:
-            # call function for manually curating segmentation results and saving to training directory
-            k = curate_training_data(training_dir,segmented_imgs,img_stack,fov_id,peak_id)
-            if k == ord('c'):
-                return(k)
-            elif k == ord('n'):
-                continue
+            h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
+                                data=segmented_imgs,
+                                chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
+                                compression="gzip", shuffle=True, fletcher32=True)
+            h5f.close()
 
 
 def segment_fov_unet(fov_id, specs, model):
@@ -2463,7 +2358,7 @@ def segment_fov_unet(fov_id, specs, model):
             ana_peak_ids.append(peak_id)
     ana_peak_ids.sort() # sort for repeatability
 
-    k = segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_training_data, training_dir)
+    k = segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return(k)
