@@ -229,12 +229,20 @@ def load_channel_masks():
     '''
     information("Loading channel masks dictionary.")
 
+    # try loading from .yaml before .pkl
     try:
-        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
-        with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
-            channel_masks = pickle.load(cmask_file)
-    except ValueError:
-        warning('Could not load channel masks dictionary.')
+        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.yaml'))
+        with open(os.path.join(params['ana_dir'], 'channel_masks.yaml'), 'r') as cmask_file:
+            channel_masks = yaml.safe_load(cmask_file)
+    except:
+        warning('Could not load channel masks dictionary from .yaml.')
+
+        try:
+            information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
+            with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
+                channel_masks = pickle.load(cmask_file)
+        except ValueError:
+            warning('Could not load channel masks dictionary from .pkl.')
 
     return channel_masks
 
@@ -629,7 +637,6 @@ def save_tiffs(imgDict, analyzed_imgs, fov_id):
 
             channel_filename = os.path.join(savePath, params['experiment_name'] + '_xy{0:0=3}_p{1:0=4}_c{2}.tif'.format(fov_id, peak, planeNumber))
             io.imsave(channel_filename, img[:,:,:,int(planeNumber)-1])
-
 
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
@@ -1437,25 +1444,38 @@ def make_masks(analyzed_imgs):
         # f_id = int(fov)
         for peak, chnl_mask in six.iteritems(peaks):
             # p_id = int(peak)
-            # just add length to the open end (top of image, low column)
+            # just add length to the open end (bottom of image, low column)
             if chnl_mask[0][1] - chnl_mask[0][0] !=  max_chnl_mask_len:
                 cm_copy[fov][peak][0][1] = chnl_mask[0][0] + max_chnl_mask_len
             # enlarge widths around the middle, but make sure you don't get floats
             if chnl_mask[1][1] - chnl_mask[1][0] != max_chnl_mask_wid:
                 wid_diff = max_chnl_mask_wid - (chnl_mask[1][1] - chnl_mask[1][0])
                 if wid_diff % 2 == 0:
-                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - wid_diff/2, 0))
-                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + wid_diff/2, image_cols - 1))
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - wid_diff/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + wid_diff/2, image_cols - 1)
                 else:
-                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - (wid_diff-1)/2, 0))
-                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1))
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
 
+            # convert all values to ints
+            chnl_mask[0][0] = int(chnl_mask[0][0])
+            chnl_mask[0][1] = int(chnl_mask[0][1])
+            chnl_mask[1][0] = int(chnl_mask[1][0])
+            chnl_mask[1][1] = int(chnl_mask[1][1])
+
+            # cm_copy[fov][peak] = {'y_top': chnl_mask[0][0],
+            #                       'y_bot': chnl_mask[0][1],
+            #                       'x_left': chnl_mask[1][0],
+            #                       'x_right': chnl_mask[1][1]}
+            # print(type(cm_copy[fov][peak][1][0]), cm_copy[fov][peak][1][0])
 
     #save the channel mask dictionary to a pickle and a text file
-    with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
-        pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
-    with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
-        pprint(channel_masks, stream=cmask_file)
+    # with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
+    #     pickle.dump(cm_copy, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
+    # with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
+    #     pprint(cm_copy, stream=cmask_file)
+    with open(os.path.join(params['ana_dir'], 'channel_masks.yaml'), 'w') as cmask_file:
+        yaml.dump(data=cm_copy, stream=cmask_file, default_flow_style=False, tags=None)
 
     information("Channel masks saved.")
 
