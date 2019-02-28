@@ -2342,7 +2342,9 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
 
         # pad image to correct size
         img_stack = np.pad(img_stack,
-                           ((0,0),(pad_dict['top'],pad_dict['bottom']),(pad_dict['left'],pad_dict['right'])),
+                           ((0,0),
+                           (pad_dict['top'],pad_dict['bottom']),
+                           (pad_dict['left'],pad_dict['right'])),
                            mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
@@ -2355,10 +2357,9 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
         predict_args = dict(use_multiprocessing=False,
                             verbose=1)
         predictions = model.predict_generator(image_generator, **predict_args)
-        predictions = predictions[:,:,:,0] # get rid of 4t dimension
 
         # post processing
-        # remove padding
+        # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
                                      pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
 
@@ -2505,7 +2506,10 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
     def __data_generation(self, list_fileNames_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) *** fix
+        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) *** did not work in py2
+        # jt's untested fix
+        shape = np.concatenate(self.batch_size, [dim for dim in self.dim], self.n_channels)
+        X = np.zeros(shape)
 
         # Generate data
         for i, fName in enumerate(list_fileNames_temp):
