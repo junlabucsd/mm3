@@ -91,6 +91,10 @@ if __name__ == "__main__":
     t_end = p['compile']['t_end']
     if t_end == 'None':
         t_end = None
+    # only analyze images at and after this t point. Put in None otherwise
+    t_start = p['compile']['t_start']
+    if t_start == 'None':
+        t_start = None
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -120,6 +124,17 @@ if __name__ == "__main__":
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
+        # keep images starting at this timepoint
+        if t_start:
+            # go through list and find first place where timepoint is equivalent to t_start
+            for n, ifile in enumerate(found_files):
+                string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_start,t_start)) # account for 3 and 4 digit
+                # if re.search == True then a match was found
+                if re.search(string, ifile):
+                    # cut off every file name prior to this one and quit the loop
+                    found_file = found_files[n:]
+                    break
+
         # remove images after this timepoint
         if t_end:
             # go through list and find first place where timepoint is equivalent to t_end
@@ -130,6 +145,7 @@ if __name__ == "__main__":
                     # cut off found files
                     found_files = found_files[:n]
                     break # get out of the loop
+
 
         # if user has specified only certain FOVs, filter for those
         if (len(user_spec_fovs) > 0):
