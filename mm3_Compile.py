@@ -258,17 +258,18 @@ if __name__ == "__main__":
                 dilator = np.ones((1,300))
 
                 # create weights for taking weighted mean of several runs of Unet over various crops of the first image in the series. This helps remove "blind spots" from the neural network at the edges of each crop of the original image.
-                stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'],
-                                             subImageNumber=16, padSubImageNumber=25)[0,...]
-                # print(stackWeights.shape) #uncomment for debugging
+                stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)[0,...]
+                # print(stack_weights.shape) #uncomment for debugging
 
                 # get prediction of where traps are located in first image
-                imgPath = os.path.join(p['experiment_directory'],p['image_directory'],trap_align_metadata['first_frame_name'])
+                imgPath = os.path.join(p['experiment_directory'], p['image_directory'],
+                                       trap_align_metadata['first_frame_name'])
                 img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
+                # print(img.shape)
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 print("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img,model,stack_weights,trap_align_metadata['shift_distance'],subImageNumber=16,padSubImageNumber=25)
+                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)
 
                 # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
                 class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
@@ -334,7 +335,7 @@ if __name__ == "__main__":
                 if p['debug']:
                     print(test_array)
                     print(np.all(test_array,axis=0))
-                
+
                 good_trap_region_index = np.where(np.all(test_array, axis=0))[0][0]
                 centroid = centroids[good_trap_region_index,:].astype('uint16')
                 if p['debug']:

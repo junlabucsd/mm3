@@ -907,6 +907,7 @@ def tileImage(img, subImageNumber):
     divisor = int(np.sqrt(subImageNumber))
     M = img.shape[0]//divisor
     N = img.shape[0]//divisor
+    print(img.shape, M, N, divisor, subImageNumber)
     tiles = np.asarray([img[x:x+M,y:y+N] for x in range(0,img.shape[0],M) for y in range(0,img.shape[1],N)])
     return(tiles)
 
