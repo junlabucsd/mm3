@@ -2419,7 +2419,8 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
             elif k == ord('n'):
                 continue
 
-def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_dir=None):
+
+def segment_fov_unet(fov_id, specs, model):
     '''
     Segments the channels from one fov using the U-net CNN model.
 
