@@ -218,8 +218,13 @@ def load_time_table():
     This is so it can be used during Cell creation.
     '''
 
-    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
-        params['time_table'] = pickle.load(time_table_file)
+    # try first for yaml, then for pkl
+    try:
+        with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'rb') as time_table_file:
+            params['time_table'] = yaml.safe_load(time_table_file)
+    except:
+        with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
+            params['time_table'] = pickle.load(time_table_file)
 
     return
 
@@ -607,13 +612,13 @@ def make_time_table(analyzed_imgs):
         else:
             t_in_seconds = np.around((idata['t'] - first_time) * params['moviemaker']['seconds_per_time_index'], decimals=0).astype('uint32')
 
-        time_table[idata['fov']][idata['t']] = t_in_seconds
+        time_table[idata['fov']][idata['t']] = int(t_in_seconds)
 
     # save to .pkl. This pkl will be loaded into the params
-    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
-        pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
-    with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
-        pprint(time_table, stream=time_table_file)
+    # with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
+    #     pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
+    # with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
+    #     pprint(time_table, stream=time_table_file)
     with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'w') as time_table_file:
         yaml.dump(data=time_table, stream=time_table_file, default_flow_style=False, tags=None)
     information('Time table saved.')
@@ -3710,9 +3715,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
+    time_table = load_time_table()
     times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
 
@@ -3812,10 +3815,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    time_table = load_time_table()
     t0 = times_all[0] # first time index
 
     # Loop through cells
@@ -3886,10 +3886,7 @@ def x_profile_analysis(fov_id, peak_id, Cells, profile_plane='sub_c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    time_table = load_time_table()
     t0 = times_all[0] # first time index
 
     # Loop through cells
@@ -3990,10 +3987,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    time_table = load_time_table()
     t0 = times_all[0] # first time index
 
     # Loop through cells
