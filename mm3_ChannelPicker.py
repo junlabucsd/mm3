@@ -534,7 +534,6 @@ def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
 
     return specs
 
-
 # function for better formatting of channel plot
 def format_channel_plot(ax, peak_id):
     '''Removes axis and puts peak as title from plot for channels'''
@@ -555,7 +554,7 @@ def preload_images(specs, fov_id_list):
     UI_images = {}
 
     for fov_id in fov_id_list:
-        mm3.information("Preloading images for fov_id {}.".format(fov_id))
+        mm3.information("Preloading images for FOV {}.".format(fov_id))
         UI_images[fov_id] = {}
         for peak_id in specs[fov_id].keys():
             image_data = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
@@ -571,7 +570,7 @@ def preload_images(specs, fov_id_list):
 
 ### For when this script is run from the terminal ##################################
 if __name__ == "__main__":
-    '''mm3_ChannelPicker.py allows the user to identify full and empty channelsself.
+    '''mm3_ChannelPicker.py allows the user to identify full and empty channels.
     '''
 
     # set switches and parameters
@@ -580,7 +579,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
     # parser.add_argument('-s', '--specfile',  type=file,
@@ -604,7 +603,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 
@@ -657,18 +660,6 @@ if __name__ == "__main__":
     mm3.information("Found %d FOVs to process." % len(fov_id_list))
 
     ### Cross correlations ########################################################################
-    # load precalculated ones if indicated
-    if not do_crosscorrs:
-
-        mm3.information('Loading precalculated cross-correlations.')
-
-        try:
-            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
-                crosscorrs = pickle.load(xcorrs_file)
-        except:
-            crosscorrs = None
-            mm3.information('Precalculated cross-correlations not found.')
-
     if do_CNN:
         # a nested dict to hold predictions per channel per fov.
         predictionDict = {}
@@ -721,7 +712,7 @@ if __name__ == "__main__":
             pprint(predictionDict, stream=preds_file)
         mm3.information("Wrote channel picking predictions files.")
 
-    else:
+    elif do_crosscorrs:
         # a nested dict to hold cross corrs per channel per fov.
         crosscorrs = {}
 
@@ -773,6 +764,16 @@ if __name__ == "__main__":
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")
 
+    # try to load previously calculated cross correlations
+    else:
+        mm3.information('Loading precalculated cross-correlations.')
+        try:
+            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
+                crosscorrs = pickle.load(xcorrs_file)
+        except:
+            crosscorrs = None
+            mm3.information('Precalculated cross-correlations not found.')
+
     ### User selection (channel picking) #####################################################
     if specfile == None:
         mm3.information('Initializing specifications file.')
@@ -812,7 +813,7 @@ if __name__ == "__main__":
         else: # just set everything to 1 and go forward.
 
             for fov_id, peaks in six.iteritems(channel_masks):
-                specs[fov_id] = {peak_id: 1 for peak_id in peaks.keys()}
+                specs[fov_id] = {peak_id: -1 for peak_id in peaks.keys()}
     else:
         mm3.information('Loading supplied specifiication file.')
         with open(specfile, 'r') as fin:
@@ -841,7 +842,7 @@ if __name__ == "__main__":
                 specs = fov_plot_channels(fov_id, crosscorrs, specs,
                                           outputdir=outputdir, phase_plane=p['phase_plane'])
             elif do_CNN:
-                specs = fov_CNN_plot_channels(fov_id, predictionDict, specs, 
+                specs = fov_CNN_plot_channels(fov_id, predictionDict, specs,
                                               outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format

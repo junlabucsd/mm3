@@ -57,7 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
     parser.add_argument('-m', '--modelfile', type=str,
@@ -74,7 +74,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 
@@ -254,17 +258,18 @@ if __name__ == "__main__":
                 dilator = np.ones((1,300))
 
                 # create weights for taking weighted mean of several runs of Unet over various crops of the first image in the series. This helps remove "blind spots" from the neural network at the edges of each crop of the original image.
-                stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'],
-                                             subImageNumber=16, padSubImageNumber=25)[0,...]
-                # print(stackWeights.shape) #uncomment for debugging
+                stack_weights = mm3.get_weights_array(np.zeros((trap_align_metadata['full_frame_size'],trap_align_metadata['full_frame_size'])), trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)[0,...]
+                # print(stack_weights.shape) #uncomment for debugging
 
                 # get prediction of where traps are located in first image
-                imgPath = os.path.join(p['experiment_directory'],p['image_directory'],trap_align_metadata['first_frame_name'])
+                imgPath = os.path.join(p['experiment_directory'], p['image_directory'],
+                                       trap_align_metadata['first_frame_name'])
                 img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
+                # print(img.shape)
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 print("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img,model,stack_weights,trap_align_metadata['shift_distance'],subImageNumber=16,padSubImageNumber=25)
+                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)
 
                 # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
                 class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
@@ -304,7 +309,7 @@ if __name__ == "__main__":
 
                 for idx,area in enumerate(areas):
                     if area < p['compile']['merged_trap_region_area_threshold']:
-                        
+
                         label = labels[idx]
                         dilated_traps[dilated_trap_labels == label] = 0
 
@@ -330,12 +335,12 @@ if __name__ == "__main__":
                 if p['debug']:
                     print(test_array)
                     print(np.all(test_array,axis=0))
-                
+
                 good_trap_region_index = np.where(np.all(test_array, axis=0))[0][0]
                 centroid = centroids[good_trap_region_index,:].astype('uint16')
                 if p['debug']:
                     print(centroid)
-                
+
                 # get the (frame_number,512,512,1)-sized stack for image aligment
                 align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
 
@@ -438,7 +443,7 @@ if __name__ == "__main__":
                 align_centroids = []
                 for frame in range(trap_align_metadata['frame_count']):
                     align_centroids.append([reg.centroid for reg in measure.regionprops(labelled_align_trap_mask_stack[frame,:,:])])
-                
+
                 align_centroids = np.asarray(align_centroids)
                 shifts = np.mean(align_centroids - align_centroids[0,:,:], axis=1)
                 integer_shifts = np.round(shifts).astype('int16')

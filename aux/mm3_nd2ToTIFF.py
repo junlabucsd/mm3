@@ -50,7 +50,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--paramfile',  type=file,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-3", etc.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -63,7 +63,11 @@ if __name__ == "__main__":
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 
@@ -128,6 +132,8 @@ if __name__ == "__main__":
             # last time index is before the actual time index. Ignore it.
             if (p['nd2ToTIFF']['image_start'] < 1):
                 p['nd2ToTIFF']['image_start'] = 1
+            if p['nd2ToTIFF']['image_end'] == 'None':
+                p['nd2ToTIFF']['image_end'] = False
             if p['nd2ToTIFF']['image_end']:
                 if len(nd2f) > 1 and len(nd2f) < p['nd2ToTIFF']['image_end']:
                     p['nd2ToTIFF']['image_end'] = len(nd2f)

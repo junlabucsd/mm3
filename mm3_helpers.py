@@ -49,6 +49,7 @@ from tensorflow.python.keras import models
 from tensorflow.python.keras import losses
 from tensorflow.python.keras import utils
 from tensorflow.python.keras import backend as K
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # supress warnings
 
 # Parralelization modules
 import multiprocessing
@@ -229,7 +230,7 @@ def load_channel_masks():
     information("Loading channel masks dictionary.")
 
     try:
-        information('Path: ', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
+        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
         with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
             channel_masks = pickle.load(cmask_file)
     except ValueError:
@@ -678,12 +679,13 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
         #information('Slicing and saving channel peak %s.' % channel_filename.split('/')[-1])
         information('Slicing and saving channel peak %d.' % peak)
 
+        # channel masks should only contain ints, but you can use this for hard fix
+        # for i in range(len(channel_loc)):
+        #     for j in range(len(channel_loc[i])):
+        #         channel_loc[i][j] = int(channel_loc[i][j])
+
         # slice out channel.
         # The function should recognize the shape length as 4 and cut all time points
-        for i in range(len(channel_loc)):
-            for j in range(len(channel_loc[i])):
-                channel_loc[i][j] = int(channel_loc[i][j])
-
         channel_stack = cut_slice(image_fov_stack, channel_loc)
 
         # save a different time stack for all colors
@@ -724,7 +726,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
     image_planes = image_params['planes']
 
     fov_channel_masks = channel_masks[fov_id]
-        
+
     with h5py.File(os.path.join(savePath,'{}_xy{:0=2}.hdf5'.format(params['experiment_name'],fov_id)), 'w', libver='earliest') as h5f:
 
         # add in metadata for this FOV
@@ -753,7 +755,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
 
         # cut out the channels as per channel masks for this fov
         for peak,channel_stack in six.iteritems(imgDict):
-    
+
             channel_stack = channel_stack.astype('uint16')
             # create group for this trap
             h5g = h5f.create_group('channel_%04d' % peak)
@@ -766,7 +768,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
 
             # save a different dataset for all colors
             for color_index in range(channel_stack.shape[3]):
-    
+
                 # create the dataset for the image. Review docs for these options.
                 h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
                                 data=channel_stack[:,:,:,color_index],
@@ -875,9 +877,10 @@ def hdf5_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             h5g.attrs.create('peak_id', peak)
             h5g.attrs.create('channel_loc', channel_loc)
 
-            for i in range(len(channel_loc)):
-                for j in range(len(channel_loc[i])):
-                    channel_loc[i][j] = int(channel_loc[i][j])
+            # channel masks should only contain ints, but you can use this for a hard fix
+            # for i in range(len(channel_loc)):
+            #     for j in range(len(channel_loc[i])):
+            #         channel_loc[i][j] = int(channel_loc[i][j])
 
             # slice out channel.
             # The function should recognize the shape length as 4 and cut all time points
@@ -904,6 +907,7 @@ def tileImage(img, subImageNumber):
     divisor = int(np.sqrt(subImageNumber))
     M = img.shape[0]//divisor
     N = img.shape[0]//divisor
+    print(img.shape, M, N, divisor, subImageNumber)
     tiles = np.asarray([img[x:x+M,y:y+N] for x in range(0,img.shape[0],M) for y in range(0,img.shape[1],N)])
     return(tiles)
 
@@ -1240,10 +1244,10 @@ def find_channel_locs(image_data):
     # Detect peaks in the x projection (i.e. find the channels)
     projection_x = image_data.sum(axis=0).astype(np.int32)
     # find_peaks_cwt is a function which attempts to find the peaks in a 1-D array by
-    # convolving it with a wave. here the wave is the default wave used by the algorithm
+    # convolving it with a wave. here the wave is the default Mexican hat wave
     # but the minimum signal to noise ratio is specified
-    peaks = find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5),
-                                 min_snr=chan_snr)
+    # *** The range here should be a parameter or changed to a fraction.
+    peaks = find_peaks_cwt(projection_x, np.arange(chan_w-5,chan_w+5), min_snr=chan_snr)
 
     # If the left-most peak position is within half of a channel separation,
     # discard the channel from the list.
@@ -1285,6 +1289,7 @@ def find_channel_locs(image_data):
 
         # check if these values make sense. If so, use them. If not, use default
         # make sure lenght is not 30 pixels bigger or smaller than default
+        # *** This 15 should probably be a parameter or at least changed to a fraction.
         if slice_length + 15 < default_length or slice_length - 15 > default_length:
             continue
         # make sure ends are greater than 15 pixels from image edge
@@ -1326,7 +1331,7 @@ def make_masks(analyzed_imgs):
 
     # declare temp variables from yaml parameter dict.
     crop_wp = int(params['compile']['channel_width_pad'] + params['compile']['channel_width']/2)
-    chan_lp = params['compile']['channel_length_pad']
+    chan_lp = int(params['compile']['channel_length_pad'])
 
     #intiaize dictionary
     channel_masks = {}
@@ -1350,7 +1355,7 @@ def make_masks(analyzed_imgs):
     max_chnl_mask_len = 0
     max_chnl_mask_wid = 0
 
-    # for each fov make a channel_mask dictionary from consensus mask for each fov
+    # for each fov make a channel_mask dictionary from consensus mask
     for fov in fovs:
         # initialize a the dict and consensus mask
         channel_masks_1fov = {} # dict which holds channel masks {peak : [[y1, y2],[x1,x2]],...}
@@ -1381,7 +1386,7 @@ def make_masks(analyzed_imgs):
             # add it to the consensus mask
             consensus_mask += img_chnl_mask
 
-        # average the consensus mask
+        # Normalize concensus mask between 0 and 1.
         consensus_mask = consensus_mask.astype('float32') / float(np.amax(consensus_mask))
 
         # threshhold and homogenize each channel mask within the mask, label them
@@ -1407,7 +1412,7 @@ def make_masks(analyzed_imgs):
             # if their channels contain this median value to match up
             channel_id = int(np.median(np.where(poscols)[0]))
 
-            # store the edge locations of the channel mask in the dictionary
+            # store the edge locations of the channel mask in the dictionary. Will be ints
             min_row = np.min(np.where(posrows)[0])
             max_row = np.max(np.where(posrows)[0])
             min_col = np.min(np.where(poscols)[0])
@@ -1439,11 +1444,11 @@ def make_masks(analyzed_imgs):
             if chnl_mask[1][1] - chnl_mask[1][0] != max_chnl_mask_wid:
                 wid_diff = max_chnl_mask_wid - (chnl_mask[1][1] - chnl_mask[1][0])
                 if wid_diff % 2 == 0:
-                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - wid_diff/2, 0)
-                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + wid_diff/2, image_cols - 1)
+                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - wid_diff/2, 0))
+                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + wid_diff/2, image_cols - 1))
                 else:
-                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
-                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
+                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - (wid_diff-1)/2, 0))
+                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1))
 
 
     #save the channel mask dictionary to a pickle and a text file
@@ -1478,7 +1483,7 @@ def make_channel_masks_CNN(bboxes_dict):
 
     Calls
     '''
-    
+
     # initialize the new channel_masks dict
     channel_masks = {}
 
@@ -1490,7 +1495,7 @@ def make_channel_masks_CNN(bboxes_dict):
     for peak_id in peak_ids:
         # get each frame's bounding boxes for the given peak_id
         frame_bboxes = bboxes_dict[peak_id]
-        
+
         for frame_index in range(len(frame_bboxes)):
             # replace the values in bbox_array with the proper ones from frame_bboxes
             minrow = frame_bboxes[frame_index][0]
@@ -2322,22 +2327,26 @@ def curate_training_data(training_dir,segmented_imgs,img_stack,fov_id,peak_id):
 
     return(k)
 
-
-
 def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_training_data=False, training_dir=None):
 
     batch_size = params['segment']['batch_size']
     cellClassThreshold = params['segment']['cell_class_threshold']
+    if cellClassThreshold == 'None': # yaml imports None as a string
+        cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
 
     for peak_id in ana_peak_ids:
+        information('Segmenting peak {}.'.format(peak_id))
         # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
+
         # pad image to correct size
         img_stack = np.pad(img_stack,
-                           ((0,0),(pad_dict['top'],pad_dict['bottom']),(pad_dict['left'],pad_dict['right'])),
-                           mode='reflect')
+                           ((0,0),
+                           (pad_dict['top'],pad_dict['bottom']),
+                           (pad_dict['left'],pad_dict['right'])),
+                           mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
         image_datagen = ImageDataGenerator()
@@ -2351,22 +2360,34 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
-        # remove padding
+        # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
                                      pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
 
-        # binarized and label
-        predictions[predictions >= cellClassThreshold] = 1
-        predictions[predictions < cellClassThreshold] = 0
-        predictions = predictions.astype('uint8')
+        # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
+        if cellClassThreshold:
+            predictions[predictions >= cellClassThreshold] = 1
+            predictions[predictions < cellClassThreshold] = 0
+            predictions = predictions.astype('uint8')
 
-        segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
-        # process and label each frame of the channel
-        for frame in range(segmented_imgs.shape[0]):
-            # get rid of small objects
+            segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
+            # process and label each frame of the channel
+            for frame in range(segmented_imgs.shape[0]):
+                # get rid of small holes
+                predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                # get rid of small objects.
+                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
+                # remove labels which touch the boarder
+                predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+                # relabel now
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
 
-            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
-            segmented_imgs[frame,:,:] = morphology.remove_small_objects(segmented_imgs[frame,:,:], min_size=min_object_size)
+        else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
+            information('Converting predictions to grayscale.')
+            segmented_imgs = np.around(predictions * 100)
+
+        # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
+        segmented_imgs = segmented_imgs.astype('uint8')
 
         if not make_training_data:
             # save out the segmented stacks
@@ -2398,10 +2419,9 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
             elif k == ord('n'):
                 continue
 
-
 def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_dir=None):
     '''
-    Segments the channels from one fov using the U-net CNN modelself. It batches channels together by stiching them into one image. It then splits them up again to save the segmented masks.
+    Segments the channels from one fov using the U-net CNN model.
 
     Parameters
     ----------
@@ -2427,7 +2447,7 @@ def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_di
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
 
-    half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
+    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
     pad_dict = {'top':top_pad,
                'bottom':bottom_pad,
                'right':right_pad,
@@ -2446,7 +2466,6 @@ def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_di
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return(k)
-
 
 # class for image generation for classifying traps as good, empty, out-of-focus, or defective
 class TrapKymographPredictionDataGenerator(utils.Sequence):
@@ -2488,7 +2507,10 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
     def __data_generation(self, list_fileNames_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        X = np.zeros((self.batch_size, *self.dim, self.n_channels))
+        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) *** did not work in py2
+        # jt's untested fix
+        shape = np.concatenate(self.batch_size, [dim for dim in self.dim], self.n_channels)
+        X = np.zeros(shape)
 
         # Generate data
         for i, fName in enumerate(list_fileNames_temp):
@@ -2502,7 +2524,6 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
             X[i,:t_end,:,:] = np.expand_dims(tmpImg[:t_end,:,tmpImg.shape[-1]//2], axis=-1)
 
         return X
-
 
 # finds lineages for all peaks in a fov
 def make_lineages_fov(fov_id, specs):
@@ -2599,7 +2620,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     cell_leaves = [] # cell ids of the current leaves of the growing lineage tree
 
     # go through regions by timepoint and build lineages
-    # timepoints start at 1, like the original images
+    # timepoints start with the index of the first image
     for t, regions in enumerate(regions_by_time, start=start_time_index):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
@@ -2630,7 +2651,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
             # go through regions, they will come off in Y position order
             for r, region in enumerate(regions):
                 # create tuple which is cell_id of closest leaf, distance
-                current_closest = (None, 1000) # 1000 is just a large number
+                current_closest = (None, float('inf'))
 
                 # check this region against all positions of all current leaf regions,
                 # find the closest one in y.
@@ -2693,6 +2714,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     # 2 if the second region is the cell, and the first is trash
                     # or 0 if it cannot be determined.
                     check_division_result = check_division(Cells[leaf_id], region1, region2)
+
                     if check_division_result == 3:
                         # create two new cells and divide the mother
                         daughter1_id = create_cell_id(region1, t, peak_id, fov_id)
@@ -2825,6 +2847,7 @@ class Cell():
         self.tau = None
         self.elong_rate = None
         self.septum_position = None
+        self.width = None
 
     def grow(self, region, t):
         '''Append data from a region to this cell.
@@ -2873,8 +2896,8 @@ class Cell():
         # delta is here for convenience
         self.delta = self.sd - self.sb
 
-        # generation time. Use more accurate times but round them to integer minutes
-        self.tau = np.around((self.abs_times[-1] - self.abs_times[0]) / 60.0)
+        # generation time. Use more accurate times and convert to minutes
+        self.tau = (self.abs_times[-1] - self.abs_times[0]) / 60.0
 
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
@@ -2901,6 +2924,9 @@ class Cell():
         # compared to the total size
         self.septum_position = daughter1.lengths[0] / (daughter1.lengths[0] + daughter2.lengths[0])
 
+        # calculate single width over cell's life
+        self.width = np.mean(self.widths_w_div)
+
         # convert data to smaller floats. No need for float64
         # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
         convert_to = 'float16' # numpy datatype to convert to
@@ -2911,6 +2937,7 @@ class Cell():
         self.elong_rate = self.elong_rate.astype(convert_to)
         self.tau = self.tau.astype(convert_to)
         self.septum_position = self.septum_position.astype(convert_to)
+        self.width = self.width.astype(convert_to)
 
         self.lengths = [length.astype(convert_to) for length in self.lengths]
         self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
