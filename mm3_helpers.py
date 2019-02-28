@@ -724,7 +724,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
     image_planes = image_params['planes']
 
     fov_channel_masks = channel_masks[fov_id]
-        
+
     with h5py.File(os.path.join(savePath,'{}_xy{:0=2}.hdf5'.format(params['experiment_name'],fov_id)), 'w', libver='earliest') as h5f:
 
         # add in metadata for this FOV
@@ -753,7 +753,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
 
         # cut out the channels as per channel masks for this fov
         for peak,channel_stack in six.iteritems(imgDict):
-    
+
             channel_stack = channel_stack.astype('uint16')
             # create group for this trap
             h5g = h5f.create_group('channel_%04d' % peak)
@@ -766,7 +766,7 @@ def save_hdf5(imgDict, img_names, analyzed_imgs, fov_id, channel_masks):
 
             # save a different dataset for all colors
             for color_index in range(channel_stack.shape[3]):
-    
+
                 # create the dataset for the image. Review docs for these options.
                 h5ds = h5g.create_dataset(u'p%04d_c%1d' % (peak, color_index+1),
                                 data=channel_stack[:,:,:,color_index],
@@ -1478,7 +1478,7 @@ def make_channel_masks_CNN(bboxes_dict):
 
     Calls
     '''
-    
+
     # initialize the new channel_masks dict
     channel_masks = {}
 
@@ -1490,7 +1490,7 @@ def make_channel_masks_CNN(bboxes_dict):
     for peak_id in peak_ids:
         # get each frame's bounding boxes for the given peak_id
         frame_bboxes = bboxes_dict[peak_id]
-        
+
         for frame_index in range(len(frame_bboxes)):
             # replace the values in bbox_array with the proper ones from frame_bboxes
             minrow = frame_bboxes[frame_index][0]
@@ -2399,7 +2399,7 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model, make_t
                 continue
 
 
-def segment_fov_unet(fov_id, specs, model, make_training_data=False, training_dir=None):
+def segment_fov_unet(fov_id, specs, model):
     '''
     Segments the channels from one fov using the U-net CNN modelself. It batches channels together by stiching them into one image. It then splits them up again to save the segmented masks.
 
