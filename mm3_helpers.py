@@ -614,6 +614,8 @@ def make_time_table(analyzed_imgs):
         pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
     with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
         pprint(time_table, stream=time_table_file)
+    with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'w') as time_table_file:
+        yaml.dump(data=time_table, stream=time_table_file, default_flow_style=False, tags=None)
     information('Time table saved.')
 
     return time_table
