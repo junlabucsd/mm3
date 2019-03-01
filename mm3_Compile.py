@@ -87,15 +87,14 @@ if __name__ == "__main__":
         p['num_analyzers'] = namespace.nproc
     mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
-    # only analyze images after and between these time points. Put in None otherwise
-    if 't_start' in p['compile']: # backwards compatibility for older param files w/o t_start
-        t_start = p['compile']['t_start']
-        if t_start == 'None':
-            t_start = None
-    if 't_end' in p['compile']:
-        t_end = p['compile']['t_end']
-        if t_end == 'None':
-            t_end = None
+    # only analyze images up until this t point. Put in None otherwise
+    t_end = p['compile']['t_end']
+    if t_end == 'None':
+        t_end = None
+    # only analyze images at and after this t point. Put in None otherwise
+    t_start = p['compile']['t_start']
+    if t_start == 'None':
+        t_start = None
 
     # create the subfolders if they don't
     if not os.path.exists(p['ana_dir']):
@@ -125,15 +124,16 @@ if __name__ == "__main__":
         found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
         found_files = sorted(found_files) # should sort by timepoint
 
-        # remove images before this time point
+        # keep images starting at this timepoint
         if t_start:
             mm3.information('Removing images before time {}'.format(t_start))
             # go through list and find first place where timepoint is equivalent to t_start
             for n, ifile in enumerate(found_files):
-                string = re.compile('t%03dxy|t%04dxy' % (t_start, t_start)) # for 3 and 4 digit
-                # if re.search == True then a match was found, then cut list to files after n
+                string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_start,t_start)) # account for 3 and 4 digit
+                # if re.search == True then a match was found
                 if re.search(string, ifile):
-                    found_files = found_files[n:]
+                    # cut off every file name prior to this one and quit the loop
+                    found_file = found_files[n:]
                     break
 
         # remove images after this timepoint
@@ -145,6 +145,7 @@ if __name__ == "__main__":
                 if re.search(string, ifile):
                     found_files = found_files[:n]
                     break
+
 
         # if user has specified only certain FOVs, filter for those
         if (len(user_spec_fovs) > 0):
