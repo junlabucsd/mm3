@@ -88,12 +88,18 @@ if __name__ == "__main__":
     mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # only analyze images up until this t point. Put in None otherwise
-    t_end = p['compile']['t_end']
-    if t_end == 'None':
+    if 't_end' in p['compile']:
+        t_end = p['compile']['t_end']
+        if t_end == 'None':
+            t_end = None
+    else:
         t_end = None
     # only analyze images at and after this t point. Put in None otherwise
-    t_start = p['compile']['t_start']
-    if t_start == 'None':
+    if 't_start' in p['compile']:
+        t_start = p['compile']['t_start']
+        if t_start == 'None':
+            t_start = None
+    else:
         t_start = None
 
     # create the subfolders if they don't
