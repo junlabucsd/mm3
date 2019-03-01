@@ -176,7 +176,6 @@ class Window(QMainWindow):
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
-
 class ImgsWidget(QWidget):
 
         def __init__(self,parent):
@@ -336,10 +335,11 @@ class MaskTransparencyWidget(QWidget):
         def buttonSave(self):
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
-                peak_id_pat = re.compile(r'.+\_(p\d{4})_.+')
-                mat = peak_id_pat.match(original_file_name)
-                peakID = mat.groups()[0]
-                fileBaseName = '{}_xy{:0=3}_{}_t{:0=4}.tif'.format(experiment_name, self.fov_id, peakID, self.frameIndex+1)
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+')
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
                 savePath = os.path.join(self.mask_dir,fileBaseName)
                 print("Saved binary mask image as: ", savePath)
 
@@ -575,6 +575,10 @@ class PhaseWidget(QWidget):
                 self.label.setPixmap(self.phaseQpixmap)
 
         def setImg(self, img):
+                self.originalImgMax = np.max(img)
+                originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
+                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
+
                 rescaledImg = img/np.max(img)*255
                 RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
                 self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
@@ -646,10 +650,11 @@ class PhaseWidget(QWidget):
         def buttonSave(self):
                 experiment_name = params['experiment_name']
                 original_file_name = self.phaseImgPath
-                peak_id_pat = re.compile(r'.+\_(p\d{4})_.+')
-                mat = peak_id_pat.match(original_file_name)
-                peakID = mat.groups()[0]
-                fileBaseName = '{}_xy{:0=3}_{}_t{:0=4}.tif'.format(experiment_name, self.fov_id, peakID, self.frameIndex+1)
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+')
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
                 savePath = os.path.join(self.image_dir,fileBaseName)
                 print("Saved phase image as: ", savePath)
 
