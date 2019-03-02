@@ -283,7 +283,7 @@ if __name__ == "__main__":
         for img in images:
             # skip images not specified by param file.
             t = mm3.get_time(img)
-            if ((p['moviemaker']['image_start'] and t < p['moviemaker']['image_start']) or
+            if ((p['moviemaker']['image_start'] and t < p['moviemaker']['image_start']) and
                 (p['moviemaker']['image_end'] and t > p['moviemaker']['image_end'])):
                 continue
 

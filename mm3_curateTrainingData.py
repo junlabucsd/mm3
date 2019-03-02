@@ -97,10 +97,10 @@ if __name__ == "__main__":
         fov_filename_dict[fov_id] = []
         for i in range(len(mask_filenames)):
             fov_filename_dict[fov_id].append((phase_filenames[i],mask_filenames[i]))
-        
+
     # print([names for names in fov_filename_dict[1]]) # for debugging
 
     app = QApplication(sys.argv)
     window = GUI.Window(imgPaths=fov_filename_dict, fov_id_list=fov_id_list, training_dir=training_dir)
     window.show()
-    app.exec()
+    app.exec_() # exec is a reserved word in python2, so this is exec_

@@ -23,7 +23,7 @@ import traceback # for error messaging
 import warnings # error messaging
 import copy # not sure this is needed
 import h5py # working with HDF5 files
-import cv2 # for curating segmentation results for making new training data
+# import cv2 # for curating segmentation results for making new training data
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
@@ -63,7 +63,6 @@ font = {'family' : 'sans-serif',
         'size'   : 12}
 mpl.rc('font', **font)
 mpl.rcParams['pdf.fonttype'] = 42
-import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
 # user modules
@@ -1479,8 +1478,8 @@ def make_masks(analyzed_imgs):
     #save the channel mask dictionary to a pickle and a text file
     # with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
     #     pickle.dump(cm_copy, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
-    # with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
-    #     pprint(cm_copy, stream=cmask_file)
+    with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
+        pprint(cm_copy, stream=cmask_file)
     with open(os.path.join(params['ana_dir'], 'channel_masks.yaml'), 'w') as cmask_file:
         yaml.dump(data=cm_copy, stream=cmask_file, default_flow_style=False, tags=None)
 
