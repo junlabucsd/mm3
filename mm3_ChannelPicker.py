@@ -768,11 +768,11 @@ if __name__ == "__main__":
     else:
         mm3.information('Loading precalculated cross-correlations.')
         try:
-            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'r') as xcorrs_file:
+            with open(os.path.join(ana_dir,'crosscorrs.pkl'), 'rb') as xcorrs_file:
                 crosscorrs = pickle.load(xcorrs_file)
         except:
             crosscorrs = None
-            mm3.information('Precalculated cross-correlations not found.')
+            mm3.information('Could not load cross-correlations.')
 
     ### User selection (channel picking) #####################################################
     if specfile == None:
@@ -838,7 +838,7 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            if crosscorrs:
+            if not do_CNN:
                 specs = fov_plot_channels(fov_id, crosscorrs, specs,
                                           outputdir=outputdir, phase_plane=p['phase_plane'])
             elif do_CNN:
