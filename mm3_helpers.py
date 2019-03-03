@@ -2475,19 +2475,19 @@ def make_lineages_fov(fov_id, specs):
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
 
     # set up multiprocessing pool. will complete pool before going on
-    pool = Pool(processes=params['num_analyzers'])
-
-    # create the lineages for each peak individually
-    # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
-
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
+    # pool = Pool(processes=params['num_analyzers'])
+    #
+    # # create the lineages for each peak individually
+    # # the output is a list of dictionaries
+    # lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
+    #
+    # pool.close() # tells the process nothing more will be added.
+    # pool.join() # blocks script until everything has been processed and workers exit
 
     # This is the non-parallelized version (useful for debug)
-    # lineages = []
-    # for fov_and_peak_ids in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_ids))
+    lineages = []
+    for fov_and_peak_ids in fov_and_peak_ids_list:
+        lineages.append(make_lineage_chnl_stack(fov_and_peak_ids))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information
@@ -2819,7 +2819,7 @@ class Cell():
         self.delta = self.sd - self.sb
 
         # generation time. Use more accurate times and convert to minutes
-        self.tau = (self.abs_times[-1] - self.abs_times[0]) / 60.0
+        self.tau = np.float64((self.abs_times[-1] - self.abs_times[0]) / 60.0)
 
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
@@ -2839,7 +2839,7 @@ class Cell():
             p = np.polyfit(times, log_lengths, 1)
             self.elong_rate = p[0] * 60.0 # convert to hours
         except:
-            self.elong_rate = float('NaN')
+            self.elong_rate = np.float64('NaN')
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
