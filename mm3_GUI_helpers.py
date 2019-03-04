@@ -49,7 +49,7 @@ class Window(QMainWindow):
 
         # icon = "icons/pain.png"
 
-        self.setWindowTitle("Paint Application")
+        self.setWindowTitle("You got this!")
         self.setGeometry(top,left,width,height)
         # self.setWindowIcon(QIcon(icon))
 
@@ -176,29 +176,6 @@ class Window(QMainWindow):
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
-class ImgsWidget(QWidget):
-
-        def __init__(self,parent):
-                super(ImgsWidget, self).__init__(parent)
-
-                self.imgLayout = QGridLayout()
-
-                names = ['image','mask']
-                positions = [(0,0),(0,1)]
-
-                for name,position in zip(names,positions):
-                        if name == '':
-                                continue
-                        if name == 'mask':
-                                self.mask_widget = MaskWidget(self)
-                                self.imgLayout.addWidget(self.mask_widget, *position)
-
-                        elif name == 'image':
-                                self.img_widget = PhaseWidget(self)
-                                self.imgLayout.addWidget(self.img_widget, *position)
-
-                self.setLayout(self.imgLayout)
-
 class OverlayImgsWidget(QWidget):
 
         def __init__(self,parent,imgPaths,fov_id_list,training_dir):
@@ -228,34 +205,13 @@ class OverlayImgsWidget(QWidget):
 
                 self.setLayout(self.imgLayout)
 
-class PhaseTransparencyWidget(QWidget):
-
-        def __init__(self,parent):
-                super(PhaseTransparencyWidget, self).__init__(parent)
-
-                self.label = QLabel(self)
-
-                img = io.imread('/home/wanglab/src/motherMachineSegger/data_from_deepLearning/commonDir/images/cells/20181011_JDW3308_StagePosition01_68_Channel1-0103.tif')
-                rescaledImg = img/np.max(img)*255
-                self.RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                alphaFloat = 0.75
-                alphaArray = np.zeros(img.shape, dtype='uint8')
-                alphaArray = np.expand_dims(alphaArray, -1)
-                alpha = int(255*alphaFloat)
-                alphaArray[...] = alpha
-                self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
-
-                self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-
 class MaskTransparencyWidget(QWidget):
 
         def __init__(self,parent,imgPaths,fov_id_list,mask_dir):
                 super(MaskTransparencyWidget, self).__init__(parent)
 
                 self.mask_dir = mask_dir
+                self.frameIndex = 0
 
                 self.imgPaths = imgPaths
                 self.fov_id_list = fov_id_list
@@ -264,9 +220,24 @@ class MaskTransparencyWidget(QWidget):
 
                 self.imgIndex = 0
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                # TO DO: check if re-annotated mask exists in training_dir, and present that instead of original mask
+                #        make indicator appear if we're re-editing the mask again.
+                experiment_name = params['experiment_name']
+                original_file_name = self.maskImgPath
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                self.maskStack = io.imread(self.maskImgPath)
+                if os.path.isfile(savePath):
+                    print('Re-annotated mask exists in training directory. Loading it.')
+                    # add widget to express whether this mask is one you already re-annotated
+                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+
                 img = self.maskStack[self.frameIndex,:,:]
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
@@ -335,7 +306,7 @@ class MaskTransparencyWidget(QWidget):
         def buttonSave(self):
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+')
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
                 mat = pat.match(original_file_name)
                 fovID = mat.groups()[0]
                 peakID = mat.groups()[1]
@@ -414,16 +385,42 @@ class MaskTransparencyWidget(QWidget):
         def next_frame(self):
                 self.frameIndex += 1
                 try:
-                        img = self.maskStack[self.frameIndex,:,:]
+                    experiment_name = params['experiment_name']
+                    original_file_name = self.maskImgPath
+                    pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                    mat = pat.match(original_file_name)
+                    fovID = mat.groups()[0]
+                    peakID = mat.groups()[1]
+                    fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                    savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                    if os.path.isfile(savePath):
+                        print('Re-annotated mask exists in training directory. Loading it.')
+                        # add widget to express whether this mask is one you already re-annotated
+                        self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+                    img = self.maskStack[self.frameIndex,:,:]
                 except IndexError:
-                        sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
+                    sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
 
                 self.setImg(img)
 
         def prior_frame(self):
                 self.frameIndex -= 1
                 try:
-                        img = self.maskStack[self.frameIndex,:,:]
+                    experiment_name = params['experiment_name']
+                    original_file_name = self.maskImgPath
+                    pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                    mat = pat.match(original_file_name)
+                    fovID = mat.groups()[0]
+                    peakID = mat.groups()[1]
+                    fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                    savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                    if os.path.isfile(savePath):
+                        print('Re-annotated mask exists in training directory. Loading it.')
+                        # add widget to express whether this mask is one you already re-annotated
+                        self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+                    img = self.maskStack[self.frameIndex,:,:]
                 except IndexError:
                         sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
                 self.setImg(img)
@@ -434,6 +431,21 @@ class MaskTransparencyWidget(QWidget):
                 self.maskStack = io.imread(self.maskImgPath)
 
                 self.frameIndex = 0
+
+                experiment_name = params['experiment_name']
+                original_file_name = self.maskImgPath
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                if os.path.isfile(savePath):
+                    print('Re-annotated mask exists in training directory. Loading it.')
+                    # add widget to express whether this mask is one you already re-annotated
+                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+
                 img = self.maskStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -443,6 +455,20 @@ class MaskTransparencyWidget(QWidget):
                 self.maskStack = io.imread(self.maskImgPath)
 
                 self.frameIndex = 0
+
+                experiment_name = params['experiment_name']
+                original_file_name = self.maskImgPath
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                if os.path.isfile(savePath):
+                    print('Re-annotated mask exists in training directory. Loading it.')
+                    # add widget to express whether this mask is one you already re-annotated
+                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
                 img = self.maskStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -455,6 +481,20 @@ class MaskTransparencyWidget(QWidget):
                 self.maskStack = io.imread(self.maskImgPath)
 
                 self.frameIndex = 0
+
+                experiment_name = params['experiment_name']
+                original_file_name = self.maskImgPath
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                if os.path.isfile(savePath):
+                    print('Re-annotated mask exists in training directory. Loading it.')
+                    # add widget to express whether this mask is one you already re-annotated
+                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
                 img = self.maskStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -467,81 +507,21 @@ class MaskTransparencyWidget(QWidget):
                 self.maskStack = io.imread(self.maskImgPath)
 
                 self.frameIndex = 0
+                experiment_name = params['experiment_name']
+                original_file_name = self.maskImgPath
+                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+                mat = pat.match(original_file_name)
+                fovID = mat.groups()[0]
+                peakID = mat.groups()[1]
+                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+                savePath = os.path.join(self.mask_dir,fileBaseName)
+
+                if os.path.isfile(savePath):
+                    print('Re-annotated mask exists in training directory. Loading it.')
+                    # add widget to express whether this mask is one you already re-annotated
+                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
                 img = self.maskStack[self.frameIndex,:,:]
                 self.setImg(img)
-
-class MaskWidget(QWidget):
-
-        def __init__(self, parent):
-                super(MaskWidget, self).__init__(parent)
-
-                self.label = QLabel(self)
-
-                img = io.imread('/home/wanglab/src/motherMachineSegger/data_from_deepLearning/commonDir/masks/cells/20181011_JDW3308_StagePosition01_68_Channel1-0103.tif')
-                img[img>0] = 255
-                self.RGBImg = color.gray2rgb(img).astype('uint8')
-                self.originalHeight = self.RGBImg.shape[0]
-                self.originalWidth = self.RGBImg.shape[1]
-                self.maskQimage = QImage(self.RGBImg, self.originalWidth, self.originalHeight, self.RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-
-                self.drawing = False
-                self.brushSize = 2
-                self.brushColor = Qt.black
-                self.lastPoint = QPoint()
-
-        def mousePressEvent(self, event):
-                if event.button() == Qt.LeftButton:
-                        self.drawing = True
-                        self.lastPoint = event.pos()
-
-        def mouseMoveEvent(self, event):
-                if (event.buttons() & Qt.LeftButton) & self.drawing:
-                        painter = QPainter(self.maskQimage)
-                        painter.setPen(QPen(self.brushColor, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-                        painter.drawLine(self.lastPoint, event.pos())
-                        self.maskQpixmap = QPixmap(self.maskQimage)
-                        self.label.setPixmap(self.maskQpixmap)
-                        self.lastPoint = event.pos()
-                        self.update()
-
-        def mouseReleaseEvent(self, event):
-                if event.button == Qt.LeftButton:
-                        self.drawing = False
-
-        def save(self):
-                filePath, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(*.png);;JPEG(*.jpg *.jpeg);;TIFF(*.tif *.tiff);;ALL FILES(*.*)")
-                if filePath == "":
-                        return
-                self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio).save(filePath)
-
-        def clear(self):
-                self.maskQimage = QImage(self.RGBImg, self.originalWidth, self.originalHeight, self.RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-                self.update()
-
-        def threePx(self):
-                self.brushSize = 3
-
-        def fivePx(self):
-                self.brushSize = 5
-
-        def sevenPx(self):
-                self.brushSize = 7
-
-        def ninePx(self):
-                self.brushSize = 9
-
-        def blackColor(self):
-                self.brushColor = Qt.black
-
-        def whiteColor(self):
-                self.brushColor = Qt.white
-
-        def redColor(self):
-                self.brushColor = Qt.red
 
 class PhaseWidget(QWidget):
 
@@ -663,7 +643,6 @@ class PhaseWidget(QWidget):
 
                 saveImg = self.originalPhaseQImage.convertToFormat(QImage.Format_Grayscale8)
                 saveImg.save(savePath)
-
 
 if __name__ == "__main__":
 
