@@ -707,7 +707,7 @@ if __name__ == "__main__":
         # write predictions to pickle and text
         mm3.information("Writing channel picking predictions file.")
         with open(os.path.join(ana_dir,"channel_picker_CNN_results.pkl"), 'wb') as preds_file:
-            pickle.dump(predictionDict, preds_file, protocol=HIGHEST_PROTOCOL)
+            pickle.dump(predictionDict, preds_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"channel_picker_CNN_results.txt"), 'w') as preds_file:
             pprint(predictionDict, stream=preds_file)
         mm3.information("Wrote channel picking predictions files.")
@@ -759,7 +759,7 @@ if __name__ == "__main__":
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
         with open(os.path.join(ana_dir,"crosscorrs.pkl"), 'wb') as xcorrs_file:
-            pickle.dump(crosscorrs, xcorrs_file, protocol=HIGHEST_PROTOCOL)
+            pickle.dump(crosscorrs, xcorrs_file, protocol=pickle.HIGHEST_PROTOCOL)
         with open(os.path.join(ana_dir,"crosscorrs.txt"), 'w') as xcorrs_file:
             pprint(crosscorrs, stream=xcorrs_file)
         mm3.information("Wrote cross correlations files.")

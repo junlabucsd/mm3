@@ -101,7 +101,7 @@ if __name__ == "__main__":
         # save cell pickle of filtered cells.
         if False:
             with open(os.path.join(p['cell_dir'],'complete_cells_filtered.pkl'), 'wb') as cell_file:
-                pickle.dump(Cells, cell_file, protocol=HIGHEST_PROTOCOL)
+                pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     ### From here, change flags to True for different data transformations that you want
     # Save complete cells into a dictionary of dictionaries.
@@ -112,7 +112,7 @@ if __name__ == "__main__":
         if False:
             # save pickle version.
             with open(os.path.join(p['cell_dir'],'/cells_dict.pkl'), 'wb') as cell_file:
-                pickle.dump(Cells_dict, cell_file, protocol=HIGHEST_PROTOCOL)
+                pickle.dump(Cells_dict, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         if False:
             # The text file version of the dictionary is good for easy glancing
