@@ -101,7 +101,7 @@ if __name__ == "__main__":
     # Output data to both dictionary and the .mat format used by the GUI
     cell_filename = os.path.basename(cell_file_path)
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:
-        pickle.dump(Cells, cell_file, protocol=2)
+        pickle.dump(Cells, cell_file, protocol=HIGHEST_PROTOCOL)
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
         sio.savemat(cell_file, Cells)
 
