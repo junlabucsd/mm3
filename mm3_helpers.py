@@ -2840,7 +2840,7 @@ class Cell():
             self.elong_rate = p[0] * 60.0 # convert to hours
         except:
             self.elong_rate = np.float64('NaN')
-            mm3.warining('Elongation rate calculate failed for {}.'.format(self.id))
+            warning('Elongation rate calculate failed for {}.'.format(self.id))
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end

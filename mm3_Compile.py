@@ -119,7 +119,7 @@ if __name__ == "__main__":
     if not p['compile']['do_metadata']:
         mm3.information("Loading image parameters dictionary.")
 
-        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'r') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'rb') as tiff_metadata:
             analyzed_imgs = pickle.load(tiff_metadata)
 
     else:
