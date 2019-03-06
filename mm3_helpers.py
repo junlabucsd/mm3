@@ -3962,6 +3962,54 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
 
     return
 
+# Calculate pole age of cell and add as attribute
+def calculate_pole_age(Cells):
+    '''Finds the pole age of each end of the cell. Adds this information to the cell object.
+
+    This should maybe move to helpers
+    '''
+
+    # run through once and set up default
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        cell_tmp.poleage = None
+
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        # start from r1 cells which have r1 parents in the list.
+        # these cells are old pole mothers.
+    #     if cell_tmp.parent in Cells and cell_tmp.birth_label == 1:
+
+        # less stringent requirement that the cell just r1
+        if cell_tmp.birth_label == 1:
+
+            # label this cell
+            cell_tmp.poleage = (1000, 0) # closed end age first, 1000 for old pole.
+
+            # label the daughter cell 01 if it is in the list
+            if cell_tmp.daughters[1] in Cells:
+                # sets poleage of this cell and recursively goes through descendents.
+                Cells = set_poleages(cell_tmp.daughters[1], 1, Cells)
+
+    return Cells
+
+def set_poleages(cell_id, daughter_index, Cells):
+    '''Determines pole ages for cells. Only for cells which are not old-pole mother.'''
+
+    parent_poleage = Cells[Cells[cell_id].parent].poleage
+
+    # the lower daughter
+    if daughter_index == 0:
+        Cells[cell_id].poleage = (parent_poleage[0]+1, 0)
+    elif daughter_index == 1:
+        Cells[cell_id].poleage = (0, parent_poleage[1]+1)
+
+#     print(cell_id, Cells[cell_id].poleage)
+
+    for i, daughter_id in enumerate(Cells[cell_id].daughters):
+        if daughter_id in Cells:
+            Cells = set_poleages(daughter_id, i, Cells)
+
+    return Cells
+
 def poly2o(x, a, b, c):
     '''Second order polynomial of the form
        y = a*x^2 + bx + c'''
