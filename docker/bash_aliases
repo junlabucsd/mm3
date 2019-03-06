@@ -9,13 +9,26 @@ get_IP ()
 # docker
 alias docker='sudo docker'
 # -v maps your docker image's directories to your computer's
-# bin/bash at the end starts a bash shell rather than a Jupyter notebook, which is the default for the tensorflow docker
-alias docker-mm3-tf='docker run --rm -it -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -h python ucsd/mm3-tf:16.04 /bin/bash'
+
 alias x11-tunnel='socat TCP-LISTEN:6000,reuseaddr,fork UNIX-CLIENT:\"$DISPLAY\"'
 
 
 docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/16.04-tf-py3:test20190305c
 
-docker run -it --rm -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:20190305a
+docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:20190305a
 
 docker run -it --rm -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3:pipjupyter
+
+docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3:pipjupyter
+
+# bin/bash at the end starts a bash shell rather than a Jupyter notebook, which is the default for the tensorflow docker
+
+docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:20190305a /bin/bash
+
+docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:20190305a /bin/bash
+
+docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
+
+docker run -it --rm -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
+
+docker run -it --rm -u $(id -u):$(id -g) -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash

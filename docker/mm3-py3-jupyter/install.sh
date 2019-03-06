@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# This is done in the Dockerfile
-# echo "update sources and upgrade distro"
-# apt-get update
-# apt dist-upgrade -y
-
-# These things are already installed with the tf image, except tk
 # -y means yes
 apt-get install -y python3-tk
 
