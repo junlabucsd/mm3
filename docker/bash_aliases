@@ -29,6 +29,8 @@ docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/ho
 
 docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
 
+docker run -it --rm -p 9888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
+
 docker run -it --rm -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
 
 docker run -it --rm -u $(id -u):$(id -g) -p 8888:8888 -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 -v /Volumes/GoogleDrive:/media/GoogleDrive -v /Volumes/GoogleDrive:/Volumes/GoogleDrive -h python local/mm3-py3-jupyter:jt /bin/bash
