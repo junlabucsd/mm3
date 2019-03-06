@@ -3711,7 +3711,13 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table = load_time_table()
+    load_time_table()
+    times_all = []
+    for fov in params['time_table']:
+        times_all = np.append(times_all, list(params['time_table'][fov].keys()))
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
 
     # Loop through cells
