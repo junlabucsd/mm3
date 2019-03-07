@@ -70,6 +70,7 @@ if __name__ == "__main__":
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+    GUI.init_params(param_file_path)
 
     if namespace.fov:
         user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
