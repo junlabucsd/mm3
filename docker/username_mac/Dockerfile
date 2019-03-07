@@ -1,26 +1,31 @@
-# EDIT THE USER, WORKDIR, GROUPNAME names and IDs
+# Edit the variables:
+# _USERNAME_, _USERID_, _GROUPNAME_, and _GROUPID_ below
 
-FROM local/mm3-py3-jupyter:root
+# For the Jupyter build, use local/mm3-py3-jupyter:root
+FROM local/mm3-py3:root
 
-# remove inconvenient id
+# remove inconvenient id (Mac OSX)
 USER 0
-RUN groupmod -g 200 dialout
+RUN groupmod -g 200 dialout # Change group 20 (dialout) to 200
 RUN find / -gid 20 ! -type l -exec chgrp 200 {} \; 2>&1 > /dev/null | { grep -v 'No such file or directory' >&2; [ $? -eq 1 ];  }
 RUN groupmod -g 20 staff && \
     find / -gid 50 ! -type l -exec chgrp 20 {} \; 2>&1 > /dev/null | { grep -v 'No such file or directory' >&2; [ $? -eq 1 ];  }
 
-# install package for mac OSX socket sharing through x11
-RUN apt-get install -y libglu1-mesa
+# Add new sudo user
+# Edit these
+ENV USERNAME _USERNAME_
+ENV USERID _USERID_
+ENV GROUPNAME _GROUPNAME_
+ENV GROUPID _GROUPID_
 
-# add new sudo user
-ENV USERNAME jt
-ENV GROUPNAME staff
-RUN useradd -N -m $USERNAME --uid 504 --gid 20 && \
+# Don't edit this, it uses the variables above
+RUN useradd -N -m $USERNAME --uid $USERID --gid $GROUPID && \
     echo "$USERNAME:$GROUPNAME" | chpasswd && \
     usermod --shell /bin/bash $USERNAME && \
     usermod -aG sudo $USERNAME && \
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME && \
     chmod 0440 /etc/sudoers.d/$USERNAME
 
-USER jt
-WORKDIR /home/jt
+# Edit these
+USER _USERNAME_
+WORKDIR /home/_USERNAME_
