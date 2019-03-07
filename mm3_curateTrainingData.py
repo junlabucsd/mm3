@@ -54,12 +54,15 @@ if __name__ == "__main__":
     parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-t', '--traindir', type=str,
-                        required=True, help='Absolute path to the directory where you want your "images" and "masks" training data directories to be created and images to be saved')
+                        required=True, help='Absolute path to the directory where you want your "images" and "masks" training data directories to be created and images to be saved.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
     training_dir = namespace.traindir
+    if not os.path.exists(training_dir):
+        mm3.warning('Training directory not found, making directory.')
+        os.makedirs(training_dir)
 
     if namespace.paramfile:
         param_file_path = namespace.paramfile
