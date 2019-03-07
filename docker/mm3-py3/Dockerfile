@@ -1,5 +1,5 @@
 # Tensorflow image based on Ubuntu 16.04 with Python 3 and Jupyter
-FROM tensorflow/tensorflow:1.13.1-py3-jupyter
+FROM tensorflow/tensorflow:1.13.1-py3
 
 # update repositories
 RUN apt-get update && \
@@ -14,6 +14,9 @@ RUN rm -f /etc/localtime /etc/timezone && echo "tzdata tzdata/Areas select Ameri
 
 # Install minimal packages
 RUN apt-get install -y sudo vim less
+
+# install package for mac OSX socket sharing through x11
+RUN apt-get install -y libglu1-mesa
 
 # Copy installation script with Python packages into container and execute
 COPY install_mm3_dependencies.sh /root/
