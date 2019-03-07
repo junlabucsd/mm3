@@ -811,9 +811,9 @@ if __name__ == "__main__":
             #pprint(specs) # uncomment for debugging
 
         else: # just set everything to 1 and go forward.
-
             for fov_id, peaks in six.iteritems(channel_masks):
                 specs[fov_id] = {peak_id: -1 for peak_id in peaks.keys()}
+
     else:
         mm3.information('Loading supplied specifiication file.')
         with open(specfile, 'r') as fin:
