@@ -23,7 +23,7 @@ import traceback # for error messaging
 import warnings # error messaging
 import copy # not sure this is needed
 import h5py # working with HDF5 files
-import cv2 # for curating segmentation results for making new training data
+# import cv2 # for curating segmentation results for making new training data
 
 # scipy and image analysis
 from scipy.signal import find_peaks_cwt # used in channel finding
@@ -63,7 +63,6 @@ font = {'family' : 'sans-serif',
         'size'   : 12}
 mpl.rc('font', **font)
 mpl.rcParams['pdf.fonttype'] = 42
-import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 
 # user modules
@@ -218,8 +217,13 @@ def load_time_table():
     This is so it can be used during Cell creation.
     '''
 
-    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
-        params['time_table'] = pickle.load(time_table_file)
+    # try first for yaml, then for pkl
+    try:
+        with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'rb') as time_table_file:
+            params['time_table'] = yaml.safe_load(time_table_file)
+    except:
+        with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
+            params['time_table'] = pickle.load(time_table_file)
 
     return
 
@@ -229,12 +233,20 @@ def load_channel_masks():
     '''
     information("Loading channel masks dictionary.")
 
+    # try loading from .yaml before .pkl
     try:
-        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
-        with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
-            channel_masks = pickle.load(cmask_file)
-    except ValueError:
-        warning('Could not load channel masks dictionary.')
+        information('Path:', os.path.join(params['ana_dir'], 'channel_masks.yaml'))
+        with open(os.path.join(params['ana_dir'], 'channel_masks.yaml'), 'r') as cmask_file:
+            channel_masks = yaml.safe_load(cmask_file)
+    except:
+        warning('Could not load channel masks dictionary from .yaml.')
+
+        try:
+            information('Path:', os.path.join(params['ana_dir'], 'channel_masks.pkl'))
+            with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'rb') as cmask_file:
+                channel_masks = pickle.load(cmask_file)
+        except ValueError:
+            warning('Could not load channel masks dictionary from .pkl.')
 
     return channel_masks
 
@@ -599,13 +611,15 @@ def make_time_table(analyzed_imgs):
         else:
             t_in_seconds = np.around((idata['t'] - first_time) * params['moviemaker']['seconds_per_time_index'], decimals=0).astype('uint32')
 
-        time_table[idata['fov']][idata['t']] = t_in_seconds
+        time_table[idata['fov']][idata['t']] = int(t_in_seconds)
 
     # save to .pkl. This pkl will be loaded into the params
-    with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
-        pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
-    with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
-        pprint(time_table, stream=time_table_file)
+    # with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
+    #     pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
+    # with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
+    #     pprint(time_table, stream=time_table_file)
+    with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'w') as time_table_file:
+        yaml.dump(data=time_table, stream=time_table_file, default_flow_style=False, tags=None)
     information('Time table saved.')
 
     return time_table
@@ -629,7 +643,6 @@ def save_tiffs(imgDict, analyzed_imgs, fov_id):
 
             channel_filename = os.path.join(savePath, params['experiment_name'] + '_xy{0:0=3}_p{1:0=4}_c{2}.tif'.format(fov_id, peak, planeNumber))
             io.imsave(channel_filename, img[:,:,:,int(planeNumber)-1])
-
 
 # slice_and_write cuts up the image files one at a time and writes them out to tiff stacks
 def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
@@ -1437,25 +1450,38 @@ def make_masks(analyzed_imgs):
         # f_id = int(fov)
         for peak, chnl_mask in six.iteritems(peaks):
             # p_id = int(peak)
-            # just add length to the open end (top of image, low column)
+            # just add length to the open end (bottom of image, low column)
             if chnl_mask[0][1] - chnl_mask[0][0] !=  max_chnl_mask_len:
                 cm_copy[fov][peak][0][1] = chnl_mask[0][0] + max_chnl_mask_len
             # enlarge widths around the middle, but make sure you don't get floats
             if chnl_mask[1][1] - chnl_mask[1][0] != max_chnl_mask_wid:
                 wid_diff = max_chnl_mask_wid - (chnl_mask[1][1] - chnl_mask[1][0])
                 if wid_diff % 2 == 0:
-                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - wid_diff/2, 0))
-                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + wid_diff/2, image_cols - 1))
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - wid_diff/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + wid_diff/2, image_cols - 1)
                 else:
-                    cm_copy[fov][peak][1][0] = int(max(chnl_mask[1][0] - (wid_diff-1)/2, 0))
-                    cm_copy[fov][peak][1][1] = int(min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1))
+                    cm_copy[fov][peak][1][0] = max(chnl_mask[1][0] - (wid_diff-1)/2, 0)
+                    cm_copy[fov][peak][1][1] = min(chnl_mask[1][1] + (wid_diff+1)/2, image_cols - 1)
 
+            # convert all values to ints
+            chnl_mask[0][0] = int(chnl_mask[0][0])
+            chnl_mask[0][1] = int(chnl_mask[0][1])
+            chnl_mask[1][0] = int(chnl_mask[1][0])
+            chnl_mask[1][1] = int(chnl_mask[1][1])
+
+            # cm_copy[fov][peak] = {'y_top': chnl_mask[0][0],
+            #                       'y_bot': chnl_mask[0][1],
+            #                       'x_left': chnl_mask[1][0],
+            #                       'x_right': chnl_mask[1][1]}
+            # print(type(cm_copy[fov][peak][1][0]), cm_copy[fov][peak][1][0])
 
     #save the channel mask dictionary to a pickle and a text file
-    with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
-        pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
+    # with open(os.path.join(params['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
+    #     pickle.dump(cm_copy, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
     with open(os.path.join(params['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:
-        pprint(channel_masks, stream=cmask_file)
+        pprint(cm_copy, stream=cmask_file)
+    with open(os.path.join(params['ana_dir'], 'channel_masks.yaml'), 'w') as cmask_file:
+        yaml.dump(data=cm_copy, stream=cmask_file, default_flow_style=False, tags=None)
 
     information("Channel masks saved.")
 
@@ -2793,7 +2819,7 @@ class Cell():
         self.delta = self.sd - self.sb
 
         # generation time. Use more accurate times and convert to minutes
-        self.tau = (self.abs_times[-1] - self.abs_times[0]) / 60.0
+        self.tau = np.float64((self.abs_times[-1] - self.abs_times[0]) / 60.0)
 
         # include the data points from the daughters
         self.lengths_w_div = [l * params['pxl2um'] for l in self.lengths] + [self.sd]
@@ -2806,14 +2832,15 @@ class Cell():
                                        np.pi * (self.widths_w_div[i]/2)**2 +
                                        (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
-        # calculate elongation rate
+        # calculate elongation rate.
         try:
-            times = (self.abs_times - self.abs_times[0]) / 60.0
-            log_lengths = np.log(self.lengths_w_div)
-            p = np.polyfit(times, log_lengths, 1)
+            times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
+            log_lengths = np.float64(np.log(self.lengths_w_div))
+            p = np.polyfit(times, log_lengths, 1) # this wants float64
             self.elong_rate = p[0] * 60.0 # convert to hours
         except:
-            self.elong_rate = float('NaN')
+            self.elong_rate = np.float64('NaN')
+            warning('Elongation rate calculate failed for {}.'.format(self.id))
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
@@ -3584,9 +3611,7 @@ def ring_analysis(fov_id, peak_id, Cells, ring_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
+    time_table = load_time_table()
     times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
     t0 = times_all[0] # first time index
 
@@ -3686,10 +3711,13 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    load_time_table()
+    times_all = []
+    for fov in params['time_table']:
+        times_all = np.append(times_all, list(params['time_table'][fov].keys()))
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
 
     # Loop through cells
@@ -3760,10 +3788,7 @@ def x_profile_analysis(fov_id, peak_id, Cells, profile_plane='sub_c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    time_table = load_time_table()
     t0 = times_all[0] # first time index
 
     # Loop through cells
@@ -3864,10 +3889,7 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    time_table_path = os.path.join(params['ana_dir'], 'time_table.pkl')
-    with open(time_table_path, 'r') as fin:
-        time_table = pickle.load(fin)
-    times_all = np.array(np.sort(time_table[fov_id].keys()), np.int_)
+    time_table = load_time_table()
     t0 = times_all[0] # first time index
 
     # Loop through cells
@@ -3945,6 +3967,54 @@ def constriction_analysis(fov_id, peak_id, Cells, plane='sub_c1'):
         setattr(Cell, 'constriction_time', Cell.times[constriction_index])
 
     return
+
+# Calculate pole age of cell and add as attribute
+def calculate_pole_age(Cells):
+    '''Finds the pole age of each end of the cell. Adds this information to the cell object.
+
+    This should maybe move to helpers
+    '''
+
+    # run through once and set up default
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        cell_tmp.poleage = None
+
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        # start from r1 cells which have r1 parents in the list.
+        # these cells are old pole mothers.
+    #     if cell_tmp.parent in Cells and cell_tmp.birth_label == 1:
+
+        # less stringent requirement that the cell just r1
+        if cell_tmp.birth_label == 1:
+
+            # label this cell
+            cell_tmp.poleage = (1000, 0) # closed end age first, 1000 for old pole.
+
+            # label the daughter cell 01 if it is in the list
+            if cell_tmp.daughters[1] in Cells:
+                # sets poleage of this cell and recursively goes through descendents.
+                Cells = set_poleages(cell_tmp.daughters[1], 1, Cells)
+
+    return Cells
+
+def set_poleages(cell_id, daughter_index, Cells):
+    '''Determines pole ages for cells. Only for cells which are not old-pole mother.'''
+
+    parent_poleage = Cells[Cells[cell_id].parent].poleage
+
+    # the lower daughter
+    if daughter_index == 0:
+        Cells[cell_id].poleage = (parent_poleage[0]+1, 0)
+    elif daughter_index == 1:
+        Cells[cell_id].poleage = (0, parent_poleage[1]+1)
+
+#     print(cell_id, Cells[cell_id].poleage)
+
+    for i, daughter_id in enumerate(Cells[cell_id].daughters):
+        if daughter_id in Cells:
+            Cells = set_poleages(daughter_id, i, Cells)
+
+    return Cells
 
 def poly2o(x, a, b, c):
     '''Second order polynomial of the form

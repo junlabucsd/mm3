@@ -88,12 +88,18 @@ if __name__ == "__main__":
     mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # only analyze images up until this t point. Put in None otherwise
-    t_end = p['compile']['t_end']
-    if t_end == 'None':
+    if 't_end' in p['compile']:
+        t_end = p['compile']['t_end']
+        if t_end == 'None':
+            t_end = None
+    else:
         t_end = None
     # only analyze images at and after this t point. Put in None otherwise
-    t_start = p['compile']['t_start']
-    if t_start == 'None':
+    if 't_start' in p['compile']:
+        t_start = p['compile']['t_start']
+        if t_start == 'None':
+            t_start = None
+    else:
         t_start = None
 
     # create the subfolders if they don't
@@ -113,7 +119,7 @@ if __name__ == "__main__":
     if not p['compile']['do_metadata']:
         mm3.information("Loading image parameters dictionary.")
 
-        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'r') as tiff_metadata:
+        with open(os.path.join(p['ana_dir'], 'TIFF_metadata.pkl'), 'rb') as tiff_metadata:
             analyzed_imgs = pickle.load(tiff_metadata)
 
     else:
@@ -126,6 +132,7 @@ if __name__ == "__main__":
 
         # keep images starting at this timepoint
         if t_start:
+            mm3.information('Removing images before time {}'.format(t_start))
             # go through list and find first place where timepoint is equivalent to t_start
             for n, ifile in enumerate(found_files):
                 string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_start,t_start)) # account for 3 and 4 digit
@@ -137,14 +144,13 @@ if __name__ == "__main__":
 
         # remove images after this timepoint
         if t_end:
+            mm3.information('Removing images after time {}'.format(t_end))
             # go through list and find first place where timepoint is equivalent to t_end
             for n, ifile in enumerate(found_files):
                 string = re.compile('t%03dxy|t%04dxy' % (t_end, t_end)) # account for 3 and 4 digit
-                # if re.search == True then a match was found
                 if re.search(string, ifile):
-                    # cut off found files
                     found_files = found_files[:n]
-                    break # get out of the loop
+                    break
 
 
         # if user has specified only certain FOVs, filter for those
@@ -517,16 +523,17 @@ if __name__ == "__main__":
 
         if p['compile']['find_channels_method'] == 'peaks':
             # only calculate channels masks from images before t_end in case it is specified
+            if t_start:
+                analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if i_metadata['t'] >= t_start}
             if t_end:
-                analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if
-                                 i_metadata['t'] <= t_end}
+                analyzed_imgs = {fn : i_metadata for fn, i_metadata in six.iteritems(analyzed_imgs) if i_metadata['t'] <= t_end}
 
             # Uses channel mm3.information from the already processed image data
             channel_masks = mm3.make_masks(analyzed_imgs)
 
         elif p['compile']['find_channels_method'] == 'Unet':
 
-            #save the channel mask dictionary to a pickle and a text file
+            # save the channel mask dictionary to a pickle and a text file
             with open(os.path.join(p['ana_dir'], 'channel_masks.pkl'), 'wb') as cmask_file:
                 pickle.dump(channel_masks, cmask_file, protocol=pickle.HIGHEST_PROTOCOL)
             with open(os.path.join(p['ana_dir'], 'channel_masks.txt'), 'w') as cmask_file:

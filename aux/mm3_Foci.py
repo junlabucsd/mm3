@@ -26,7 +26,7 @@ mm3_dir = os.path.realpath(os.path.abspath(
                                  inspect.currentframe()))[0], '..')))
 if mm3_dir not in sys.path:
     sys.path.insert(0, mm3_dir)
-    
+
 import mm3_helpers as mm3
 import mm3_plots as mm3_plots
 
