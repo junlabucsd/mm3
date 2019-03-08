@@ -1,0 +1,23 @@
+# EDIT THESE FOR YOUR USE AND ADD THEM TO YOUR ~/.bash_aliases
+alias docker='sudo docker'
+
+### Linux launchers
+# Launch the root image with your username
+alias docker-mm3-py3='docker run -it --rm -u $(id -u):$(id -g) -p 8888:8888 -e DISPLAY=$DISPLAY -v /home/USERNAME:/home/USERNAME local/mm3-py3:root'
+
+# Luanches the image with your username. Put your username here in place of USERNAME
+alias docker-mm3-py3='docker run -it --rm -p 8888:8888 -e DISPLAY=$DISPLAY -v /home/USERNAME:/home/USERNAME local/mm3-py3:USERNAME'
+
+### OSX launchers
+# Usese the functions below to connect to your display for the GUI.
+alias docker-mm3-py3='docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/USERNAME:/home/USERNAME -v /Users/USERNAME:/Users/USERNAME local/mm3-py3:USERNAME'
+
+# OSX functions for tunneling docker output
+get_IP ()
+{
+  myip=$(ifconfig | grep "inet " | grep -Fv 127.0.0.1 | head -n 1 | awk '{print $2}')
+  echo $myip
+}
+
+# Run 'x11-tunnel' in a separate terminal window
+alias x11-tunnel='socat TCP-LISTEN:6000,reuseaddr,fork UNIX-CLIENT:\"$DISPLAY\"'
