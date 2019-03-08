@@ -142,8 +142,8 @@ if __name__ == "__main__":
 
     # hard parameters
     # path to FFMPEG
-    FFMPEG_BIN = sp.check_output("which ffmpeg", shell=True).replace('\n','')
-    #FFMPEG_BIN = "/usr/local/bin/ffmpeg" # location where FFMPEG is installed
+    # FFMPEG_BIN = sp.check_output("which ffmpeg", shell=True).replace('\n','')
+    FFMPEG_BIN = "/usr/bin/ffmpeg" # location where FFMPEG is installed
 
     # path to font for label
     fontfile = "/Library/Fonts/Andale Mono.ttf"    # Mac OS location
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_MovieMaker.py',
                                      description='Make .mpg movies from TIFF images.')
-    parser.add_argument('-f', '--paramfile',  type=file,
+    parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
@@ -167,8 +167,8 @@ if __name__ == "__main__":
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -182,18 +182,25 @@ if __name__ == "__main__":
     # assign shorthand directory names
     TIFF_dir = os.path.join(p['experiment_directory'], p['image_directory']) # source of images
     movie_dir = os.path.realpath(os.path.join(p['experiment_directory'], p['moviemaker']['movie_directory']))
-
-    print(movie_dir)
+    mm3.information('Saving movies to {}.'.format(movie_dir))
 
     # set up movie folder if it does not already exist
     if not os.path.exists(movie_dir):
         os.makedirs(movie_dir)
 
-    # port over labels from yaml file
+    # port over parameters from yaml file
+    image_start = p['moviemaker']['image_start']
+    if image_start == 'None':
+        image_start = None
+    image_end = p['moviemaker']['image_end']
+    if image_end == 'None':
+        image_end = None
     show_time_stamp = p['moviemaker']['show_time_stamp']
     show_label = p['moviemaker']['show_label']
     label1_text = p['moviemaker']['label1_text']
     shift_time = p['moviemaker']['shift_time']
+    if shift_time == 'None':
+        shift_time = None
     label2_text = p['moviemaker']['label2_text']
     show_scalebar = p['moviemaker']['show_scalebar']
     scalebar_length_um = p['moviemaker']['scalebar_length_um']
@@ -248,8 +255,8 @@ if __name__ == "__main__":
         # use first image to set size of frame
         image = tiff.imread(images[0]) # pull out an image
         size_x, size_y = image.shape[-1], image.shape[-2]
-        size_x = (size_x / 2) * 2 # fixes bug if images don't have even dimensions with ffmpeg
-        size_y = (size_y / 2) * 2
+        size_x = int((size_x / 2) * 2) # fixes bug if images don't have even dimensions with ffmpeg
+        size_y = int((size_y / 2) * 2)
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -283,8 +290,9 @@ if __name__ == "__main__":
         for img in images:
             # skip images not specified by param file.
             t = mm3.get_time(img)
-            if ((p['moviemaker']['image_start'] and t < p['moviemaker']['image_start']) and
-                (p['moviemaker']['image_end'] and t > p['moviemaker']['image_end'])):
+            if image_start and t <= image_start:
+                continue
+            if image_end and t >= image_end:
                 continue
 
             image_data = tiff.imread(img) # get the image
