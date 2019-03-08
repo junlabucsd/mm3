@@ -365,7 +365,8 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
             ax[-1].plot(ccs, range(len(ccs)))
             ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
         else:
-            ax[-1].plot(np.zeros(10), range(10))
+            pass
+            # ax[-1].plot(np.zeros(10), range(10))
 
         ax[-1].set_xlim((0.8,1))
         ax[-1].get_xaxis().set_ticks([])
@@ -828,10 +829,10 @@ if __name__ == "__main__":
         # go through the fovs again, same as above
         for fov_id in fov_id_list:
 
-            if crosscorrs:
-                specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
-            elif do_CNN:
+            if do_CNN:
                 specs = fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
+            else: # crosscorrs == None will default to just picking with no help.
+                specs = fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images)
 
     else:
         outputdir = os.path.join(ana_dir, "fovs")
