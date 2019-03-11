@@ -813,7 +813,7 @@ def plot_distributions(Cells_df, color='b', title='Distributions'):
 
         ax[i].get_yaxis().set_ticks([])
         # ax[i].set_ylabel('pdf')
-        ax[i].legend(['$\mu$=%.3f, CV=%.2f' % (data_mean, data_cv)], fontsize=SMALL_SIZE, loc=1)
+        ax[i].legend(['$\mu$=%.3f, CV=%.2f' % (data_mean, data_cv)], fontsize=SMALL_SIZE, loc=1, frameon=False)
 
     sns.despine(left=True)
     plt.tight_layout()
@@ -1053,7 +1053,7 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
     if figlabelcols == None:
         figlabelcols = int(len(exps)/2)
     fig.legend(handles, labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize)
+               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
@@ -1124,7 +1124,7 @@ def plotmulti_phase_dist(data, exps, figlabelcols=None):
         ax[i].set_title(titles[i])
         ax[i].set_xlabel(xlabels[i])
         ax[i].get_yaxis().set_ticks([])
-        ax[i].legend(loc=1)
+        ax[i].legend(loc=1, frameon=False)
         ax[i].set_xlim(0, 2*xlimmaxs[i])
 
     # legend for whole figure
@@ -1138,7 +1138,7 @@ def plotmulti_phase_dist(data, exps, figlabelcols=None):
         figlabelcols = int(len(exps)/2)
 
     fig.legend(handles, labels,
-               ncol=figlabelcols, loc=8, fontsize=SMALL_SIZE)
+               ncol=figlabelcols, loc=8, fontsize=SMALL_SIZE, frameon=False)
 
     sns.despine(left=True)
     plt.tight_layout()
@@ -1374,7 +1374,7 @@ def plotmulti_phase_paramtime(data, exps, window=30):
                                      lw=2, alpha=0.9))
         labels.append(data[key]['name'])
     fig.legend(handles, labels,
-               ncol=4, loc=8, fontsize=MEDIUM_SIZE)
+               ncol=4, loc=8, fontsize=MEDIUM_SIZE, frameon=False)
 
     sns.despine()
     plt.tight_layout()
@@ -1442,7 +1442,8 @@ def plot_hex_time(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=
 
         p.set_cmap(cmap=plt.cm.Blues) # set color and style
 
-    ax[5].legend(['%s frame binned average' % moving_window], loc='lower right')
+    ax[5].legend(['%s frame binned average' % moving_window], loc='lower right',
+                 frameon=False)
     ax[4].set_xlabel('%s [frame]' % time_mark)
     ax[5].set_xlabel('%s [frame]' % time_mark)
 
@@ -1498,7 +1499,8 @@ def plot_derivative(Cells_df, time_mark='birth_time', x_extents=None, time_windo
         ax[i].set_title(titles[i], size=18)
         ax[i].set_ylabel(ylabels[i], size=16)
 
-    ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right')
+    ax[5].legend(['%s minute binned average' % time_window], fontsize=14, loc='lower right',
+                 frameon=False)
     ax[4].set_xlabel('Frame [min/5]', size=16)
     ax[5].set_xlabel('Frame [min/5]', size=16)
 
@@ -1607,7 +1609,7 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
     ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=22)
     ax.set_ylabel('Growth rate [hours$^{-1}$]', size=20)
     ax.set_xlabel('Time [min]', size=20)
-    ax.legend(loc='lower right', fontsize=16)
+    ax.legend(loc='lower right', fontsize=16, frameon=False)
 
     return fig, ax
 
@@ -1715,7 +1717,7 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, pearson=False, legend_loc
         a.set_xlim(0, None)
         a.set_ylim(0, None)
         if pearson:
-            a.legend(loc=legend_loc, fontsize=SMALL_SIZE*0.75)
+            a.legend(loc=legend_loc, fontsize=SMALL_SIZE*0.75, frameon=False)
 
     for i, prow in enumerate(plot_params):
         for j, pcol in enumerate(plot_params):
@@ -1732,7 +1734,7 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, pearson=False, legend_loc
                                      lw=2, alpha=0.9))
         labels.append(data[exp]['name'])
     fig.legend(handles, labels,
-               ncol=len(exps), loc=8, fontsize=MEDIUM_SIZE)
+               ncol=len(exps), loc=8, fontsize=MEDIUM_SIZE, frameon=False)
 
     # sns.despine()
     plt.tight_layout()
@@ -1827,7 +1829,7 @@ def plotmulti_corrs_vs_one(data, exps, y_params=None, x_param='elong_rate'):
                                      lw=2, alpha=0.9))
         labels.append(data[exp]['name'])
     fig.legend(handles, labels,
-               ncol=4, loc=8, fontsize=MEDIUM_SIZE)
+               ncol=4, loc=8, fontsize=MEDIUM_SIZE, frameon=False)
 
     # sns.despine()
     fig.tight_layout()
@@ -1937,7 +1939,7 @@ def plotmulti_corr(data, exps, param_pairs=None, rescale_data=False, binmin=20, 
             a.set_ylim(0, None)
 
         if pearson:
-            a.legend(loc=1, fontsize=legendfontsize)
+            a.legend(loc=1, fontsize=legendfontsize, frameon=False)
 
     # remove axis for plots that are not there
     for ax_no in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
@@ -1954,7 +1956,7 @@ def plotmulti_corr(data, exps, param_pairs=None, rescale_data=False, binmin=20, 
     if figlabelcols == None:
         figlabelcols = int(len(exps)/2)
     fig.legend(handles, labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize)
+               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     # sns.despine()
     fig.tight_layout()

@@ -229,6 +229,16 @@ The `bash_aliases` file  described in **3.5 Setting up shortcuts** has two usefu
 
 TBA
 
+`docker build -t local/mm3-py3-jupyter:root .`
+
+
+`docker build -t local/mm3-py3-jupyter:USERNAME`
+
+
+`docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 local/mm3-py3-jupyter:jt /bin/bash`
+
+for some reason this does not require x11-tunnel
+
 ### 3.5 Setting up shortcuts
 
 Typing the big run command every time is annoying, so to get around that add an alias to your `.bash_aliases` file in your home folder. Look in section **1.2.1 Avoid entering sudo with bash alias** for directions on setting up a `.bash_aliases` file.
