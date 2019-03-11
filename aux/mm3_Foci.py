@@ -1,5 +1,6 @@
 #!/usr/bin/python
 from __future__ import print_function
+import six
 
 # import modules
 import sys
@@ -28,7 +29,46 @@ if mm3_dir not in sys.path:
     sys.path.insert(0, mm3_dir)
 
 import mm3_helpers as mm3
-import mm3_plots as mm3_plots
+
+def organize_cells_by_channel(Cells, specs):
+    '''
+    Returns a nested dictionary where the keys are first
+    the fov_id and then the peak_id (similar to specs),
+    and the final value is a dictiary of cell objects that go in that
+    specific channel, in the same format as normal {cell_id : Cell, ...}
+    '''
+
+    # make a nested dictionary that holds lists of cells for one fov/peak
+    Cells_by_peak = {}
+    for fov_id in specs.keys():
+        Cells_by_peak[fov_id] = {}
+        for peak_id, spec in specs[fov_id].items():
+            # only make a space for channels that are analyized
+            if spec == 1:
+                Cells_by_peak[fov_id][peak_id] = {}
+
+    # organize the cells
+    for cell_id, Cell in Cells.items():
+        Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+
+    # remove peaks and that do not contain cells
+    remove_fovs = []
+    for fov_id, peaks in six.iteritems(Cells_by_peak):
+        remove_peaks = []
+        for peak_id in peaks.keys():
+            if not peaks[peak_id]:
+                remove_peaks.append(peak_id)
+
+        for peak_id in remove_peaks:
+            peaks.pop(peak_id)
+
+        if not Cells_by_peak[fov_id]:
+            remove_fovs.append(fov_id)
+
+    for fov_id in remove_fovs:
+        Cells_by_peak.pop(fov_id)
+
+    return Cells_by_peak
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -39,16 +79,16 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Foci.py',
                                      description='Finds foci.')
-    parser.add_argument('-f', '--paramfile', type=file,
+    parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
-    parser.add_argument('-c', '--cellfile', type=file,
+    parser.add_argument('-c', '--cellfile', type=str,
                         required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
@@ -57,12 +97,12 @@ if __name__ == "__main__":
     # load cell file
     mm3.information('Loading cell data.')
     if namespace.cellfile:
-        cell_file_path = namespace.cellfile.name
+        cell_file_path = namespace.cellfile
     else:
         mm3.warning('No cell file specified. Using complete_cells.pkl.')
         cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
 
-    with open(cell_file_path, 'r') as cell_file:
+    with open(cell_file_path, 'rb') as cell_file:
         Cells = pickle.load(cell_file)
 
     # load specs file
@@ -78,7 +118,7 @@ if __name__ == "__main__":
     mm3.information("Starting foci analysis.")
 
     # create dictionary which organizes cells by fov and peak_id
-    Cells_by_peak = mm3_plots.organize_cells_by_channel(Cells, specs)
+    Cells_by_peak = organize_cells_by_channel(Cells, specs)
 
     # for each set of cells in one fov/peak, find the foci
     for fov_id in fov_id_list:

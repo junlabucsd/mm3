@@ -3207,10 +3207,14 @@ def foci_analysis(fov_id, peak_id, Cells):
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
-    # Load time table to determine first image index.
-    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
+    # determine absolute time index
+    times_all = []
+    for fov, times in params['time_table'].items():
+        times_all = np.append(times_all, list(times.keys()))
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all, np.int_)
     t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
 
     for cell_id, cell in six.iteritems(Cells):
 
@@ -4007,8 +4011,6 @@ def set_poleages(cell_id, daughter_index, Cells):
         Cells[cell_id].poleage = (parent_poleage[0]+1, 0)
     elif daughter_index == 1:
         Cells[cell_id].poleage = (0, parent_poleage[1]+1)
-
-#     print(cell_id, Cells[cell_id].poleage)
 
     for i, daughter_id in enumerate(Cells[cell_id].daughters):
         if daughter_id in Cells:
