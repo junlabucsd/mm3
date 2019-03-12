@@ -2417,16 +2417,16 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
 
     # Choose colormap. Need to add alpha to color map and normalization
     # green/c2
-    max_c2_int = 0
-    min_c2_int = float('inf')
-    for cell_id, cell in lin:
-        for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
-            if max(profile_t) > max_c2_int:
-                max_c2_int = max(profile_t)
-            if min(profile_t) < min_c2_int:
-                min_c2_int = min(profile_t)
-    cmap_c2 = plt.cm.Greens
-    color_norm_c2 = mpl.colors.Normalize(vmin=min_c2_int, vmax=max_c2_int)
+    # max_c2_int = 0
+    # min_c2_int = float('inf')
+    # for cell_id, cell in lin:
+    #     for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
+    #         if max(profile_t) > max_c2_int:
+    #             max_c2_int = max(profile_t)
+    #         if min(profile_t) < min_c2_int:
+    #             min_c2_int = min(profile_t)
+    # cmap_c2 = plt.cm.Greens
+    # color_norm_c2 = mpl.colors.Normalize(vmin=min_c2_int, vmax=max_c2_int)
 
     for cell_id, cell in lin:
         # plot cell length and division lines
@@ -2444,6 +2444,17 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
         last_length = cell.sd
 
         # plot fluorescence on every time point for which it exists.
+        # determine coloring on a cell by cell basis
+        max_c2_int = 0
+        min_c2_int = float('inf')
+        for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
+            if max(profile_t) > max_c2_int:
+                max_c2_int = max(profile_t)
+            if min(profile_t) < min_c2_int:
+                min_c2_int = min(profile_t)
+        cmap_c2 = plt.cm.Greens
+        color_norm_c2 = mpl.colors.Normalize(vmin=min_c2_int, vmax=max_c2_int)
+
         for i, t in enumerate(cell.times):
             if t % fl_int == 1 or fl_int == 1:
                 nuc_x = np.ones(len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) * t * time_int / 60.0 - alt_time
