@@ -135,7 +135,7 @@ Run:
 
 * `-it` is for interactive mode so you can use the terminal (very often used).
 * `--rm` is to remove the container automatically when it closes (very often used).
-* `-p` publishes container's port to the host computer.
+* `-p` publishes container's port to the host computer. This may only be required for the Jupyter notebook. Should test and edit the directions below as needed.
 * `local/mm3-py3:root` is the tag of our image we chose when building.
 * Exit the container with `CTRL + D`
 
