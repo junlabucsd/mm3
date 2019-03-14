@@ -1352,9 +1352,9 @@ def plotmulti_phase_paramtime(data, exps, window=30):
             bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
             ax[i].plot(bin_centers, bin_mean, lw=2, alpha=0.75, color=line_color)
 
-            # set y lim to the highest mean
-            if np.mean(bin_mean) > ylimmaxs[i]:
-                ylimmaxs[i] = np.mean(bin_mean)
+            # set y lim to the highest mean. There may be nans if no items in bin
+            if np.nanmean(bin_mean) > ylimmaxs[i]:
+                ylimmaxs[i] = np.nanmean(bin_mean)
 
     # formatting
     for i, column in enumerate(columns):
@@ -2511,7 +2511,7 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
 
     return fig, ax
 
-def plot_channel_traces(Cells, time_int=1.0, fl_plane='c2', fl_int=1.0, plot_fl=False, plot_foci=False, plot_pole=False, pxl2um=1.0, xlims=None, foci_size=100):
+def plot_channel_traces(Cells, time_int=1.0, fl_plane='c2', alt_time='birth', fl_int=1.0, plot_fl=False, plot_foci=False, plot_pole=False, pxl2um=1.0, xlims=None, foci_size=100):
     '''Plot a cell lineage with profile information. Plots cells at their Y location in the growth channel.
 
     Parameters
@@ -2548,9 +2548,10 @@ def plot_channel_traces(Cells, time_int=1.0, fl_plane='c2', fl_int=1.0, plot_fl=
     lin = sorted(lin, key=lambda x: x[1].birth_time)
 
     # align time to first birth or shift time
-    # alt_time = 0
-    alt_time = lin[0][1].birth_time * time_int / 60.0
-#     alt_time = shift_t * time_int
+    if alt_time == None:
+        alt_time = 0
+    elif alt_time == 'birth':
+        alt_time = lin[0][1].birth_time * time_int / 60.0
 
     # determine last time for xlims
     if xlims == None or xlims[1] == None:
@@ -2693,7 +2694,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
         regions_by_time = [regionprops(timepoint) for timepoint in image_data_seg]
 
         # Color map for good label colors
-        vmin = 0.1 # values under this color go to black
+        vmin = 0.5 # values under this color go to black
         vmax = 100 # max y value
         cmap = mpl.colors.ListedColormap(sns.husl_palette(vmax, h=0.5, l=.8, s=1))
         cmap.set_under(color='black')
@@ -2724,10 +2725,10 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
             # make a new version of the segmented image where the
             # regions are relabeled by their y centroid position.
             # scale it so it falls within 100.
-            seg_relabeled = image_data_seg[i].copy()
+            seg_relabeled = image_data_seg[i].copy().astype(np.float)
             for region in regions_by_time[i]:
                 rescaled_color_index = region.centroid[0]/image_data_seg.shape[1] * vmax
-                seg_relabeled[seg_relabeled == region.label] = rescaled_color_index
+                seg_relabeled[seg_relabeled == region.label] = int(rescaled_color_index)-0.1 # subtract small value to make it so there is not overlabeling
             ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.55, vmin=vmin, vmax=vmax)
 
         ax[i].set_title(str(i + t_adj), color='white')
@@ -2743,7 +2744,6 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
 
     # Annotate each cell with information
     if plot_tracks:
-        print('plotting traces')
         for cell_id in Cells:
             for n, t in enumerate(Cells[cell_id].times):
                 t -= t_adj # adjust for special indexing
