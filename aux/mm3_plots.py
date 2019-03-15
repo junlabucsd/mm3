@@ -1034,7 +1034,7 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
             ax[i].set_xlim(0, 2*xlimmaxs[i])
         ax[i].set_ylim(0, None)
         if individual_legends:
-            ax[i].legend(loc=1, fontsize=legendfontsize)
+            ax[i].legend(loc=1, fontsize=legendfontsize, frameon=False)
 
     # remove axis for plots that are not there
     for ax_no in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
