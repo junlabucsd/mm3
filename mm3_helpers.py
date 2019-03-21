@@ -890,8 +890,12 @@ def fix_orientation(image_data):
 
     # setting image_orientation to 'auto' will use autodetection
     if image_orientation == "auto":
-        # Pick the plane to analyze with the highest mean px value (should be phase)
-        ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
+         # use 'phase_plane' to find the phase plane in image_data, assuming c1, c2, c3... naming scheme here. 
+        try:
+            ph_channel = int(re.search('[0-9]', params['phase_plane']).group(0)) - 1
+        except:
+            # Pick the plane to analyze with the highest mean px value (should be phase)
+            ph_channel = np.argmax([np.mean(image_data[ci]) for ci in range(image_data.shape[0])])
 
         # flip based on the index of the higest average row value
         # this should be closer to the opening
