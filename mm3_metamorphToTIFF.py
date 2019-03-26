@@ -111,7 +111,7 @@ if __name__ == '__main__':
         # skip if we aren't using this time point
         if (t_crop[0] and frame < t_crop[0]) or (t_crop[1] and frame > t_crop[1]):
             continue
-    
+
         new_name = os.path.join(dest_dir, '{}_t{:0=4}xy{:0=2}.tif'.format(file_prefix,
                                                                           frame,
                                                                           stagePosition))
@@ -133,6 +133,5 @@ if __name__ == '__main__':
 
         # save out image
         information("Saving {}.".format(new_name))
-        print(os.path.join(dest_dir,new_name))
+        # print(os.path.join(dest_dir,new_name))
         io.imsave(os.path.join(dest_dir, new_name), img_data)
-
