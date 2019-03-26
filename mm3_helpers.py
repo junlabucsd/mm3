@@ -611,7 +611,7 @@ def make_time_table(analyzed_imgs):
         else:
             t_in_seconds = np.around((idata['t'] - first_time) * params['moviemaker']['seconds_per_time_index'], decimals=0).astype('uint32')
 
-        time_table[idata['fov']][idata['t']] = int(t_in_seconds)
+        time_table[int(idata['fov'])][int(idata['t'])] = int(t_in_seconds)
 
     # save to .pkl. This pkl will be loaded into the params
     # with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
@@ -934,6 +934,17 @@ def get_weights(img, subImageNumber):
         weights[:,(N*(i+1))-25:(N*(i+1)+25)] = 0
     return(weights)
 
+def permute_image(img, trap_align_metadata):
+    # are there three dimensions?
+    if len(img.shape) == 3:
+        if img.shape[0] < 3: # for tifs with fewer than three imageing channels, the first dimension separates channels
+            # img = np.transpose(img, (1,2,0))
+            img = img[trap_align_metadata['phase_plane_index'],:,:] # grab just the phase channel
+        else:
+            img = img[:,:,trap_align_metadata['phase_plane_index']] # grab just the phase channel
+
+    return(img)
+
 def imageConcatenatorFeatures(imgStack, subImageNumber = 64):
 
     rowNumPerImage = int(np.sqrt(subImageNumber)) # here I'm assuming our large images are square, with equal number of crops in each dimension
@@ -1175,6 +1186,9 @@ def crop_traps(fileNames, trapProps, labelledTraps, bboxesDict, trap_align_metad
 
         imgPath = os.path.join(params['experiment_directory'],params['image_directory'],fileNames[frame])
         fullFrameImg = io.imread(imgPath)
+        if len(fullFrameImg.shape) == 3:
+            if fullFrameImg.shape[0] < 3: # for tifs with less than three imaging channels, the first dimension separates channels
+                fullFrameImg = np.transpose(fullFrameImg, (1,2,0))
         trapClosedEndPxDict[fileNames[frame]] = {key:{} for key in bboxesDict.keys()}
 
         for key in trapImagesDict.keys():
@@ -2306,11 +2320,11 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                 # get rid of small holes
                 predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
                 # get rid of small objects.
-                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:]), min_size=min_object_size)
+                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
                 # remove labels which touch the boarder
                 predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
                 # relabel now
-                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:])
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
 
         else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
             information('Converting predictions to grayscale.')
@@ -2429,10 +2443,7 @@ class TrapKymographPredictionDataGenerator(utils.Sequence):
     def __data_generation(self, list_fileNames_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        # X = np.zeros((self.batch_size, *self.dim, self.n_channels)) *** did not work in py2
-        # jt's untested fix
-        shape = np.concatenate(self.batch_size, [dim for dim in self.dim], self.n_channels)
-        X = np.zeros(shape)
+        X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels))
 
         # Generate data
         for i, fName in enumerate(list_fileNames_temp):
