@@ -6,10 +6,10 @@ FROM local/mm3-py3:root
 
 # Add new sudo user
 # Edit these
-ENV USERNAME _USERNAME_
-ENV USERID _USERID_
-ENV GROUPNAME _GROUPNAME_
-ENV GROUPID _GROUPID_
+ENV USERNAME wanglab
+ENV USERID 1000
+ENV GROUPNAME wanglab
+ENV GROUPID 1000
 
 # Don't edit this, it uses the variables above
 RUN useradd -N -m $USERNAME --uid $USERID --gid $GROUPID && \
@@ -20,5 +20,5 @@ RUN useradd -N -m $USERNAME --uid $USERID --gid $GROUPID && \
     chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Edit these
-USER _USERNAME_
-WORKDIR /home/_USERNAME_
+USER wanglab
+WORKDIR /home/wanglab/sandbox

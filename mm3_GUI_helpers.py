@@ -1,9 +1,10 @@
 #! /usr/bin/env python3
+from __future__ import print_function, division
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton
 from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
 from PyQt5.QtCore import Qt, QPoint, QRectF
-from skimage import io, img_as_ubyte, color, draw
+from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
 import sys
 import re
@@ -237,6 +238,9 @@ class MaskTransparencyWidget(QWidget):
                     print('Re-annotated mask exists in training directory. Loading it.')
                     # add widget to express whether this mask is one you already re-annotated
                     self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+                    overwriteSegFile = True
+                else:
+                    overwriteSegFile = False
 
                 img = self.maskStack[self.frameIndex,:,:]
                 img[img>0] = 255
@@ -312,6 +316,7 @@ class MaskTransparencyWidget(QWidget):
                 peakID = mat.groups()[1]
                 fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
                 savePath = os.path.join(self.mask_dir,fileBaseName)
+                labelSavePath = os.path.join(params['seg_dir'],fileBaseName)
                 print("Saved binary mask image as: ", savePath)
 
                 if not os.path.isdir(self.mask_dir):
@@ -321,15 +326,21 @@ class MaskTransparencyWidget(QWidget):
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
 
+                saveArr = np.zeros((qimgHeight,qimgWidth),dtype='uint8')
                 for rowIndex in range(qimgHeight):
 
                         for colIndex in range(qimgWidth):
                                 pixVal = qGray(saveImg.pixel(colIndex,rowIndex))
                                 if pixVal > 0:
-                                        saveImg.setPixelColor(colIndex,rowIndex,QColor(1,1,1))
-                                        pixVal = qGray(saveImg.pixel(colIndex, rowIndex))
+                                        saveArr[rowIndex,colIndex] = 1
 
-                saveImg.save(savePath)
+                io.imsave(savePath, saveArr)
+                # labelArr = measure.label(saveArr, connectivity=1)
+                # labelArr = labelArr.astype('uint8')
+
+                # print(labelSavePath)
+                # io.imsave(labelSavePath,labelArr)
+
 
         def reset(self):
                 self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
@@ -659,7 +670,9 @@ if __name__ == "__main__":
 
         training_dir = '/home/wanglab/sandbox/pyqtpainter/commonDir'
 
+        init_params('/home/wanglab/Users_local/Jeremy/Imaging/20190214/20190214_params_Unet.yaml')
+
         app = QApplication(sys.argv)
         window = Window(imgPaths=imgPaths, fov_id_list=fov_id_list, training_dir=training_dir)
         window.show()
-        app.exec()
+        app.exec_()

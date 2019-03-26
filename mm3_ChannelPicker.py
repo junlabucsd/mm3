@@ -662,6 +662,7 @@ if __name__ == "__main__":
     ### Cross correlations ########################################################################
     if do_CNN:
         # a nested dict to hold predictions per channel per fov.
+        crosscorrs = None
         predictionDict = {}
 
         mm3.information('Loading model ....')
