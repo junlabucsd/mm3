@@ -3419,8 +3419,8 @@ def foci_lap(img, img_foci, cell, t):
     # loop through each potential foci
     for blob in blobs:
         yloc, xloc, sig = blob # x location, y location, and sigma of gaus
-        xloc = int(xloc) # switch to int for slicing images
-        yloc = int(yloc)
+        xloc = int(np.around(xloc)) # switch to int for slicing images
+        yloc = int(np.around(yloc))
         radius = int(np.ceil(np.sqrt(2)*sig)) # will be used to slice out area around foci
 
         # ensure blob is inside the bounding box
@@ -3435,6 +3435,7 @@ def foci_lap(img, img_foci, cell, t):
             gfit_area = img_foci[yloc-radius:yloc+radius, xloc-radius:xloc+radius]
             # gfit_area_0 = img_foci[max(0, yloc-1*radius):min(img_foci.shape[0], yloc+1*radius),
             #                        max(0, xloc-1*radius):min(img_foci.shape[1], xloc+1*radius)]
+            gfit_area_fixed = img_foci[yloc-maxsig:yloc+maxsig, xloc-maxsig:xloc+maxsig]
 
             # fit gaussian to proposed foci in small box
             p = fitgaussian(gfit_area)
@@ -3455,6 +3456,8 @@ def foci_lap(img, img_foci, cell, t):
                 y_gaus = np.append(y_gaus, y_rel) # for plotting
                 w_gaus = np.append(w_gaus, w_fit) # for plotting
 
+                if debug_foci: print('x', xloc, x_rel, x_fit, 'y', yloc, y_rel, y_fit, 'w', sig, radius, w_fit, 'h', np.sum(gfit_area), np.sum(gfit_area_fixed), peak_fit)
+
                 # calculate distance of foci from middle of cell (scikit image)
                 if orientation < 0:
                     orientation = np.pi+orientation
@@ -3464,7 +3467,8 @@ def foci_lap(img, img_foci, cell, t):
                 # append foci information to the list
                 disp_l = np.append(disp_l, disp_y)
                 disp_w = np.append(disp_w, disp_x)
-                foci_h = np.append(foci_h, np.sum(gfit_area))
+                foci_h = np.append(foci_h, np.sum(gfit_area_fixed))
+                # foci_h = np.append(foci_h, peak_fit)
         else:
             if debug_foci:
                 print ('Blob not in bounding box.')

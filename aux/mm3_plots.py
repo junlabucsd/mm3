@@ -128,9 +128,10 @@ def cells2df(Cells, rescale=False):
     '''
 
     # columns to include
-    columns = ['fov', 'peak', 'birth_time', 'division_time', 'birth_label',
+    columns = ['fov', 'peak', 'birth_label',
+               'birth_time', 'division_time',
                'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
-    rescale_columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
+    rescale_columns = ['sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position']
 
     # should not need this as of unet
     # for cell_tmp in Cells:
@@ -642,8 +643,12 @@ def add_cc_info(Cells, matlab_df, time_int):
         Picture taking interval for the experiment.
     '''
 
-    if type(matlab_df) == str:
+    if isinstance(matlab_df, type(pd.DataFrame())):
+        pass
+    elif isinstance(matlab_df, str):
         matlab_df = pd.read_csv(matlab_df)
+    else:
+        matlab_df = pd.DataFrame(data=['None'], columns=['cell_id'])
 
     # counters for which cells do and do not have cell cycle info
     n_in_cc_df = 0
@@ -656,7 +661,7 @@ def add_cc_info(Cells, matlab_df, time_int):
         # intialize dictionary of attributes to add to cells
         attributes = dict(initiation_time=None,
                           termination_time=None,
-                          n_oc=2,
+                          n_oc=None,
                           true_initiation_length=None,
                           initiation_length=None,
                           true_initiation_volume=None,
@@ -883,7 +888,7 @@ def plot_rescaled_distributions(Cells_df):
 
     return fig, ax
 
-def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins=20, rescale_data=False, figlabelcols=None, figlabelfontsize=SMALL_SIZE, individual_legends=True, legend_stat='mean', legendfontsize=SMALL_SIZE/2):
+def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins='sturges', rescale_data=False, fig_legend=True, figlabelcols=None, figlabelfontsize=SMALL_SIZE, individual_legends=True, legend_stat='mean', legendfontsize=SMALL_SIZE*0.75):
     '''
     Plot distributions of specified parameters.
 
@@ -897,9 +902,9 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
         The key of dataframe within the data dicionary. Defaults to 'df', but somtimes 'cc_df' is used.
     columns : list
         List of column names to plot
-    disttype : 'line' or 'hist'
+    disttype : 'line' or 'step'
         'line' plots a continuous line which moves from the center of the bins of the histogram.
-        'hist' plots a stepwise histogram.
+        'step' plots a stepwise histogram.
     nbins : int
         Number of bins to use for histograms. If 'tau' method is being plotted, bins are calculated based on the time interval
     rescale_data : bool
@@ -929,7 +934,7 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
     bottom_pad = (0, 0.125, 0.25, 0.35, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125,
                   0.075, 0.075, 0.075,
                   0.1, 0.1, 0.1, 0.1)
-    h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375,
+    h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.5,
              0.5, 0.5, 0.5,
              0.6, 0.6, 0.6, 0.6)
 
@@ -938,6 +943,7 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
     ax = axes.flat
 
     xlimmaxs = [0 for col in columns]
+    fig_legend_labels = []
 
     for key in exps:
         df_temp = data[key][df_key]
@@ -954,6 +960,13 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
             # remove rows where value is none or NaN
             data_temp = data_temp.dropna()
 
+            if len(data_temp) == 0:
+                continue
+
+            if i == 0: # add experiment name to list for figure legend
+                ### This is a bit messed up as it only uses axis 1 to check for included data
+                fig_legend_labels .append(data[key]['name'])
+
             # get stats for legend and limits
             data_mean = data_temp.mean()
             data_std = data_temp.std()
@@ -962,9 +975,11 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
             data_med = data_temp.median()
 
             if legend_stat == 'mean':
-                leg_stat = '$\\mu$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+                leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
             elif legend_stat == 'median':
                 leg_stat = 'Md={:0.2f}, CV={:0.2f}'.format(data_med, data_cv)
+            elif legend_stat == 'CV':
+                leg_stat = 'CV={:0.2f}'.format(data_cv)
 
             if rescale_data:
                 # rescale data to be centered at mean.
@@ -974,16 +989,27 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
             if data_mean > xlimmaxs[i]:
                 xlimmaxs[i] = data_mean
 
-            if disttype == 'line':
-                # use this for line histogram
+            # determine bin bin_edge
+            if type(nbins) == str: # one of the numpy supported strings
+                # only use 3 std of mean for bins
+                if not rescale_data:
+                    bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+                else:
+                    bin_range = (0, 2)
+                bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+            elif type(nbins) == int: # just even number
+                # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+                bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
                 if column == 'tau': # make good bin sizes for the not float data
                     time_int = data[key]['t_int']
-                    bin_edges = np.arange(0, data_max, step=time_int*2) + time_int/2.0
+                    bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
                     if rescale_data:
                         bin_edges /= data_mean
-                    bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=True)
-                else:
-                    bin_vals, bin_edges = np.histogram(data_temp, bins=nbins, density=True)
+
+            if disttype == 'line':
+                # use this for line histogram
+
+                bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=True)
 
                 bin_distance = bin_edges[1] - bin_edges[0]
                 bin_centers = bin_edges[:-1] + (bin_distance)/2
@@ -997,22 +1023,11 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
                            color=color, ls=line_style, lw=1, alpha=0.75,
                            label=leg_stat)
 
-            elif disttype == 'hist':
+            elif disttype == 'step':
             # produce stepwise histogram
-                if column == 'tau':
-                    time_int = data[key]['t_int']
-                    bin_edges = np.arange(0, data_max, step=time_int*2) + time_int/2.0
-
-                    if rescale_data:
-                        bin_edges /= data_mean
-                    ax[i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
-                               color=color, lw=1, alpha=0.5,
-                               label=['$\mu$=%.3f, CV=%.2f' % (data_mean, data_cv)])
-
-                else:
-                    ax[i].hist(data_temp, bins=nbins, histtype='step', density=True,
-                               color=color, lw=1, alpha=0.5,
-                               label=leg_stat)
+                ax[i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                           color=color, ls=line_style, lw=1, alpha=0.5,
+                           label=leg_stat)
 
     ### plot formatting
     # settings based on size of figure
@@ -1048,15 +1063,18 @@ def plotmulti_dist(data, exps, columns=None, df_key='df', disttype='line', nbins
             sns.despine(ax=ax[ax_no], left=True)
 
     # legend for whole figure
-    handles, _ = ax[0].get_legend_handles_labels()
-    labels = [data[key]['name'] for key in exps]
-    if figlabelcols == None:
-        figlabelcols = int(len(exps)/2)
-    fig.legend(handles, labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+    if fig_legend:
+        handles, _ = ax[0].get_legend_handles_labels()
+        # labels = [data[key]['name'] for key in exps] # this is done above
+        if figlabelcols == None:
+            figlabelcols = int(len(exps)/2)
+        fig.legend(handles, fig_legend_labels,
+                   ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+        plt.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
+    else:
+        plt.subplots_adjust(hspace=h_pad[no_p])
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
     # fig.suptitle('Cell cycle parameter distributions')
 
     return fig, ax
@@ -1617,7 +1635,6 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
 def plotmulti_crosscorrs(data, exps, plot_params=None, pearson=False, legend_loc=1):
     '''
     Plot cross correlation plot with pairwise comparisons. Plots distributions along diagonal.
-    Currently geared towards the cell cycle dataframe but it's not specific.
 
     data : dictionary
         Data dictionary which contains cell data in dataframe, name, color.
@@ -1743,8 +1760,154 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, pearson=False, legend_loc
 
     return fig, ax
 
+def plotmulti_corr(data, exps, param_pairs=None, df_key='df', rescale_data=False, binmin=20, plot_scatter=True, plot_mean=True, pearson=False, figlabelcols=None, figlabelfontsize=SMALL_SIZE, legendfontsize=SMALL_SIZE/2):
+    '''
+    Plot correlations against one parameter (default is growth rate)
+    Currently geared towards the cell cycle dataframe but it's not specific.
+
+    data : dictionary
+        Data dictionary which contains cell data in dataframe, name, color.
+    exps : list
+        List of strings which are the keys to the data dictionary.
+    param_pairs : list of tuple pairs for x and y axis
+    df_key : str
+        String key of the dataframe to use.
+    rescale_data : bool
+    binmin : int
+        Minimum number of items per bin for binned avergae
+    pearson : bool
+        Plot Pearson coefficient.
+    figlabelcols : int
+        Number of columns to put in the figure label which says the experiment names.
+    figlabelfontsize : int
+        Font size to use for bottom figure legend
+    legendfontsize : int
+        Font size for plot legends
+    '''
+
+    no_p = len(param_pairs)
+    # holds number of rows, columns, and fig height. All figs are 8 in width
+    fig_dims = ((0,0,0), (1,1,8), (1,2,4), (1,3,3), (2,2,8), (2,3,6), (2,3,6),
+                (3,3,8), (3,3,8), (3,3,8),
+                (4,3,10), (4,3,10), (4,3,10), # 10, 11, 12
+                (4,4,8), (4,4,8), (4,4,8), (4,4,8))
+    bottom_pad = (0, 0.125, 0.25, 0.25, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125,
+                  0.1, 0.1, 0.1, # 10, 11, 12
+                  0.1, 0.1, 0.1, 0.1)
+    h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375,
+             0.3, 0.3, 0.3,
+             0.3, 0.3, 0.3, 0.3)
+
+    fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
+                             figsize=(8,fig_dims[no_p][2]), squeeze=False)
+    ax = axes.flat
+
+    fig_legend_labels = []
+
+    for exp in exps:
+        df = data[exp][df_key]
+        c = data[exp]['color']
+        ls = data[exp]['line_style']
+
+        try:
+            scat_c = data[exp]['color_light']
+        except:
+            scat_c = c
+
+        for ax_no, param_pair in enumerate(param_pairs):
+            pcol, prow = param_pair
+
+            df_temp = df[[pcol, prow]].dropna(how='any')
+            if len(df_temp) == 0:
+                continue # skip if there is no data
+
+            if ax_no == 0: # add experiment name to list for figure legend
+                ### This is a bit messed up as it only uses axis 1 to check for included data
+                fig_legend_labels .append(data[exp]['name'])
+
+            col = df_temp[pcol]
+            row = df_temp[prow]
+            if rescale_data:
+                col /= col.mean()
+                row /= row.mean()
+
+            # scatter plot on bottom
+            if plot_scatter:
+                ax[ax_no].scatter(col, row,
+                                  s=5, alpha=0.25, color=scat_c, label=None,
+                                  rasterized=True)
+
+            # pearson correlation
+            if pearson:
+                r = np.corrcoef(col, row)[0][1]
+                bin_c, bin_m = binned_stat(col, row, binmin=binmin)
+                ax[ax_no].plot(bin_c, bin_m,
+                               lw=1, alpha=0.75, color=c, ls=ls,
+                               label='Pearson coeff. = {:.2f}'.format(r))
+            else:
+                bin_c, bin_m = binned_stat(col, row, binmin=binmin)
+                ax[ax_no].plot(bin_c, bin_m,
+                               lw=1, alpha=0.75, color=c, ls=ls,
+                               label=' ')
+
+            # plot mean symbol on top
+            if plot_mean:
+                ax[ax_no].plot(col.mean(), row.mean(),
+                               marker='o', ms=5, alpha=1, color=c, ls=ls,
+                               mec='k', mew=0.5, label=None)
+
+            # plot title and labels
+            if not rescale_data:
+                xl = pnames[pcol]['label'] + ' ['+pnames[pcol]['unit'] + ']'
+                ax[ax_no].set_xlabel(xl)
+                yl = pnames[prow]['label'] + ' ['+pnames[prow]['unit'] + ']'
+                ax[ax_no].set_ylabel(yl)
+            else:
+                xl = 'rescaled ' + pnames[pcol]['label']
+                ax[ax_no].set_xlabel(xl)
+                yl = 'rescaled ' + pnames[prow]['label']
+                ax[ax_no].set_ylabel(yl)
+
+    for a in ax:
+        if rescale_data:
+            a.set_xlim(0.6, 1.4)
+            a.set_ylim(0.6, 1.4)
+        else:
+            a.set_xlim(0, None)
+            a.set_ylim(0, None)
+
+        if pearson:
+            a.legend(loc=1, fontsize=legendfontsize, frameon=False)
+
+    # remove axis for plots that are not there
+    for ax_no in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
+        if ax_no >= no_p:
+            sns.despine(ax=ax[ax_no], left=True, bottom=True)
+            ax[ax_no].set_xticklabels([])
+            ax[ax_no].set_xticks([])
+            ax[ax_no].set_yticklabels([])
+            ax[ax_no].set_yticks([])
+
+    # legend for whole figure
+    handles, _ = ax[0].get_legend_handles_labels()
+    # labels = [data[key]['name'] for key in exps] # done above incase some datasets not included
+    if figlabelcols == None:
+        figlabelcols = int(len(exps)/2)
+    fig.legend(handles, fig_legend_labels,
+               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+
+    # sns.despine()
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
+    # fig.suptitle('Parameters over time')
+
+    return fig, ax
+
+# Use the above two instead of these.
 def plotmulti_corrs_vs_one(data, exps, y_params=None, x_param='elong_rate'):
     '''
+    Defunct, use plotmulti_corr
+
     Plot correlations against one parameter (default is growth rate)
     Currently geared towards the cell cycle dataframe but it's not specific.
 
@@ -1830,133 +1993,6 @@ def plotmulti_corrs_vs_one(data, exps, y_params=None, x_param='elong_rate'):
         labels.append(data[exp]['name'])
     fig.legend(handles, labels,
                ncol=4, loc=8, fontsize=MEDIUM_SIZE, frameon=False)
-
-    # sns.despine()
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=bottom_pad[no_p])
-    # fig.suptitle('Parameters over time')
-
-    return fig, ax
-
-def plotmulti_corr(data, exps, param_pairs=None, rescale_data=False, binmin=20, plot_scatter=True, plot_mean=True, pearson=False, figlabelcols=None, figlabelfontsize=SMALL_SIZE, legendfontsize=SMALL_SIZE/2):
-    '''
-    Plot correlations against one parameter (default is growth rate)
-    Currently geared towards the cell cycle dataframe but it's not specific.
-
-    data : dictionary
-        Data dictionary which contains cell data in dataframe, name, color.
-    exps : list
-        List of strings which are the keys to the data dictionary.
-    param_pairs : list of tuple pairs for x and y axis
-    rescale_data : bool
-    binmin : int
-        Minimum number of items per bin for binned avergae
-    pearson : bool
-        Plot Pearson coefficient.
-    figlabelcols : int
-        Number of columns to put in the figure label which says the experiment names.
-    figlabelfontsize : int
-        Font size to use for bottom figure legend
-    legendfontsize : int
-        Font size for plot legends
-    '''
-
-    no_p = len(param_pairs)
-    # holds number of rows, columns, and fig height. All figs are 8 in width
-    fig_dims = ((0,0,0), (1,1,8), (2,1,8), (1,3,3), (2,2,8), (2,3,6), (2,3,6),
-                (3,3,8), (3,3,8), (3,3,8))
-    bottom_pad = (0, 0.125, 0.25, 0.25, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125)
-
-    fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
-                             figsize=(4,fig_dims[no_p][2]), squeeze=False)
-    ax = axes.flat
-
-    for exp in exps:
-        df = data[exp]['df']
-        c = data[exp]['color']
-        ls = data[exp]['line_style']
-
-        try:
-            scat_c = data[exp]['color_light']
-        except:
-            scat_c = c
-
-        for ax_no, param_pair in enumerate(param_pairs):
-            pcol, prow = param_pair
-
-            df_temp = df[[pcol, prow]].dropna(how='any')
-
-            col = df_temp[pcol]
-            row = df_temp[prow]
-            if rescale_data:
-                col /= col.mean()
-                row /= row.mean()
-
-            # scatter plot on bottom
-            if plot_scatter:
-                ax[ax_no].scatter(col, row,
-                                  s=5, alpha=0.25, color=scat_c, label=None,
-                                  rasterized=True)
-
-            # pearson correlation
-            if pearson:
-                r = np.corrcoef(col, row)[0][1]
-                bin_c, bin_m = binned_stat(col, row, binmin=binmin)
-                ax[ax_no].plot(bin_c, bin_m,
-                               lw=1, alpha=0.75, color=c, ls=ls,
-                               label='Pearson coeff. = {:.2f}'.format(r))
-            else:
-                bin_c, bin_m = binned_stat(col, row, binmin=binmin)
-                ax[ax_no].plot(bin_c, bin_m,
-                               lw=1, alpha=0.75, color=c, label=' ')
-
-            # plot mean symbol on top
-            if plot_mean:
-                ax[ax_no].plot(col.mean(), row.mean(),
-                               marker='o', ms=5, alpha=1, color=c, ls=ls,
-                               mec='k', mew=0.5, label=None)
-
-            # plot title and labels
-            if not rescale_data:
-                xl = pnames[pcol]['label'] + ' ['+pnames[pcol]['unit'] + ']'
-                ax[ax_no].set_xlabel(xl)
-                yl = pnames[prow]['label'] + ' ['+pnames[prow]['unit'] + ']'
-                ax[ax_no].set_ylabel(yl)
-            else:
-                xl = 'rescaled ' + pnames[pcol]['label']
-                ax[ax_no].set_xlabel(xl)
-                yl = 'rescaled ' + pnames[prow]['label']
-                ax[ax_no].set_ylabel(yl)
-
-    for a in ax:
-
-
-        if rescale_data:
-            a.set_xlim(0.6, 1.4)
-            a.set_ylim(0.6, 1.4)
-        else:
-            a.set_xlim(0, None)
-            a.set_ylim(0, None)
-
-        if pearson:
-            a.legend(loc=1, fontsize=legendfontsize, frameon=False)
-
-    # remove axis for plots that are not there
-    for ax_no in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
-        if ax_no >= no_p:
-            sns.despine(ax=ax[ax_no], left=True, bottom=True)
-            ax[ax_no].set_xticklabels([])
-            ax[ax_no].set_xticks([])
-            ax[ax_no].set_yticklabels([])
-            ax[ax_no].set_yticks([])
-
-    # legend for whole figure
-    handles, _ = ax[0].get_legend_handles_labels()
-    labels = [data[key]['name'] for key in exps]
-    if figlabelcols == None:
-        figlabelcols = int(len(exps)/2)
-    fig.legend(handles, labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     # sns.despine()
     fig.tight_layout()
@@ -2457,6 +2493,7 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
 
         for i, t in enumerate(cell.times):
             if t % fl_int == 1 or fl_int == 1:
+            # if t % fl_int == 0:
                 nuc_x = np.ones(len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) * t * time_int / 60.0 - alt_time
                 nuc_y = (np.arange(0, len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) - y_adj_px) * pxl2um
                 nuc_z = getattr(cell, 'fl_profiles_' + fl_plane)[i]
@@ -2492,16 +2529,17 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
     ax[0].set_ylim(0, None)
 
     # foci counts multiples of 2 line
+    ax_foci.axhline(1, color='green', lw=0.5, ls='-', alpha=0.5)
     ax_foci.axhline(2, color='green', lw=0.5, ls='-', alpha=0.5)
     ax_foci.axhline(4, color='green', lw=0.5, ls='-', alpha=0.5)
     ax_foci.axhline(8, color='green', lw=0.5, ls='-', alpha=0.5)
     ax_foci.axhline(16, color='green', lw=0.5, ls='-', alpha=0.5)
 
     # ax_foci.set_ylabel('foci total height')
-    ax_foci.set_yscale('log', basey=2)
+    # ax_foci.set_yscale('log', basey=2)
     ax_foci.set_ylabel('foci counts')
-    yticks = [1, 2, 4, 8]#[2, 4, 8, 16]
-    ax_foci.set_ylim([1, yticks[-1]+1])
+    yticks = [0, 1, 2, 4]#[2, 4, 8, 16]
+    ax_foci.set_ylim([yticks[0], yticks[-1]+1])
     ax_foci.set_yticks(yticks)
     ax_foci.set_yticklabels([str(l) for l in yticks])
     ax[0].spines['top'].set_visible(False)
@@ -2891,6 +2929,140 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
             # if n == 0 or n == len(Cells[cell_id].times)-1:
             #     print(x/100.0, y/100.0, cell_id[9:])
             #     ax[t].text(x/100.0, y/100.0, cell_id[9:], color='red', size=10, ha='center', va='center')
+
+    return fig, ax
+
+### Miscelaneous
+def plot_cc_ensemble(Cells, time_int=1, fl_int=2, pxl2um=1):
+    '''For plotting replisome trace ensemble in order to determine cell cycle parameters using an Ergodic method.
+
+    Parameters
+    ----------
+    Cells : dict of Cell objects
+        Cells must have fl_profile_sub_c2 information.
+    time_int : int or float
+        Used to adjust the X axis to plot in hours
+    fl_int : int
+        Used to plot the florescence at the correct interval. Interval is relative to time interval, i.e., every time is 1, every other time is 2, etc.
+    plx2um : float
+        Conversion factor between pixels and microns.
+    '''
+    ### Calculate ensemble data
+    # recover stats for setting bounds
+    stats = stats_table(cells2df(Cells))
+
+    # initialize bins for different lengths.
+    # Will do spacing of 10th of a micron
+    max_length_int = np.ceil(stats['sd']['max']+1)
+    length_bins = np.linspace(0, max_length_int, max_length_int*10+1)
+    length_bin_data = {np.around(l_bin,1) : dict(bin_n=0,
+                                 fl_profile=np.zeros(len(length_bins))) for l_bin in length_bins}
+
+    # add information cell by cell
+    for cell_id, cell_tmp in Cells.items():
+        # find calculated growth rate and length # Ld = Lb * exp(growth_rate * tau)
+        growth_rate_calc = np.log(cell_tmp.sd/cell_tmp.sb) / cell_tmp.tau
+        times_for_length_calc = (np.array(cell_tmp.times) - cell_tmp.times[0]) * time_int
+        lengths_calc = cell_tmp.sb * np.exp(growth_rate_calc * times_for_length_calc)
+
+        # go through times with calculated lengths and get corresponding fluorescent information.
+        # go ahead and filter out lengths and times that don't have fl information
+        times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % fl_int == 1 or t==1]
+
+        for t, l in times_w_lengths:
+            l_bin = np.around(l, 1)
+            fl_profile = cell_tmp.fl_profiles_sub_c2[cell_tmp.times.index(t)]
+            # print(l_bin, len(fl_profile), fl_profile)
+            # add fl profile to data dicionary
+            # try:
+            length_bin_data[l_bin]['bin_n'] += 1
+            length_bin_data[l_bin]['fl_profile'][:len(fl_profile)] += fl_profile
+            # except:
+            #     print(l_bin, len(fl_profile), fl_profile)
+
+    # average data at each bin, but only if there are enough cells for that datapoint
+    cell_min = 10
+    for l_bin, bin_data in length_bin_data.items():
+        if bin_data['bin_n'] > cell_min:
+            bin_data['fl_profile_norm'] = bin_data['fl_profile'] / bin_data['bin_n']
+        else:
+            # print(bin_data['fl_profile'])
+            bin_data['fl_profile_norm'] = np.zeros_like(bin_data['fl_profile'])
+
+    # adjust position so it is centered
+    noise_floor = 1
+    for l_bin, bin_data in sorted(length_bin_data.items()):
+        bin_data['fl_profile_center'] = np.zeros(len(length_bins))
+        fl_length = sum(bin_data['fl_profile_norm'] > noise_floor)
+        # print(l_bin, fl_length, fl_length*pxl2um, bin_data['fl_profile_norm'])
+        fl_data = bin_data['fl_profile_norm'][bin_data['fl_profile_norm'] > noise_floor]
+        fl_ystart = int((len(length_bins) - fl_length) / 2)+1
+        fl_yend = int((len(length_bins) + fl_length) / 2)+1
+        bin_data['fl_profile_center'][fl_ystart:fl_yend] = fl_data
+
+    ### Do ploting
+    fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(4, 4))
+    ax = [axes]
+    # ax_foci = ax[0].twinx() # for plotting foci counts
+
+    xlims = (np.floor(stats['sb']['mean'])-0.5, np.ceil(stats['sd']['mean']+1))
+
+    # Set up data for colormesh plot and make it.
+    fl_x = []
+    fl_y = []
+    fl_z = []
+
+    for l_bin, bin_data in sorted(length_bin_data.items()):
+        fl_x.append(np.ones(len(length_bins)) * l_bin) # length bin, x position for scatter
+        fl_y.append(np.arange(-1*(len(length_bins)-1)/2, (len(length_bins)-1)/2 + 1,
+                    1) * pxl2um) # cell length, y position for scatter
+        fl_z.append(length_bin_data[l_bin]['fl_profile_center'])
+    fl_x = np.stack(fl_x)
+    fl_y = np.stack(fl_y)
+    fl_z = np.stack(fl_z)
+
+    # normalize z height to between 0 and 1
+    fl_z = fl_z - np.min(fl_z)
+    fl_z = fl_z / np.max(fl_z)
+
+    # choose colormap see https://seaborn.pydata.org/generated/seaborn.cubehelix_palette.html#seaborn.cubehelix_palette
+    cmap_helix = sns.cubehelix_palette(start=0.5, rot=1, dark=0.2, light=1, as_cmap=True)
+    colors = ax[0].pcolormesh(fl_x, fl_y, fl_z,
+                              cmap=cmap_helix, shading='flat',
+                              rasterized=True) # shading can be flat or gouraud
+    plt.colorbar(colors, ax=ax[0], orientation='vertical')
+
+    # plot average birth and division
+    ax[0].axvline(stats['sb']['mean'],
+                  lw=1, ls='--', c=sns.xkcd_rgb['light blue'], alpha=0.5,
+                  label='mean birth length')
+    ax[0].axvline(stats['sd']['mean'],
+                  lw=1, ls='--', c=sns.xkcd_rgb['dark blue'], alpha=0.5,
+                  label='mean division length')
+
+    # plot lines for cell length
+    cell_lengths_x = sorted(length_bin_data.keys())
+    cell_lengths_up = []
+    cell_lengths_down = []
+    for length in cell_lengths_x:
+        cell_lengths_up.append(length/2)
+        cell_lengths_down.append((-length/2)) #  - 1 * pxl2um
+
+    ax[0].plot(cell_lengths_x, cell_lengths_up,
+               lw=1, ls='-', c=sns.xkcd_rgb['light purple'], alpha=0.5)
+    ax[0].plot(cell_lengths_x, cell_lengths_down,
+               lw=1, ls='-', c=sns.xkcd_rgb['light purple'], alpha=0.5)
+
+    # set axis limits and labels
+    ax[0].set_xlim(xlims[0], xlims[1])
+    ax[0].set_ylim(-xlims[1]/2, xlims[1]/2)
+
+    ax[0].set_xlabel('cell length [$\mu$M]')
+    ax[0].set_ylabel('replisome position relative to midcell [$\mu$M]')
+
+    plt.tight_layout()
+    plt.suptitle('Fluorescence ensemble plot aligned by size', fontsize=MEDIUM_SIZE*1.2)
+    plt.subplots_adjust(top=0.9)
 
     return fig, ax
 
