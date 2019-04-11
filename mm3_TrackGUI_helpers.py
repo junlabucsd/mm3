@@ -54,8 +54,20 @@ class Window(QMainWindow):
         self.setWindowTitle("You got this!")
         self.setGeometry(top,left,width,height)
 
-        scene = QGraphicsScene(self)
-        
+        self.scene = QGraphicsScene(self)
+
+        # add layout to scene
+
+        # add QImages to scene (try three frames)
+
+        # make scene the central widget
+
+        self.setCentralWidget(self.scene)
+
+
+class GraphicsHandler(QWidget):
+
+    def __init(self, parent, imgPaths, fov_id_list, training_dir)
 
 if __name__ == "__main__":
 
