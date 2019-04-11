@@ -288,15 +288,32 @@ if __name__ == "__main__":
                 img = io.imread(imgPath)
                 # detect if there are multiple imaging channels, and rearrange image if necessary, keeping only the phase image
                 img = mm3.permute_image(img, trap_align_metadata)
+                if p['debug']:
+                    io.imshow(img/np.max(img));
+                    plt.title("Initial phase image");
+                    plt.show();
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 mm3.information("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)
+                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25, debug=p['debug'])
+
+                if p['debug']:
+                    fig,ax = plt.subplots(nrows=1, ncols=4, figsize=(12,12))
+                    ax[0].imshow(img);
+                    for i in range(first_frame_trap_prediction.shape[-1]):
+                        ax[i+1].imshow(first_frame_trap_prediction[:,:,i]);
+                    plt.show();
 
                 # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
                 class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
 
                 traps = class_predictions == 0 # returns boolean array where our intial guesses at trap locations are True
+
+                if p['debug']:
+                    io.imshow(traps);
+                    plt.title('Initial trap masks')
+                    plt.show();
+
                 trap_labels = measure.label(traps)
                 trap_props = measure.regionprops(trap_labels)
 
@@ -364,7 +381,7 @@ if __name__ == "__main__":
                     print(centroid)
 
                 # get the (frame_number,512,512,1)-sized stack for image aligment
-                align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
+                align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1), dtype='uint16')
 
                 for frame,fn in enumerate(fov_file_names):
                     imgPath = os.path.join(p['experiment_directory'],p['image_directory'],fn)
@@ -387,7 +404,20 @@ if __name__ == "__main__":
                 # run model on all frames
                 batch_size=p['compile']['channel_prediction_batch_size']
                 mm3.information("Predicting trap regions for (512,512) slice through all frames.")
-                align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
+
+                data_gen_args = {'batch_size':batch_size,
+                         'n_channels':1,
+                         'normalize_to_one':True,
+                         'shuffle':False}
+                predict_gen_args = {'verbose'=1,
+                                    'use_multiprocessing'=True,
+                                    'workers'=params['num_analyzers']}
+
+                img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
+
+                align_region_predictions = model.predict_generator(img_generator, **predict_gen_args)
+                #align_region_stack = mm3.apply_median_filter_and_normalize(align_region_stack)
+                #align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
                 # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.
                 align_region_class_predictions = np.argmax(align_region_predictions, axis=3)
 

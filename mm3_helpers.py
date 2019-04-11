@@ -35,7 +35,7 @@ from skimage import segmentation # used in make_masks and segmentation
 from skimage.transform import rotate
 from skimage.feature import match_template # used to align images
 from skimage.feature import blob_log # used for foci finding
-from skimage.filters import threshold_otsu # segmentation
+from skimage.filters import threshold_otsu, median # segmentation
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
@@ -57,7 +57,7 @@ from multiprocessing import Pool
 
 # Plotting for debug
 import matplotlib as mpl
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 font = {'family' : 'sans-serif',
         'weight' : 'normal',
         'size'   : 12}
@@ -101,6 +101,7 @@ def init_mm3_helpers(param_file_path):
     params['empty_dir'] = os.path.join(params['ana_dir'], 'empties')
     params['sub_dir'] = os.path.join(params['ana_dir'], 'subtracted')
     params['seg_dir'] = os.path.join(params['ana_dir'], 'segmented')
+    params['pred_dir'] = os.path.join(params['ana_dir'], 'predictions')
     params['cell_dir'] = os.path.join(params['ana_dir'], 'cell_data')
     params['track_dir'] = os.path.join(params['ana_dir'], 'tracking')
 
@@ -109,6 +110,9 @@ def init_mm3_helpers(param_file_path):
         params['use_jd'] = True
     else:
         params['use_jd'] = False
+
+    if not 'save_predictions' in params['segment']:
+        params['segment']['save_predictions'] = False
 
     return params
 
@@ -149,7 +153,7 @@ def get_time(filepath):
         return None
 
 # loads and image stack from TIFF or HDF5 using mm3 conventions
-def load_stack(fov_id, peak_id, color='c1'):
+def load_stack(fov_id, peak_id, color='c1', image_return_number=None):
     '''
     Loads an image stack.
 
@@ -920,7 +924,7 @@ def tileImage(img, subImageNumber):
     divisor = int(np.sqrt(subImageNumber))
     M = img.shape[0]//divisor
     N = img.shape[0]//divisor
-    print(img.shape, M, N, divisor, subImageNumber)
+    #print(img.shape, M, N, divisor, subImageNumber)
     tiles = np.asarray([img[x:x+M,y:y+N] for x in range(0,img.shape[0],M) for y in range(0,img.shape[1],N)])
     return(tiles)
 
@@ -1039,11 +1043,14 @@ def get_weights_array(arr=np.zeros((2048,2048)), shiftDistance=128, subImageNumb
     return(stackWeights)
 
 # predicts locations of channels in an image using deep learning model
-def get_frame_predictions(img,model,stackWeights, shiftDistance=256, subImageNumber=16, padSubImageNumber=25):
+def get_frame_predictions(img,model,stackWeights, shiftDistance=256, subImageNumber=16, padSubImageNumber=25, debug=False):
 
     pred = predict_first_image_channels(img, model, shiftDistance=shiftDistance,
-                                     subImageNumber=subImageNumber, padSubImageNumber=padSubImageNumber)[0,...]
+                                     subImageNumber=subImageNumber, padSubImageNumber=padSubImageNumber, debug=debug)[0,...]
     # print(pred.shape)
+    if debug:
+        print(pred.shape)
+
 
     compositePrediction = np.average(pred, axis=3, weights=stackWeights)
     # print(compositePrediction.shape)
@@ -1056,9 +1063,25 @@ def get_frame_predictions(img,model,stackWeights, shiftDistance=256, subImageNum
 
     return(compositePrediction)
 
+def apply_median_filter_normalize(imgs):
+
+    selem = morphology.disk(3)
+
+    for i in range(imgs.shape[0]):
+        # Store sample
+        tmpImg = imgs[i,:,:,0]
+        medImg = median(tmpImg, selem)
+        tmpImg = medImg/np.max(medImg)
+        tmpImg = np.expand_dims(tmpImg, axis=-1)
+        imgs[i,:,:,:] = tmpImg
+
+    return(imgs)
+
+
 def predict_first_image_channels(img, model,
                               subImageNumber=16, padSubImageNumber=25,
-                              shiftDistance=128, batchSize=1):
+                              shiftDistance=128, batchSize=1,
+                              debug=False):
     imgSize = img.shape[0]
     padSize = (2048-imgSize)//2 # how much to pad on each side to get up to 2048x2048?
     imgStack = np.pad(img, pad_width=((padSize,padSize),(padSize,padSize)),
@@ -1079,21 +1102,32 @@ def predict_first_image_channels(img, model,
 
     crops = tileImage(imgStack, subImageNumber=subImageNumber)
     crops = np.expand_dims(crops, -1)
-    predictions = model.predict(crops)
 
+    data_gen_args = {'batch_size':params['compile']['channel_prediction_batch_size'],
+                         'n_channels':1,
+                         'normalize_to_one':True,
+                         'shuffle':False}
+    predict_gen_args = {'verbose':1,
+                        'use_multiprocessing':True,
+                        'workers':params['num_analyzers']}
+
+    img_generator = TrapSegmentationDataGenerator(crops, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     prediction = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     #print(prediction.shape)
 
     cropsExpand = tileImage(imgStackExpand, subImageNumber=padSubImageNumber)
     cropsExpand = np.expand_dims(cropsExpand, -1)
-    predictions = model.predict(cropsExpand)
+    img_generator = TrapSegmentationDataGenerator(cropsExpand, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     predictionExpand = imageConcatenatorFeatures2(predictions, subImageNumber=padSubImageNumber)
     predictionExpand = util.crop(predictionExpand, ((0,0),(shiftDistance,shiftDistance),(shiftDistance,shiftDistance),(0,0)))
     #print(predictionExpand.shape)
 
     cropsShiftLeft = tileImage(imgStackShiftLeft, subImageNumber=subImageNumber)
     cropsShiftLeft = np.expand_dims(cropsShiftLeft, -1)
-    predictions = model.predict(cropsShiftLeft)
+    img_generator = TrapSegmentationDataGenerator(cropsShiftLeft, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     predictionLeft = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionLeft = np.pad(predictionLeft, pad_width=((0,0),(0,0),(0,shiftDistance),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,shiftDistance:,:]
@@ -1101,7 +1135,8 @@ def predict_first_image_channels(img, model,
 
     cropsShiftRight = tileImage(imgStackShiftRight, subImageNumber=subImageNumber)
     cropsShiftRight = np.expand_dims(cropsShiftRight, -1)
-    predictions = model.predict(cropsShiftRight)
+    img_generator = TrapSegmentationDataGenerator(cropsShiftRight, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     predictionRight = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionRight = np.pad(predictionRight, pad_width=((0,0),(0,0),(shiftDistance,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,:(-1*shiftDistance),:]
@@ -1110,7 +1145,8 @@ def predict_first_image_channels(img, model,
     cropsShiftUp = tileImage(imgStackShiftUp, subImageNumber=subImageNumber)
     #print(cropsShiftUp.shape)
     cropsShiftUp = np.expand_dims(cropsShiftUp, -1)
-    predictions = model.predict(cropsShiftUp)
+    img_generator = TrapSegmentationDataGenerator(cropsShiftUp, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     predictionUp = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionUp = np.pad(predictionUp, pad_width=((0,0),(0,shiftDistance),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,shiftDistance:,:,:]
@@ -1118,7 +1154,8 @@ def predict_first_image_channels(img, model,
 
     cropsShiftDown = tileImage(imgStackShiftDown, subImageNumber=subImageNumber)
     cropsShiftDown = np.expand_dims(cropsShiftDown, -1)
-    predictions = model.predict(cropsShiftDown)
+    img_generator = TrapSegmentationDataGenerator(cropsShiftDown, **data_gen_args)
+    predictions = model.predict_generator(img_generator, **predict_gen_args)
     predictionDown = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionDown = np.pad(predictionDown, pad_width=((0,0),(shiftDistance,0),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:(-1*shiftDistance),:,:]
@@ -2279,6 +2316,16 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
 
+    # arguments to data generator
+    data_gen_args = {'batch_size':params['segment']['batch_size'],
+                     'n_channels':1,
+                     'normalize_to_one':True,
+                     'shuffle':False}
+    # arguments to predict_generator
+    predict_args = dict(use_multiprocessing=True,
+                        workers=params['num_analyzers'],
+                        verbose=1)
+
     for peak_id in ana_peak_ids:
         information('Segmenting peak {}.'.format(peak_id))
         # print(peak_id) # debugging a shape error at some traps
@@ -2293,20 +2340,26 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                            mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
-        image_datagen = ImageDataGenerator()
-        image_generator = image_datagen.flow(x=img_stack,
-                                             batch_size=batch_size,
-                                             shuffle=False) # keep same order
+        image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
+        #image_datagen = ImageDataGenerator()
+        #image_generator = image_datagen.flow(x=img_stack,
+        #                                     batch_size=batch_size,
+        #                                     shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
-        predict_args = dict(use_multiprocessing=False,
-                            verbose=1)
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
         # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
                                      pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
+
+        if params['segment']['save_predictions']:
+            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
+            if not os.path.isdir(params['pred_dir']):
+                os.makedirs(params['pred_dir'])
+            tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
+                            predictions, compress=4)
 
         # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
         if cellClassThreshold:
@@ -2402,6 +2455,142 @@ def segment_fov_unet(fov_id, specs, model):
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return(k)
+
+# class for image generation for predicting cell locations in phase-contrast images
+class CellSegmentationDataGenerator(utils.Sequence):
+    'Generates data for Keras'
+    def __init__(self,
+                 img_array,
+                 batch_size=32,
+                 n_channels=1,
+                 shuffle=False,
+                 normalize_to_one=False):
+        'Initialization'
+        self.dim = (img_array.shape[1], img_array.shape[2])
+        self.batch_size = batch_size
+        self.img_array = img_array
+        self.img_number = img_array.shape[0]
+        self.n_channels = n_channels
+        self.shuffle = shuffle
+        self.on_epoch_end()
+        self.normalize_to_one = normalize_to_one
+        if normalize_to_one:
+            self.selem = morphology.disk(1)
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return(int(np.ceil(self.img_number / self.batch_size)))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        array_list_temp = [self.img_array[k,:,:,0] for k in indexes]
+
+        # Generate data
+        X = self.__data_generation(array_list_temp)
+
+        return X
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(self.img_number)
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, array_list_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels))
+
+        # Generate data
+        for i in range(self.batch_size):
+            # Store sample
+            try:
+                tmpImg = array_list_temp[i]
+            except IndexError:
+                X = X[:i,...]
+                break
+
+            # ensure image is uint8
+            if tmpImg.dtype=="uint16":
+                tmpImg = tmpImg / 2**16 * 2**8
+                tmpImg = tmpImg.astype('uint8')
+
+            if self.normalize_to_one:
+                medImg = median(tmpImg, self.selem)
+                tmpImg = tmpImg/np.max(medImg)
+                tmpImg[tmpImg > 1] = 1
+
+            X[i,:,:,0] = tmpImg
+
+        return (X)
+
+
+
+# class for image generation for predicting trap locations in phase-contrast images
+class TrapSegmentationDataGenerator(utils.Sequence):
+    'Generates data for Keras'
+    def __init__(self, img_array, batch_size=32,
+                 n_channels=1, normalize_to_one=False, shuffle=False):
+        'Initialization'
+        self.dim = (img_array.shape[1], img_array.shape[2])
+        self.img_number = img_array.shape[0]
+        self.img_array = img_array
+        self.batch_size = batch_size
+        self.n_channels = n_channels
+        self.shuffle = shuffle
+        self.on_epoch_end()
+        self.normalize_to_one = normalize_to_one
+        if normalize_to_one:
+            self.selem = morphology.disk(3)
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.ceil(self.img_number / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+        # Generate indexes of the batch
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+
+        # Find list of IDs
+        array_list_temp = [self.img_array[k,:,:,0] for k in indexes]
+
+        # Generate data
+        X = self.__data_generation(array_list_temp)
+
+        return X
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        self.indexes = np.arange(self.img_number)
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def __data_generation(self, array_list_temp):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels))
+
+        # Generate data
+        for i in range(self.batch_size):
+            # Store sample
+            try:
+                tmpImg = array_list_temp[i]
+            except IndexError:
+                X = X[:i,...]
+                break
+            if self.normalize_to_one:
+                medImg = median(tmpImg, self.selem)
+                tmpImg = medImg/np.max(medImg)
+
+            X[i,:,:,0] = tmpImg
+
+        return (X)
+
 
 # class for image generation for classifying traps as good, empty, out-of-focus, or defective
 class TrapKymographPredictionDataGenerator(utils.Sequence):
