@@ -252,6 +252,105 @@ def fov_CNN_plot_channels(fov_id, predictionDict, specs, outputdir='.', phase_pl
 
     return specs
 
+def fov_cell_segger_plot_channels(fov_id, predictionDict, specs, outputdir='.', phase_plane='c1'):
+    '''
+    Creates a plot with the channels with guesses for empties and full channels.
+    The plot is saved in PDF format.
+
+    Parameters
+    fov_id : str
+        file name of the hdf5 file name in originals
+    predictionDict : dictionary
+        dictionary for cross correlation values for all fovs.
+    specs: dictionary
+        dictionary for channal assignment (Analyze/Don't Analyze/Background).
+
+    '''
+
+    mm3.information("Plotting channels for FOV %d." % fov_id)
+
+    # set up figure for user assited choosing
+    n_peaks = len(specs[fov_id].keys())
+    axw=1
+    axh=4*axw
+    nrows=3
+    ncols=int(n_peaks)
+    fig = plt.figure(num='none', facecolor='w',figsize=(ncols*axw,nrows*axh))
+    gs = gridspec.GridSpec(nrows,ncols,wspace=0.5,hspace=0.1,top=0.90)
+
+    # plot the peaks peak by peak using sorted list
+    sorted_peaks = sorted([peak_id for peak_id in specs[fov_id].keys()])
+    npeaks = len(sorted_peaks)
+
+    for n, peak_id in enumerate(sorted_peaks):
+        if predictionDict:
+            predictions = predictionDict[fov_id][peak_id] # get predictions array
+
+        # load data for figure
+        image_data = mm3.load_stack(fov_id, peak_id, color=phase_plane)
+
+        first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
+
+        # append an axis handle to ax list while adding a subplot to the figure which has a
+        axhi = fig.add_subplot(gs[0,n])
+        axmid = fig.add_subplot(gs[1,n])
+        axlo = fig.add_subplot(gs[2,n])
+
+        # plot the first image in each channel in top row
+        ax=axhi
+        ax.imshow(first_img,cmap=plt.cm.gray, interpolation='nearest')
+        ax.axis('off')
+        ax.set_title(str(peak_id), fontsize = 12)
+        if n == 0:
+            ax.set_ylabel("first time point")
+
+        # plot middle row using last time point with highlighting for empty/full
+        ax=axmid
+        ax.axis('off')
+        #ax.imshow(last_img,cmap=plt.cm.gray, interpolation='nearest')
+        #H,W = last_img.shape
+        #img = np.zeros((H,W,3))
+        if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
+            #img[:,:,1]=last_img
+            cmap=plt.cm.Greens_r
+        elif specs[fov_id][peak_id] == 0: # 0 means reference, show blue
+            #img[:,:,2]=last_img
+            cmap=plt.cm.Blues_r
+        else: # otherwise show red, means don't analyze
+            #img[:,:,0]=last_img
+            cmap=plt.cm.Reds_r
+        ax.imshow(last_img,cmap=cmap, interpolation='nearest')
+
+        # format
+        if n == 0:
+            ax.set_ylabel("last time point")
+
+        # finally plot the prediction values as horizontal bar chart
+        ax=axlo
+        if predictionDict:
+            ax.barh(range(len(predictions)), predictions)
+            #ax.vlines(x=p['channel_picker']['channel_picking_threshold'], ymin=-1, ymax=5, linestyles='dashed',colors='red')
+            ax.set_title('cell count', fontsize = 8)
+        else:
+            ax.plot(np.zeros(10), range(10))
+
+        # ax.set_xlim((0,1)) # set limits to (0,1)
+        #ax.get_xaxis().set_ticks([])
+        if not n == 0:
+            ax.get_yaxis().set_ticks([])
+        else:
+            ax.set_yticklabels(labels=["","1","2","3","4","5"])
+            ax.set_ylabel("")
+
+    fig.suptitle("FOV {:d}".format(fov_id),fontsize=14)
+    fileout=os.path.join(outputdir,'fov_xy{:03d}.pdf'.format(fov_id))
+    fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
+    plt.close('all')
+    mm3.information("Written FOV {}'s channels in {}".format(fov_id,fileout))
+
+    return specs
+
 # funtion which makes the UI plot
 def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     '''Creates a plot with the channels with guesses for empties and full channels,
@@ -651,7 +750,7 @@ def fov_cell_segger_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
         else:
             ax[-1].plot(np.zeros(10), range(10))
 
-        ax[-1].set_xlim((0,1)) # set limits to (0,1)
+        # ax[-1].set_xlim((0,1)) # set limits to (0,1)
         #ax[-1].get_xaxis().set_ticks([])
         if not n == 1:
             ax[-1].get_yaxis().set_ticks([])
@@ -893,9 +992,11 @@ if __name__ == "__main__":
 
             predictionDict[fov_id] = {}
 
-            mm3.information('Inferring number of cells in five evenly spaces frames for each trap in fov {}.'.format(fov_id))
+            mm3.information('Inferring number of cells in five evenly spaced frames for each trap in fov {}.'.format(fov_id))
 
             # assign each prediction to the proper fov_id, peak_id in predictions dict
+            counter = 0
+            peak_number = len(channel_masks[fov_id])
             for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
                 # get list of tiff file names
                 tiff_file_name = glob.glob(os.path.join(chnl_dir, "*xy{:0=3}_p{:0=4}_c1.tif".format(fov_id, peak_id)))[0]
@@ -903,68 +1004,73 @@ if __name__ == "__main__":
                 img_array = io.imread(tiff_file_name)
                 img_height = img_array.shape[1]
                 img_width = img_array.shape[2]
-                img_stack = np.zeros((5,img_height,img_width),dtype='uint16')
                 slice_increment = int(img_array.shape[0]/5)
+
+                # set up stack for images from all peaks
+                # this is a bit more complicated than just doing 5 images at a time, but it is much faster
+                #   because you don't have nearly as many data transfer steps
+                if i == 0:
+                    img_stack = np.zeros((5*peak_number,img_height,img_width),dtype='uint16')
+
                 # grab 5 images to load and run cell segmentation
+                for j in range(5):
+                    img_stack[counter,...] = img_array[slice_increment*j,...]
+                    counter += 1
+
+
+            half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = mm3.get_pad_distances(unet_shape, img_height, img_width)
+            pad_dict = {'top':top_pad,
+                       'bottom':bottom_pad,
+                       'right':right_pad,
+                       'left':left_pad}
+            # pad image to correct size
+            img_stack = np.pad(img_stack,
+                               ((0,0),
+                               (pad_dict['top'],pad_dict['bottom']),
+                               (pad_dict['left'],pad_dict['right'])),
+                               mode='constant')
+            img_stack = np.expand_dims(img_stack, -1)
+
+            # set up image generator
+            image_generator = mm3.CellSegmentationDataGenerator(img_stack, **data_gen_args)
+            # run predictions
+            predictions = model.predict_generator(image_generator, **predict_args)[:,:,:,0]
+            if p['debug']:
+                fig,ax = plt.subplots(ncols=5);
                 for i in range(5):
-                    img_stack[i,...] = img_array[slice_increment*i,...]
+                    ax[i].imshow(predictions[i,:,:]);
+                plt.show();
 
-                half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = mm3.get_pad_distances(unet_shape, img_height, img_width)
-                pad_dict = {'top':top_pad,
-                           'bottom':bottom_pad,
-                           'right':right_pad,
-                           'left':left_pad}
-                # pad image to correct size
-                img_stack = np.pad(img_stack,
-                                   ((0,0),
-                                   (pad_dict['top'],pad_dict['bottom']),
-                                   (pad_dict['left'],pad_dict['right'])),
-                                   mode='constant')
-                img_stack = np.expand_dims(img_stack, -1)
+            # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
+            if cellClassThreshold:
+                predictions[predictions >= cellClassThreshold] = 1
+                predictions[predictions < cellClassThreshold] = 0
+                predictions = predictions.astype('uint8')
 
-                # set up image generator
-                image_generator = mm3.CellSegmentationDataGenerator(img_stack, **data_gen_args)
-                # run predictions
-                mm3.information("Detecting cells in five images from fov {}, peak {}.".format(fov_id, peak_id))
-                predictions = model.predict_generator(image_generator, **predict_args)[:,:,:,0]
-                if p['debug']:
-                    fig,ax = plt.subplots(ncols=5);
-                    for i in range(5):
-                        ax[i].imshow(predictions[i,:,:]);
-                    plt.show();
+                segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
+                # process and label each frame of the channel
+                for frame in range(segmented_imgs.shape[0]):
+                    # get rid of small holes
+                    predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                    # get rid of small objects.
+                    predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
+                    # remove labels which touch the boarder
+                    predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+                    # relabel now
+                    segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
 
-                # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
-                if cellClassThreshold:
-                    predictions[predictions >= cellClassThreshold] = 1
-                    predictions[predictions < cellClassThreshold] = 0
-                    predictions = predictions.astype('uint8')
+            else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
+                information('Converting predictions to grayscale.')
+                segmented_imgs = np.around(predictions * 100)
 
-                    segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
-                    # process and label each frame of the channel
-                    for frame in range(segmented_imgs.shape[0]):
-                        # get rid of small holes
-                        predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-                        # get rid of small objects.
-                        predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
-                        # remove labels which touch the boarder
-                        predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
-                        # relabel now
-                        segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
+            # put number of cells detected into array for predictionDict
+            counter = 0
+            for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
 
-                else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
-                    information('Converting predictions to grayscale.')
-                    segmented_imgs = np.around(predictions * 100)
-
-                # put number of cells detected into array for predictionDict
                 cell_count_array = np.zeros(5, dtype='uint8')
-                for i in range(5):
-                    cell_count_array[i] = int(np.max(segmented_imgs[i,:,:]))
-
-                if p['debug']:
-                    fig,ax = plt.subplots(ncols=5);
-                    for i in range(5):
-                        ax[i].imshow(segmented_imgs[i,:,:]);
-                    plt.show();
+                for j in range(5):
+                    cell_count_array[j] = int(np.max(segmented_imgs[counter,:,:]))
+                    counter += 1
 
                 predictionDict[fov_id][peak_id] = cell_count_array
 
@@ -1119,7 +1225,7 @@ if __name__ == "__main__":
         if not os.path.isdir(outputdir):
             os.makedirs(outputdir)
         for fov_id in fov_id_list:
-            if not do_CNN:
+            if crosscorrs:
                 specs = fov_plot_channels(fov_id, crosscorrs, specs,
                                           outputdir=outputdir, phase_plane=p['phase_plane'])
             elif do_CNN:
