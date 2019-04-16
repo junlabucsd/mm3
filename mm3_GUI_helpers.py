@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton, QInputDialog
 from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
 from PyQt5.QtCore import Qt, QPoint, QRectF
 from skimage import io, img_as_ubyte, color, draw, measure
@@ -176,6 +176,27 @@ class Window(QMainWindow):
         fileAdvanceDockWidget = QDockWidget()
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
+
+    #     setFrameInputWidget = FrameSetter()
+    #     setPeakInputWidget = PeakSetter()
+    #     setFOVInputWidget = FOVSetter()
+    #
+    #     setFOVPeakFrameInputLayout = QVBoxLayout()
+    #     setFOVPeakFrameInputLayout.addWidget(setFrameInputWidget)
+    #     setFOVPeakFrameInputLayout.addWidget(setPeakInputWidget)
+    #     setFOVPeakFrameInputLayout.addWidget(setFOVInputWidget)
+    #
+    #     setFOVPeakFrameWidget = QWidget()
+    #     setFOVPeakFrameWidget.setLayout(setFOVPeakFrameInputLayout)
+    #
+    #     setFOVPeakFrameDockWidget = QDockWidget()
+    #     setFOVPeakFrameDockWidget.setWidget(setFrameInputWidget)
+    #     self.addDockWidget(Qt.RightDockWidgetArea, setFOVPeakFrameDockWidget)
+    #
+    # def FrameSetter(self):
+    #     i, okPressed = QInputDialog.getInt(self, "Jump to frame", "Frame index (0-indexed):", 0, 0)
+    #     if okPressed:
+    #         self.
 
 class OverlayImgsWidget(QWidget):
 
@@ -377,6 +398,12 @@ class MaskTransparencyWidget(QWidget):
         def whiteColor(self):
                 self.brushColor = QColor(255, 255, 255, self.alpha)
 
+        def setFOVPeakFrameIndex(self,frame_index,peak_index,fov_id):
+            self.frameIndex = frame_index
+            self.fov_id = fov_id
+            self.imgIndex = peak_id
+
+
         def setImg(self, img):
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
@@ -536,7 +563,7 @@ class MaskTransparencyWidget(QWidget):
 
 class PhaseWidget(QWidget):
 
-        def __init__(self, parent,imgPaths,fov_id_list,image_dir):
+        def __init__(self, parent,imgPaths,fov_id_list,image_dir,frame_index,peak_id,fov_id):
                 super(PhaseWidget, self).__init__(parent)
 
                 self.image_dir = image_dir
