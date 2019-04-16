@@ -409,9 +409,9 @@ if __name__ == "__main__":
                          'n_channels':1,
                          'normalize_to_one':True,
                          'shuffle':False}
-                predict_gen_args = {'verbose'=1,
-                                    'use_multiprocessing'=True,
-                                    'workers'=params['num_analyzers']}
+                predict_gen_args = {'verbose':1,
+                        'use_multiprocessing':True,
+                        'workers':params['num_analyzers']}
 
                 img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
 
