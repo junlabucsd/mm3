@@ -411,7 +411,7 @@ if __name__ == "__main__":
                          'shuffle':False}
                 predict_gen_args = {'verbose':1,
                         'use_multiprocessing':True,
-                        'workers':params['num_analyzers']}
+                        'workers':p['num_analyzers']}
 
                 img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
 

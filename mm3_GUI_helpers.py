@@ -398,10 +398,10 @@ class MaskTransparencyWidget(QWidget):
         def whiteColor(self):
                 self.brushColor = QColor(255, 255, 255, self.alpha)
 
-        def setFOVPeakFrameIndex(self,frame_index,peak_index,fov_id):
-            self.frameIndex = frame_index
-            self.fov_id = fov_id
-            self.imgIndex = peak_id
+        # def setFOVPeakFrameIndex(self,frame_index,peak_index,fov_id):
+        #     self.frameIndex = frame_index
+        #     self.fov_id = fov_id
+        #     self.imgIndex = peak_id
 
 
         def setImg(self, img):
@@ -563,7 +563,7 @@ class MaskTransparencyWidget(QWidget):
 
 class PhaseWidget(QWidget):
 
-        def __init__(self, parent,imgPaths,fov_id_list,image_dir,frame_index,peak_id,fov_id):
+        def __init__(self, parent,imgPaths,fov_id_list,image_dir):#,frame_index,peak_id,fov_id):
                 super(PhaseWidget, self).__init__(parent)
 
                 self.image_dir = image_dir
