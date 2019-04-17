@@ -1,9 +1,9 @@
 #! /usr/bin/env python3
 from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QAction, QDockWidget, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QAction, QDockWidget, QPushButton, QGridLayout, QGraphicsLineItem
 from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
-from PyQt5.QtCore import Qt, QPoint, QRectF
+from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
 from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
 import sys
@@ -11,6 +11,8 @@ import re
 import os
 import yaml
 import multiprocessing
+
+from matplotlib import pyplot as plt
 
 def init_params(param_file_path):
     # load all the parameters into a global dictionary
@@ -38,6 +40,21 @@ def init_params(param_file_path):
     else:
         params['use_jd'] = False
 
+def overlay_imgs_pixmap(phaseStack, labelStack, frame_index):
+
+        maskImg = labelStack[frame_index,:,:]
+        phaseImg = phaseStack[frame_index,:,:]
+        originalImgMax = np.max(phaseImg)
+        phaseImg = phaseImg/originalImgMax
+
+        RGBImg = color.label2rgb(maskImg, phaseImg, alpha=0.25, bg_label=0)
+        RGBImg = (RGBImg*255).astype('uint8')
+
+        originalHeight, originalWidth, originalChannelNumber = RGBImg.shape
+        maskQimage = QImage(RGBImg, originalWidth, originalHeight, RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+        maskQpixmap = QPixmap(maskQimage)
+
+        return(maskQpixmap)
 
 class Window(QMainWindow):
 
@@ -54,56 +71,201 @@ class Window(QMainWindow):
         self.setWindowTitle("You got this!")
         self.setGeometry(top,left,width,height)
 
-
-
-        # add layout to scene
-
-        # add QImages to scene (try three frames)
-
+        self.threeFrames = ThreeFrameImgWidget(self, imgPaths=imgPaths, fov_id_list=fov_id_list, training_dir=training_dir)
         # make scene the central widget
+        self.setCentralWidget(self.threeFrames)
 
-        self.setCentralWidget(self.scene)
-
-class OverlayImgsWidget(QWidget):
-
+class ThreeFrameImgWidget(QWidget):
+        # class for setting three frames side-by-side
         def __init__(self,parent,imgPaths,fov_id_list,training_dir):
-                super(OverlayImgsWidget, self).__init__(parent)
+                super(ThreeFrameImgWidget, self).__init__(parent)
 
-                self.scene = QGraphicsScene(self)
+                # self.frameLayout = QHBoxLayout()
+                # add layout to scene
 
-                self.imgLayout = QGridLayout()
+                # add QImages to scene (try three frames)
+                self.center_frame_index = 20
+                self.fov_id_list = fov_id_list
 
-                label_dir = os.path.join(training_dir, 'masks/cells')
-                image_dir = os.path.join(training_dir, 'images/cells')
+                self.fovIndex = 0
+                self.fov_id = self.fov_id_list[self.fovIndex]
 
-                center_frame_index = 1
+                self.imgIndex = 0
+                labelImgPath = imgPaths[self.fov_id][self.imgIndex][1]
+                labelStack = io.imread(labelImgPath)
+                print(labelImgPath)
 
-                # self.maskImgPaths = [paths[1] for paths in imgPaths]
-                # self.phaseImgPaths = [paths[0] for paths in imgPaths]
+                phaseImgPath = imgPaths[self.fov_id][self.imgIndex][0]
+                phaseStack = io.imread(phaseImgPath)
 
-                names = ['image','mask'] # image has to be after mask to place image on top
-                positions = [(0,0),(0,0)]
+                #New idea: add each cell object as an item in the graphics scene at its appropriate location so that I can use
+                #     the tutorial at https://doc.qt.io/qt-5/qtwidgets-graphicsview-diagramscene-example.html to help
+                leftFrame = overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index-1)
+                centerFrame = overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index)
+                rightFrame = overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index+1)
 
-                for name,position in zip(names,positions):
-                        if name == '':
-                                continue
-                        if name == 'mask':
-                                self.mask_widget = LabelTransparencyWidget(self, imgPaths=imgPaths, fov_id_list=fov_id_list, label_dir=label_dir, center_frame_index=center_frame_index)
-                                self.imgLayout.addWidget(self.mask_widget, *position)
+                self.scene = ThreeFrameScene(leftFrame,centerFrame,rightFrame)
+                self.view = QGraphicsView(self)
+                self.view.setScene(self.scene)
+                # self.scene.addPixmap(leftFrame)
+                # self.scene.addPixmap(centerFrame)
+                # self.scene.addPixmap(rightFrame)
+                #
+                # xPos = 0
+                # for item in self.scene.items(order=Qt.AscendingOrder):
+                #         item.setPos(xPos, 0)
+                #         xPos += item.pixmap().width()
 
-                        elif name == 'image':
-                                self.img_widget = PhaseWidget(self, imgPaths=imgPaths, fov_id_list=fov_id_list, image_dir=image_dir, center_frame_index=center_frame_index)
-                                self.imgLayout.addWidget(self.img_widget, *position)
+                # self.view = QGraphicsView(self)
+                # self.view.setScene(self.scene)
 
-                self.setLayout(self.imgLayout)
+
+# need a way to track line and destroy/redraw it as mouse is dragged around scene
+
+
+class ThreeFrameScene(QGraphicsScene):
+
+        # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
+
+        def __init__(self,leftFrame, centerFrame, rightFrame):
+                super(ThreeFrameScene, self).__init__()
+
+                self.addPixmap(leftFrame)
+                self.addPixmap(centerFrame)
+                self.addPixmap(rightFrame)
+
+                xPos = 0
+                for item in self.items(order=Qt.AscendingOrder):
+                        item.setPos(xPos, 0)
+                        xPos += item.pixmap().width()
+
+                self.brushSize = 2
+                self.brushColor = QColor(0,0,0)
+                self.pen = QPen()
+                self.pen.setWidth(self.brushSize)
+                self.lastPoint = QPoint()
+                self.origPoint = QPoint()
+
+        def mousePressEvent(self, event):
+                if event.button() == Qt.LeftButton:
+                        self.drawing = True
+                        self.firstPoint = event.scenePos()
+                        self.lastPoint = event.scenePos()
+
+                        self.line = QGraphicsLineItem(QLineF(self.firstPoint,self.lastPoint))
+                        self.line.setPen(self.pen)
+                        self.addItem(self.line)
+                        # print(event.scenePos())
+
+        def mouseMoveEvent(self, event):
+                if (event.buttons() & Qt.LeftButton) & self.drawing:
+
+                        self.lastPoint = event.scenePos()
+                        self.removeItem(self.line)
+                        self.line = QGraphicsLineItem(QLineF(self.firstPoint,self.lastPoint))
+                        self.line.setPen(self.pen)
+                        self.addItem(self.line)
+
+        def mouseReleaseEvent(self, event):
+                if event.button() == Qt.LeftButton:
+                        # print(event.scenePos())
+                        self.lastPoint = event.scenePos()
+                        self.removeItem(self.line)
+                        self.line = QGraphicsLineItem(QLineF(self.firstPoint,self.lastPoint))
+                        self.line.setPen(self.pen)
+                        self.addItem(self.line)
+                        self.drawing = False
+
+#
+# class OverlayImgsPixmap(QWidget):
+#
+#         def __init__(self,imgPaths,fov_id_list,training_dir,frame_index):
+#                 super(OverlayImgsPixmap, self).__init__()
+#
+#                 self.imgLayout = QGridLayout()
+#                 # print(imgPaths)
+#
+#                 # self.maskImgPaths = [paths[1] for paths in imgPaths]
+#                 # self.phaseImgPaths = [paths[0] for paths in imgPaths]
+#
+#                 label_dir = os.path.join(training_dir, 'masks/cells')
+#                 image_dir = os.path.join(training_dir, 'images/cells')
+#
+#                 self.image_dir = image_dir
+#                 self.label_dir = label_dir
+#                 self.frameIndex = frame_index
+#
+#                 self.imgPaths = imgPaths
+#                 self.fov_id_list = fov_id_list
+#                 self.fovIndex = 0
+#                 self.fov_id = self.fov_id_list[self.fovIndex]
+#
+#                 self.imgIndex = 0
+#                 self.labelImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
+#
+#                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
+#                 self.phaseStack = io.imread(self.phaseImgPath)
+#
+#                 # print(self.labelImgPath)
+#
+#                 # TO DO: check if re-annotated mask exists in training_dir, and present that instead of original mask
+#                 #        make indicator appear if we're re-editing the mask again.
+#                 experiment_name = params['experiment_name']
+#                 original_file_name = self.labelImgPath
+#                 pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
+#                 mat = pat.match(original_file_name)
+#                 fovID = mat.groups()[0]
+#                 peakID = mat.groups()[1]
+#                 fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
+#                 savePath = os.path.join(self.label_dir,fileBaseName)
+#
+#                 self.labelStack = io.imread(self.labelImgPath)
+#                 if os.path.isfile(savePath):
+#                     print('Re-annotated mask exists in training directory. Loading it.')
+#                     # add widget to express whether this mask is one you already re-annotated
+#                     self.labelStack[self.frameIndex,:,:] = io.imread(savePath)
+#                     overwriteSegFile = True
+#                 else:
+#                     overwriteSegFile = False
+#
+#                 maskImg = self.labelStack[self.frameIndex,:,:]
+#                 phaseImg = self.phaseStack[self.frameIndex,:,:]
+#                 self.originalImgMax = np.max(phaseImg)
+#                 phaseImg = phaseImg/self.originalImgMax
+#
+#                 RGBImg = color.label2rgb(maskImg, phaseImg, alpha=0.25, bg_label=0)
+#                 self.RGBImg = (RGBImg*255).astype('uint8')
+#
+#                 self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBImg.shape
+#                 self.maskQimage = QImage(self.RGBImg, self.originalWidth, self.originalHeight, self.RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+#                 self.maskQpixmap = QPixmap(self.maskQimage)
+#
+#                 self.label = QLabel(self)
+#                 self.label.setPixmap(self.maskQpixmap)
+#
+#                 # names = ['image','mask'] # image has to be after mask to place image on top
+#                 # positions = [(0,0),(0,0)]
+#                 #
+#                 # for name,position in zip(names,positions):
+#                 #         if name == '':
+#                 #                 continue
+#                 #         if name == 'mask':
+#                 #                 self.mask_widget = LabelTransparencyWidget(imgPaths=imgPaths, fov_id_list=fov_id_list, label_dir=label_dir, frame_index=frame_index)
+#                 #                 self.imgLayout.addWidget(self.mask_widget, *position)
+#                 #
+#                 #         elif name == 'image':
+#                 #                 self.img_widget = PhaseWidget(imgPaths=imgPaths, fov_id_list=fov_id_list, image_dir=image_dir, frame_index=frame_index)
+#                 #                 self.imgLayout.addWidget(self.img_widget, *position)
+#                 #
+#                 # self.setLayout(self.imgLayout)
 
 class LabelTransparencyWidget(QWidget):
 
-        def __init__(self,parent,imgPaths,fov_id_list,label_dir,center_frame_index):
-                super(LabelTransparencyWidget, self).__init__(parent)
+        def __init__(self,imgPaths,fov_id_list,label_dir,frame_index):
+                super(LabelTransparencyWidget, self).__init__()
 
                 self.label_dir = label_dir
-                self.frameIndex = center_frame_index
+                self.frameIndex = frame_index
 
                 self.imgPaths = imgPaths
                 self.fov_id_list = fov_id_list
@@ -112,6 +274,7 @@ class LabelTransparencyWidget(QWidget):
 
                 self.imgIndex = 0
                 self.labelImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
+                # print(self.labelImgPath)
 
                 # TO DO: check if re-annotated mask exists in training_dir, and present that instead of original mask
                 #        make indicator appear if we're re-editing the mask again.
@@ -134,10 +297,9 @@ class LabelTransparencyWidget(QWidget):
                     overwriteSegFile = False
 
                 img = self.labelStack[self.frameIndex,:,:]
-                self.RGBImg = color.label2rgb(img)
-                # img[img>0] = 255
-                # self.RGBImg = color.gray2rgb(img).astype('uint8')
-                # self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
+                RGBImg = color.label2rgb(img, bg_label=0).astype('uint8')
+                self.RGBImg = RGBImg*255
+
                 alphaFloat = 0.25
                 alphaArray = np.zeros(img.shape, dtype='uint8')
                 alphaArray = np.expand_dims(alphaArray, -1)
@@ -405,9 +567,10 @@ class LabelTransparencyWidget(QWidget):
 
 class PhaseWidget(QWidget):
 
-        def __init__(self, parent,imgPaths,fov_id_list,image_dir,center_frame_index):
-                super(PhaseWidget, self).__init__(parent)
+        def __init__(self,imgPaths,fov_id_list,image_dir,frame_index):
+                super(PhaseWidget, self).__init__()
 
+                # print(imgPaths)
                 self.image_dir = image_dir
 
                 self.imgPaths = imgPaths
@@ -419,7 +582,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = center_frame_index
+                self.frameIndex = frame_index
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.originalImgMax = np.max(img)
                 originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
