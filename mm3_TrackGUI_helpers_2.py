@@ -1,8 +1,13 @@
 #! /usr/bin/env python3
 from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QAction, QDockWidget, QPushButton, QGridLayout, QGraphicsLineItem
-from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
+                             QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout,
+                             QWidget, QLabel, QAction, QDockWidget, QPushButton, QGraphicsItem,
+                             QGridLayout, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
+                             QGraphicsEllipseItem)
+from PyQt5.QtGui import (QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QPainterPath, QBrush,
+                         QTransform)
 from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
 from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
@@ -62,14 +67,14 @@ class Window(QMainWindow):
         width = 800
         height = 600
 
-        self.setWindowTitle("You got this!")
+        self.setWindowTitle("Brent is not a doo-doo head!")
         self.setGeometry(top,left,width,height)
 
         # load specs file
         with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
             specs = yaml.safe_load(specs_file)
 
-        self.threeFrames = ThreeFrameImgWidget(self, specs=specs, training_dir=training_dir)
+        self.threeFrames = ThreeFrameImgWidget(specs=specs, training_dir=training_dir)
         # make scene the central widget
         self.setCentralWidget(self.threeFrames)
 
@@ -104,8 +109,8 @@ class Window(QMainWindow):
 
 class ThreeFrameImgWidget(QWidget):
     # class for setting three frames side-by-side
-    def __init__(self,parent,specs,training_dir):
-        super(ThreeFrameImgWidget, self).__init__(parent)
+    def __init__(self,specs,training_dir):
+        super(ThreeFrameImgWidget, self).__init__()
 
         # add QImages to scene (try three frames)
         self.center_frame_index = 1
@@ -158,33 +163,91 @@ class ThreeFrameImgWidget(QWidget):
         # The 'events' array is binary. The events are [migration, division, death, birth, appearance, disappearance, no_data], where a 0 at a given position in the 'events'
         #      array indicates the given event did not occur, and a 1 indicates it did occur.
         regions_and_events_by_time = self.create_tracking_information(labelStack, specs, Cells, All_Cells)
+        # regions_and_events_three_frame = {t: regions_and_events_by_time[t] for t in range(self.center_frame_index,self.center_frame_index+3)}
         # pprint(regions_and_events_by_time)
 
         # make the frames QGraphicsItems instead of qpixmaps so that I can map regions to frames.
         # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
-        leftFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index-1,regions_and_events_by_time[self.center_frame_index])
-        centerFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index,regions_and_events_by_time[self.center_frame_index+1])
-        rightFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index+1,regions_and_events_by_time[self.center_frame_index+2])
+        leftFrame, leftRegions = self.phase_img_and_regions(phaseStack=phaseStack,labelStack=labelStack,
+                                                            frame_index=self.center_frame_index-1,
+                                                            regions_and_events=regions_and_events_by_time)
+        # pprint(leftRegions)
+        centerFrame, centerRegions = self.phase_img_and_regions(phaseStack=phaseStack,labelStack=labelStack,
+                                                                frame_index=self.center_frame_index,
+                                                                regions_and_events=regions_and_events_by_time)
+        rightFrame, rightRegions = self.phase_img_and_regions(phaseStack=phaseStack,labelStack=labelStack,
+                                                              frame_index=self.center_frame_index+1,
+                                                              regions_and_events=regions_and_events_by_time)
 
-        self.scene = ThreeFrameScene(leftFrame,centerFrame,rightFrame,regions_and_events_by_time,self.center_frame_index)
+        self.scene = ThreeFrameItem(leftFrame,centerFrame,rightFrame,
+                                    leftRegions,centerRegions,rightRegions,
+                                    self.center_frame_index)
         self.view = QGraphicsView(self)
         self.view.setScene(self.scene)
 
-    def overlay_imgs_pixmap(phaseStack, labelStack, frame_index):
+    def phase_img_and_regions(self, phaseStack, labelStack, frame_index, regions_and_events):
 
-        maskImg = labelStack[frame_index,:,:]
+        time = frame_index+1
         phaseImg = phaseStack[frame_index,:,:]
+        maskImg = labelStack[frame_index,:,:]
         originalImgMax = np.max(phaseImg)
         phaseImg = phaseImg/originalImgMax
-
-        RGBImg = color.label2rgb(maskImg, phaseImg, alpha=0.25, bg_label=0)
-        RGBImg = (RGBImg*255).astype('uint8')
+        phaseImg = color.gray2rgb(phaseImg)
+        RGBImg = (phaseImg*255).astype('uint8')
 
         originalHeight, originalWidth, originalChannelNumber = RGBImg.shape
-        maskQimage = QImage(RGBImg, originalWidth, originalHeight, RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-        maskQpixmap = QPixmap(maskQimage)
+        phaseQimage = QImage(RGBImg, originalWidth, originalHeight,
+                             RGBImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+        phaseQpixmap = QPixmap(phaseQimage)
+        # maskQpixmap = QGraphicsPixmapItem(phaseQpixmap)
 
-        return(maskQpixmap)
+        # create transparent rbg overlay to grab colors from for drawing cell regions as QGraphicsPathItems
+        RGBLabelImg = color.label2rgb(maskImg, bg_label=0)
+        RGBLabelImg = (RGBLabelImg*255).astype('uint8')
+        originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
+        RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+        # pprint(regions)
+        time_regions_and_events = regions_and_events[time]
+        regions = time_regions_and_events['regions']
+        time_regions_and_events['time'] = time
+
+        for region_id in regions.keys():
+            brush = QBrush()
+            brush.setStyle(Qt.SolidPattern)
+            pen = QPen()
+            pen.setStyle(Qt.SolidLine)
+            props = regions[region_id]['props']
+            min_row, min_col, max_row, max_col = props.bbox
+            label = props.label
+            # coords = props.coords
+            # rr = coords[:,0]
+            # cc = coords[:,1]
+            centroidY,centroidX = props.centroid
+            brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
+            brushColor.setAlphaF(0.25)
+            brush.setColor(brushColor)
+            # brush.setColor(QColor('red'))
+            pen.setColor(brushColor)
+            # brush.setColor(QColor('red'))
+
+            # for i in range(len(rr)):
+            #     x = cc[i]
+            #     y = rr[i]
+            #     point = QPoint(x,y)
+            #     if i == 0:
+            #         path = QPainterPath(point)
+            #     else:
+            #         path.moveTo(point)
+            # path.setFillRule(Qt.WindingFill)
+            # region_graphic = QGraphicsPathItem(path)
+            # region_graphic.setPen(pen)
+            # region_graphic.setBrush(brush)
+            regions[region_id]['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
+                                                    'left_x':min_col, 'right_x':max_col,
+                                                    #'path':path,
+                                                    'pen':pen, 'brush':brush}
+
+        return(phaseQpixmap, time_regions_and_events)
 
     def create_tracking_information(self, labelStack, specs, Cells, All_Cells):
 
@@ -289,65 +352,129 @@ class ThreeFrameImgWidget(QWidget):
 
         return(regions_and_events_by_time)
 
-class ThreeFrameScene(QGraphicsScene):
-
+class ThreeFrameItem(QGraphicsScene):
     # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
 
-    def __init__(self,leftFrame, centerFrame, rightFrame, regions_and_events_by_time, center_frame_index):
-        super(ThreeFrameScene, self).__init__()
+    def __init__(self,leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions, center_frame_index):
+        super(ThreeFrameItem, self).__init__()
 
         self.center_frame_index = center_frame_index
 
-        self.addPixmap(leftFrame)
-        self.addPixmap(centerFrame)
-        self.addPixmap(rightFrame)
+        # Add each image to the scene
+        self.leftFrame = self.addPixmap(leftFrame)
+        self.centerFrame = self.addPixmap(centerFrame)
+        self.rightFrame = self.addPixmap(rightFrame)
 
+        # Loop through images and shift each by appropriate x-distance to get them side-by-side, rather than stacked
+        xPositions = []
         xPos = 0
         for item in self.items(order=Qt.AscendingOrder):
             item.setPos(xPos, 0)
+            xPositions.append(xPos)
             xPos += item.pixmap().width()
 
-        # populate dictionary with cell track info
-        self.regions_and_events = {self.center_frame_index+t: regions_and_events_by_time[self.center_frame_index+t] for t in range(3)}
-        self.
+        # add cell regions to each frame
+        self.add_regions_to_frame(leftRegions, self.leftFrame, self.center_frame_index)
+        self.add_regions_to_frame(centerRegions, self.centerFrame, self.center_frame_index)
+        self.add_regions_to_frame(rightRegions, self.rightFrame, self.center_frame_index)
 
         self.brushSize = 2
         self.brushColor = QColor('black')
         self.lastPoint = QPoint()
-        self.origPoint = QPoint()
         self.pen = QPen()
 
         # class options
-        self.migration = False
-        self.die = False
-        self.children = False
-        self.birth = False
-        self.appear = False
-        self.disappear = False
+        self.classDict = {'migration':False,
+                          'die':False,
+                          'children':False,
+                          'birth':False,
+                          'appear':False,
+                          'disappear':False}
+
+    def add_regions_to_frame(self, regions_and_events, frame, frame_time):
+        # loop through cells within this frame and add their ellipses as children of their corresponding qpixmap object
+        regions = regions_and_events['regions']
+        # print(regions_and_events)
+        frame_time = regions_and_events['time']
+        for region_id in regions.keys():
+            region = regions[region_id]
+            # pprint(region)
+            # construct the ellipse
+            graphic = region['region_graphic']
+            top_left = QPoint(graphic['left_x'],graphic['top_y'])
+            bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
+            rect = QRectF(top_left,bottom_right)
+            ellipse = QGraphicsEllipseItem(rect, frame)
+
+            # add cell information to the QGraphicsEllipseItem
+            ellipse.cellMatrix = regions_and_events['matrix']
+            ellipse.cellEvents = regions_and_events['regions'][region_id]['events']
+            ellipse.cellProps = regions_and_events['regions'][region_id]['props']
+            ellipse.time = frame_time
+            ellipse.setBrush(graphic['brush'])
+            ellipse.setPen(graphic['pen'])
+
+    # function for finding the ellipse under your mouse click or mouse release,
+    #  since items can be stacked, and a line you previously drew can obscure the
+    #  ellipse you intended to select
+    def get_ellipse(self, point):
+        items = self.items(point)
+        ellipseEncountered = False
+        for item in items:
+
+            itemType = item.type()
+            if itemType == 4:
+                ellipseEncountered = True
+                # once we find an ellipse object under our mouse event we return the ellipse
+                if ellipseEncountered:
+                    return(item)
+
+        # if an ellipse was never found after burrowing through the items, return None
+        print("No cell detected underneath your selection. Ignoring selection.")
+        return(None)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drawing = True
             self.firstPoint = event.scenePos()
             self.lastPoint = event.scenePos()
-            self.set_line()
-            self.addItem(self.line)
+            self.startItem = self.get_ellipse(point=self.firstPoint)
+            if self.startItem is not None:
+                self.set_line()
+                self.addItem(self.line)
+            # print(dir(self.startItem))
+            print(self.startItem.cellEvents)
+            print(self.startItem.time)
+            print(self.startItem.cellMatrix)
+            print(self.startItem.cellProps.label)
 
     def mouseMoveEvent(self, event):
         if (event.buttons() & Qt.LeftButton) & self.drawing:
-
-            self.lastPoint = event.scenePos()
-            self.removeItem(self.line)
-            self.set_line()
-            self.addItem(self.line)
+            if self.startItem is not None:
+                self.lastPoint = event.scenePos()
+                self.removeItem(self.line)
+                self.set_line()
+                self.addItem(self.line)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.lastPoint = event.scenePos()
-            self.removeItem(self.line)
-            self.set_line()
-            self.addItem(self.line)
+            self.endItem = self.get_ellipse(point=self.lastPoint)
+            # print(self.endItem)
+            if self.startItem is not None:
+                if self.endItem is None:
+                    self.removeItem(self.line)
+
+            if self.endItem is not None:
+                if self.startItem is not None:
+                    self.removeItem(self.line)
+                    self.set_line()
+                    self.addItem(self.line)
             self.drawing = False
+            print(self.endItem.cellEvents)
+            print(self.endItem.time)
+            print(self.endItem.cellMatrix)
+            print(self.endItem.cellProps.label)
 
     # I need to test whether the cell already has an event of the chosen type
     #   so that the existing one can be replaced by the new one I'm currently drawing.
