@@ -131,7 +131,7 @@ if __name__ == "__main__":
         found_files = sorted(found_files) # should sort by timepoint
 
         # keep images starting at this timepoint
-        if t_start:
+        if t_start is not None:
             mm3.information('Removing images before time {}'.format(t_start))
             # go through list and find first place where timepoint is equivalent to t_start
             for n, ifile in enumerate(found_files):
@@ -139,11 +139,11 @@ if __name__ == "__main__":
                 # if re.search == True then a match was found
                 if re.search(string, ifile):
                     # cut off every file name prior to this one and quit the loop
-                    found_file = found_files[n:]
+                    found_files = found_files[n:]
                     break
 
         # remove images after this timepoint
-        if t_end:
+        if t_end is not None:
             mm3.information('Removing images after time {}'.format(t_end))
             # go through list and find first place where timepoint is equivalent to t_end
             for n, ifile in enumerate(found_files):
@@ -190,7 +190,7 @@ if __name__ == "__main__":
             pool.close() # tells the process nothing more will be added.
             pool.join() # blocks script until everything has been processed and workers exit
 
-            mm3.information('Image analyses pool finished, getting results.')
+            mm3.information('Image analysis pool finished, getting results.')
 
             # get results from the pool and put them in a dictionary
             for fn in analyzed_imgs.keys():
@@ -218,7 +218,7 @@ if __name__ == "__main__":
             mm3.information("Model loaded.")
 
             # initialize pool for getting image metadata
-            #pool = Pool(p['num_analyzers'])
+            pool = Pool(p['num_analyzers'])
 
             # loop over images and get information
             for fn in found_files:
@@ -226,29 +226,28 @@ if __name__ == "__main__":
                 # for each file name. Won't look for channels, just gets the metadata for later use by Unet
 
                 # This is the non-parallelized version (useful for debug)
-                analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
+                # analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
 
                 # Parallelized
-                #analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn))
+                analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn,))
 
             mm3.information('Waiting for image metadata pool to be finished.')
-            #print(analyzed_imgs) # uncomment for debug
-            #pool.close() # tells the process nothing more will be added.
-            #pool.join() # blocks script until everything has been processed and workers exit
+            pool.close() # tells the process nothing more will be added.
+            pool.join() # blocks script until everything has been processed and workers exit
 
             mm3.information('Image metadata pool finished, getting results.')
 
             # get results from the pool and put them in a dictionary
+            for fn in analyzed_imgs.keys():
+               result = analyzed_imgs[fn]
+               if result.successful():
+                   analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
+               else:
+                   analyzed_imgs[fn] = False # put a false there if it's bad
 
-            #for fn in analyzed_imgs.keys():
-            #    result = analyzed_imgs[fn]
-            #    if result.successful():
-            #        analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
-            #    else:
-            #        analyzed_imgs[fn] = False # put a false there if it's bad
+            # print(analyzed_imgs)
 
             # set up some variables for Unet and image aligment/cropping
-
             file_names = [key for key in analyzed_imgs.keys()]
             file_names.sort() # sort the file names by time
             file_names = np.asarray(file_names)
@@ -286,17 +285,35 @@ if __name__ == "__main__":
                 # get prediction of where traps are located in first image
                 imgPath = os.path.join(p['experiment_directory'], p['image_directory'],
                                        trap_align_metadata['first_frame_name'])
-                img = io.imread(imgPath)[:,:,trap_align_metadata['phase_plane_index']]
-                # print(img.shape)
+                img = io.imread(imgPath)
+                # detect if there are multiple imaging channels, and rearrange image if necessary, keeping only the phase image
+                img = mm3.permute_image(img, trap_align_metadata)
+                if p['debug']:
+                    io.imshow(img/np.max(img));
+                    plt.title("Initial phase image");
+                    plt.show();
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
-                print("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25)
+                mm3.information("Predicting trap locations for first frame.")
+                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25, debug=p['debug'])
+
+                if p['debug']:
+                    fig,ax = plt.subplots(nrows=1, ncols=4, figsize=(12,12))
+                    ax[0].imshow(img);
+                    for i in range(first_frame_trap_prediction.shape[-1]):
+                        ax[i+1].imshow(first_frame_trap_prediction[:,:,i]);
+                    plt.show();
 
                 # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
                 class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
 
                 traps = class_predictions == 0 # returns boolean array where our intial guesses at trap locations are True
+
+                if p['debug']:
+                    io.imshow(traps);
+                    plt.title('Initial trap masks')
+                    plt.show();
+
                 trap_labels = measure.label(traps)
                 trap_props = measure.regionprops(trap_labels)
 
@@ -364,12 +381,13 @@ if __name__ == "__main__":
                     print(centroid)
 
                 # get the (frame_number,512,512,1)-sized stack for image aligment
-                align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1))
+                align_region_stack = np.zeros((trap_align_metadata['frame_count'],512,512,1), dtype='uint16')
 
                 for frame,fn in enumerate(fov_file_names):
                     imgPath = os.path.join(p['experiment_directory'],p['image_directory'],fn)
                     frame_img = io.imread(imgPath)
-                    frame_img = frame_img[:,:,trap_align_metadata['phase_plane_index']]
+                    # detect if there are multiple imaging channels, and rearrange image if necessary, keeping only the phase image
+                    frame_img = mm3.permute_image(frame_img, trap_align_metadata)
                     align_region_stack[frame,:,:,0] = frame_img[centroid[0]-256:centroid[0]+256,
                                                              centroid[1]-256:centroid[1]+256]
 
@@ -386,7 +404,20 @@ if __name__ == "__main__":
                 # run model on all frames
                 batch_size=p['compile']['channel_prediction_batch_size']
                 mm3.information("Predicting trap regions for (512,512) slice through all frames.")
-                align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
+
+                data_gen_args = {'batch_size':batch_size,
+                         'n_channels':1,
+                         'normalize_to_one':True,
+                         'shuffle':False}
+                predict_gen_args = {'verbose':1,
+                        'use_multiprocessing':True,
+                        'workers':p['num_analyzers']}
+
+                img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
+
+                align_region_predictions = model.predict_generator(img_generator, **predict_gen_args)
+                #align_region_stack = mm3.apply_median_filter_and_normalize(align_region_stack)
+                #align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
                 # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.
                 align_region_class_predictions = np.argmax(align_region_predictions, axis=3)
 
@@ -416,6 +447,7 @@ if __name__ == "__main__":
                 # allocate array to store filtered traps over time
                 align_trap_mask_stack = np.zeros(align_traps.shape)
                 for frame in range(trap_align_metadata['frame_count']):
+
                     frame_trap_labels = measure.label(align_traps[frame,:,:])
                     frame_trap_props = measure.regionprops(frame_trap_labels)
 
@@ -440,6 +472,23 @@ if __name__ == "__main__":
 
                 labelled_align_trap_mask_stack = measure.label(align_trap_mask_stack)
 
+                trapTriggered = False
+                for frame in range(trap_align_metadata['frame_count']):
+                    anyTraps = np.any(labelled_align_trap_mask_stack[frame,:,:] > 0)
+                    # if anyTraps is False, that means no traps were detected for this frame. This usuall occurs due to a bug in our imaging system,
+                    #    which can cause it to miss the occasional frame. Should be fine to snag labels from prior frame.
+                    if not anyTraps:
+                        trapTriggered = True
+                        mm3.information("Frame at index {} has no detected traps. Borrowing labels from an adjacent frame.".format(frame))
+                        if frame > 0:
+                            labelled_align_trap_mask_stack[frame,:,:] = labelled_align_trap_mask_stack[frame-1,:,:]
+                        else:
+                            labelled_align_trap_mask_stack[frame,:,:] = labelled_align_trap_mask_stack[frame+1,:,:]
+
+                if trapTriggered:
+                    repaired_align_trap_mask_stack = labelled_align_trap_mask_stack > 0
+                    labelled_align_trap_mask_stack = measure.label(repaired_align_trap_mask_stack)
+
                 align_trap_props = measure.regionprops(labelled_align_trap_mask_stack)
 
                 areas = np.array([trap.area for trap in align_trap_props])
@@ -452,6 +501,12 @@ if __name__ == "__main__":
                 if p['debug']:
                     pprint(areas)
                     print(expected_area)
+
+                    if not expected_area in areas:
+                        print("No trap has expected total area. Saving labelled masks for debugging as labelled_align_trap_mask_stack.tif")
+                        io.imsave("labelled_align_trap_mask_stack.tif", labelled_align_trap_mask_stack.astype('uint8'))
+                        io.imsave("masks.tif", align_traps.astype('uint8'))
+                        # occasionally our microscope misses an image, resulting in no traps for a single frame. This obviously messes up image alignment here....
 
                 for trap in align_trap_props:
                     if trap.area != expected_area:

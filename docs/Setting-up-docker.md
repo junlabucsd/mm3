@@ -107,7 +107,7 @@ Because we are using TensorFlow, we will build upon the official [TensorFlow ima
 
 #### 2.2.1. Edit the pre-made Dockerfiles
 
-Enter the `mm3/docker/mm3-py3/` director. This directory contains two files, a Dockerfile and an additional file named `install_mm3_dependencies.sh` which contains the packages specific to mm3. You may want to edit the Dockerfile, for example, to change the time zone of the image.
+Enter the `mm3/docker/mm3-py3/` directory. This directory contains two files, a Dockerfile and an additional file named `install_mm3_dependencies.sh` which contains the packages specific to mm3. You may want to edit the Dockerfile, for example, to change the time zone of the image.
 
 _Feel free to copy and edit the mm3/docker/ directory and run the following commands on your edited version. However, avoid uploading personal changes to the Dockerfiles to the mm3 repository._
 
