@@ -82,6 +82,7 @@ if __name__ == "__main__":
 
     # set segmentation image name for saving and loading segmented images
     p['seg_img'] = 'seg_unet'
+    p['pred_img'] = 'pred_unet'
 
     # load specs file
     specs = mm3.load_specs()
