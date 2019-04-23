@@ -1,5 +1,6 @@
-#!/usr/bin/python
-from __future__ import print_function
+#!/usr/bin/env python3
+from __future__ import print_function, division
+import six
 
 # import modules
 import sys
@@ -19,6 +20,7 @@ import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
+from skimage.external import tifffile as tiff
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -34,11 +36,6 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
-# supress the warning this always gives
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import tifffile as tiff
-
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
@@ -48,10 +45,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(prog='python mm3_Subtract.py',
                                      description='Subtract background from phase contrast and fluorescent channels.')
-    parser.add_argument('-f', '--paramfile',  type=file,
+    parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov',  type=str,
-                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
+                        required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
     parser.add_argument('-c', '--color', type=str,
@@ -60,21 +57,26 @@ if __name__ == "__main__":
 
     # Load the project parameters file
     mm3.information('Loading experiment parameters.')
-    if namespace.paramfile.name:
-        param_file_path = namespace.paramfile.name
+    if namespace.paramfile:
+        param_file_path = namespace.paramfile
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
-        user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
+        if '-' in namespace.fov:
+            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
+                                   int(namespace.fov.split("-")[1])+1)
+        else:
+            user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
         user_spec_fovs = []
 
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
+    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
     # which color channel with which to do subtraction
     if namespace.color:
@@ -90,12 +92,7 @@ if __name__ == "__main__":
             os.makedirs(p['sub_dir'])
 
     # load specs file
-    try:
-        with open(os.path.join(p['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-            specs = yaml.safe_load(specs_file)
-    except:
-        mm3.warning('Could not load specs file.')
-        raise ValueError
+    specs = mm3.load_specs()
 
     # make list of FOVs to process (keys of specs file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
