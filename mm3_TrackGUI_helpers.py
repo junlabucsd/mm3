@@ -1,8 +1,13 @@
 #! /usr/bin/env python3
 from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QAction, QDockWidget, QPushButton, QGridLayout, QGraphicsLineItem
-from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphicsView,
+                             QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout,
+                             QWidget, QLabel, QAction, QDockWidget, QPushButton, QGraphicsItem,
+                             QGridLayout, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
+                             QGraphicsEllipseItem, QGraphicsTextItem)
+from PyQt5.QtGui import (QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QPainterPath, QBrush,
+                         QTransform, QPolygonF, QFont)
 from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
 from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
@@ -62,14 +67,14 @@ class Window(QMainWindow):
         width = 800
         height = 600
 
-        self.setWindowTitle("You got this!")
+        self.setWindowTitle("Brent is not a doo-doo head!")
         self.setGeometry(top,left,width,height)
 
         # load specs file
         with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
             specs = yaml.safe_load(specs_file)
 
-        self.threeFrames = ThreeFrameImgWidget(self, specs=specs, training_dir=training_dir)
+        self.threeFrames = ThreeFrameImgWidget(specs=specs, training_dir=training_dir)
         # make scene the central widget
         self.setCentralWidget(self.threeFrames)
 
@@ -85,15 +90,32 @@ class Window(QMainWindow):
         childrenButton.clicked.connect(self.threeFrames.scene.set_children)
         eventButtonGroup.addButton(childrenButton)
 
+        bornButton = QRadioButton("Born")
+        bornButton.setShortcut("Ctrl+C")
+        bornButton.clicked.connect(self.threeFrames.scene.set_born)
+        eventButtonGroup.addButton(bornButton)
+
         dieButton = QRadioButton("Die")
         dieButton.setShortcut("Ctrl+D")
         dieButton.clicked.connect(self.threeFrames.scene.set_die)
         eventButtonGroup.addButton(dieButton)
 
+        appearButton = QRadioButton("Appear")
+        appearButton.setShortcut("Ctrl+A")
+        appearButton.clicked.connect(self.threeFrames.scene.set_appear)
+        eventButtonGroup.addButton(appearButton)
+
+        disappearButton = QRadioButton("Disappear")
+        disappearButton.clicked.connect(self.threeFrames.scene.set_disappear)
+        eventButtonGroup.addButton(disappearButton)
+
         eventButtonLayout = QVBoxLayout()
         eventButtonLayout.addWidget(migrateButton)
         eventButtonLayout.addWidget(childrenButton)
+        eventButtonLayout.addWidget(bornButton)
         eventButtonLayout.addWidget(dieButton)
+        eventButtonLayout.addWidget(appearButton)
+        eventButtonLayout.addWidget(disappearButton)
 
         eventButtonGroupWidget = QWidget()
         eventButtonGroupWidget.setLayout(eventButtonLayout)
@@ -102,14 +124,63 @@ class Window(QMainWindow):
         eventButtonDockWidget.setWidget(eventButtonGroupWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, eventButtonDockWidget)
 
-class ThreeFrameImgWidget(QWidget):
-    # class for setting three frames side-by-side
-    def __init__(self,parent,specs,training_dir):
-        super(ThreeFrameImgWidget, self).__init__(parent)
+        advanceFrameButton = QPushButton("Next frame")
+        advanceFrameButton.setShortcut("Ctrl+F")
+        advanceFrameButton.clicked.connect(self.threeFrames.scene.advance_frame)
 
+        priorFrameButton = QPushButton("Prior frame")
+        priorFrameButton.clicked.connect(self.threeFrames.scene.prior_frame)
+
+        advancePeakButton = QPushButton("Next peak")
+        advancePeakButton.setShortcut("Ctrl+P")
+        advancePeakButton.clicked.connect(self.threeFrames.scene.next_peak)
+
+        priorPeakButton = QPushButton("Prior peak")
+        priorPeakButton.clicked.connect(self.threeFrames.scene.prior_peak)
+
+        advanceFOVButton = QPushButton("Next FOV")
+        advanceFOVButton.clicked.connect(self.threeFrames.scene.next_fov)
+
+        priorFOVButton = QPushButton("Prior FOV")
+        priorFOVButton.clicked.connect(self.threeFrames.scene.prior_fov)
+
+        fileAdvanceLayout = QVBoxLayout()
+        fileAdvanceLayout.addWidget(advanceFrameButton)
+        fileAdvanceLayout.addWidget(priorFrameButton)
+        fileAdvanceLayout.addWidget(advancePeakButton)
+        fileAdvanceLayout.addWidget(priorPeakButton)
+        fileAdvanceLayout.addWidget(advanceFOVButton)
+        fileAdvanceLayout.addWidget(priorFOVButton)
+        # fileAdvanceLayout.addWidget(saveAndNextButton)
+
+        fileAdvanceGroupWidget = QWidget()
+        fileAdvanceGroupWidget.setLayout(fileAdvanceLayout)
+
+        fileAdvanceDockWidget = QDockWidget()
+        fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
+        self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
+
+class ThreeFrameImgWidget(QWidget):
+    # class for setting three frames side-by-side as a central widget in a QMainWindow object
+    def __init__(self,specs,training_dir):
+        super(ThreeFrameImgWidget, self).__init__()
+
+        # add images and cell regions as ellipses to each frame in a QGraphicsScene object
+        self.scene = ThreeFrameItem(specs,training_dir)
+        self.view = QGraphicsView(self)
+        self.view.setScene(self.scene)
+
+
+class ThreeFrameItem(QGraphicsScene):
+    # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
+
+    def __init__(self,specs,training_dir):
+        super(ThreeFrameItem, self).__init__()
+
+        self.specs = specs
         # add QImages to scene (try three frames)
-        self.center_frame_index = 1
         self.fov_id_list = [fov_id for fov_id in specs.keys()]
+        self.center_frame_index = 1
 
         self.fovIndex = 0
         self.fov_id = self.fov_id_list[self.fovIndex]
@@ -120,13 +191,13 @@ class ThreeFrameImgWidget(QWidget):
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
 
         # construct image stack file names from params
-        phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
-        labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         # labelImgPath = imgPaths[self.fov_id][self.imgIndex][1]
-        labelStack = io.imread(labelImgPath)
+        self.labelStack = io.imread(self.labelImgPath)
         # phaseImgPath = imgPaths[self.fov_id][self.imgIndex][0]
-        phaseStack = io.imread(phaseImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
 
         time_int = params['moviemaker']['seconds_per_time_index']/60
 
@@ -134,11 +205,11 @@ class ThreeFrameImgWidget(QWidget):
         cell_filename_all = os.path.join(params['cell_dir'], 'all_cells.pkl')
 
         with open(cell_filename, 'rb') as cell_file:
-            Cells = pickle.load(cell_file)
-        mm3.calculate_pole_age(Cells) # add poleage
+            self.Cells = pickle.load(cell_file)
+        mm3.calculate_pole_age(self.Cells) # add poleage
 
         with open(cell_filename_all, 'rb') as cell_file:
-            All_Cells = pickle.load(cell_file)
+            self.All_Cells = pickle.load(cell_file)
 
         plot_dir = os.path.join(params['cell_dir'], '20190312_plots')
         if not os.path.exists(plot_dir):
@@ -148,53 +219,263 @@ class ThreeFrameImgWidget(QWidget):
         if not os.path.exists(lin_dir):
             os.makedirs(lin_dir)
 
-        # regions_and_events_by_time is a dictionary, the keys of which are 1-indexed frame numbers
-        # for each frame, there is a dictionary with the following keys: 'matrix' and 'regions'
-        #   'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
-        #      If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
-        #   'regions' is a dictionary with each region's label as a separate key.
-        #      Each region in 'regions' is another dictionary, with 'events', which contains a 1D array identifying the events that correspond to the connections in 'matrix',
-        #                                                      and 'props', which contains all region properties that measure.regionprops retuns for the labelled image at time t.
-        # The 'events' array is binary. The events are [migration, division, death, birth, appearance, disappearance, no_data], where a 0 at a given position in the 'events'
-        #      array indicates the given event did not occur, and a 1 indicates it did occur.
-        regions_and_events_by_time = self.create_tracking_information(labelStack, specs, Cells, All_Cells)
-        # pprint(regions_and_events_by_time)
+        self.regions_and_events_by_time = self.create_tracking_information()
 
-        # make the frames QGraphicsItems instead of qpixmaps so that I can map regions to frames.
         # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
-        leftFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index-1,regions_and_events_by_time[self.center_frame_index])
-        centerFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index,regions_and_events_by_time[self.center_frame_index+1])
-        rightFrame = self.overlay_imgs_pixmap(phaseStack=phaseStack,labelStack=labelStack,frame_index=self.center_frame_index+1,regions_and_events_by_time[self.center_frame_index+2])
+        leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+        centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+        rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
 
-        self.scene = ThreeFrameScene(leftFrame,centerFrame,rightFrame,regions_and_events_by_time,self.center_frame_index)
-        self.view = QGraphicsView(self)
-        self.view.setScene(self.scene)
+        self.brushSize = 2
+        self.brushColor = QColor('black')
+        self.lastPoint = QPoint()
+        self.pen = QPen()
 
-    def overlay_imgs_pixmap(phaseStack, labelStack, frame_index):
+        # class options
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
 
-        maskImg = labelStack[frame_index,:,:]
-        phaseImg = phaseStack[frame_index,:,:]
+        # set the scene...
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+
+    def set_scene(self, leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions):
+
+        self.clear()
+        # Add each image to the scene
+        self.leftFrame = self.addPixmap(leftFrame)
+        self.centerFrame = self.addPixmap(centerFrame)
+        self.rightFrame = self.addPixmap(rightFrame)
+
+        # Loop through images and shift each by appropriate x-distance to get them side-by-side, rather than stacked
+        xPositions = []
+        xPos = 0
+        for item in self.items(order=Qt.AscendingOrder):
+            item.setPos(xPos, 0)
+            xPositions.append(xPos)
+            xPos += item.pixmap().width()
+
+        # add cell regions to each frame
+        self.add_regions_to_frame(leftRegions, self.leftFrame)
+        self.add_regions_to_frame(centerRegions, self.centerFrame)
+        self.add_regions_to_frame(rightRegions, self.rightFrame)
+
+        self.draw_cell_events()
+
+    def advance_frame(self):
+        try:
+            self.center_frame_index += 1
+            # redefine frames and regions
+            leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+            centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+            rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        except KeyError:
+            sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
+
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def prior_frame(self):
+        try:
+            self.center_frame_index -= 1
+            print(self.center_frame_index)
+            # redefine frames and regions
+            leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+            centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+            rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        except KeyError:
+            sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
+
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def next_peak(self):
+        self.center_frame_index = 1
+        self.peakIndex += 1
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+        print(self.peak_id)
+
+        # construct image stack file names from params
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        print(self.phaseImgPath)
+        print(self.labelImgPath)
+
+        self.labelStack = io.imread(self.labelImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
+
+        self.regions_and_events_by_time = self.create_tracking_information()
+
+        # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
+        leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+        centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+        rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        # set the scene...
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def prior_peak(self):
+        self.center_frame_index = 1
+        self.peakIndex -= 1
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+        print(self.peak_id)
+
+        # construct image stack file names from params
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        print(self.phaseImgPath)
+        print(self.labelImgPath)
+
+        self.labelStack = io.imread(self.labelImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
+
+        self.regions_and_events_by_time = self.create_tracking_information()
+
+        # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
+        leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+        centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+        rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        # set the scene...
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def next_fov(self):
+        self.center_frame_index = 1
+
+        self.fovIndex += 1
+        self.fov_id = self.fov_id_list[self.fovIndex]
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in self.specs[self.fov_id].keys()]
+
+        self.peakIndex = 0
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        # construct image stack file names from params
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        print(self.phaseImgPath)
+        print(self.labelImgPath)
+
+        self.labelStack = io.imread(self.labelImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
+
+        self.regions_and_events_by_time = self.create_tracking_information()
+
+        # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
+        leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+        centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+        rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        # set the scene...
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def prior_fov(self):
+        self.center_frame_index = 1
+
+        self.fovIndex -= 1
+        self.fov_id = self.fov_id_list[self.fovIndex]
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in self.specs[self.fov_id].keys()]
+
+        self.peakIndex = 0
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        # construct image stack file names from params
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        print(self.phaseImgPath)
+        print(self.labelImgPath)
+
+        self.labelStack = io.imread(self.labelImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
+
+        self.regions_and_events_by_time = self.create_tracking_information()
+
+        # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
+        leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
+        centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
+        rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
+
+        # set the scene...
+        self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def phase_img_and_regions(self, frame_index):
+
+        time = frame_index+1
+        phaseImg = self.phaseStack[frame_index,:,:]
+        maskImg = self.labelStack[frame_index,:,:]
         originalImgMax = np.max(phaseImg)
         phaseImg = phaseImg/originalImgMax
-
-        RGBImg = color.label2rgb(maskImg, phaseImg, alpha=0.25, bg_label=0)
-        RGBImg = (RGBImg*255).astype('uint8')
+        phaseImg = color.gray2rgb(phaseImg)
+        RGBImg = (phaseImg*255).astype('uint8')
 
         originalHeight, originalWidth, originalChannelNumber = RGBImg.shape
-        maskQimage = QImage(RGBImg, originalWidth, originalHeight, RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-        maskQpixmap = QPixmap(maskQimage)
+        phaseQimage = QImage(RGBImg, originalWidth, originalHeight,
+                             RGBImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+        phaseQpixmap = QPixmap(phaseQimage)
+        # maskQpixmap = QGraphicsPixmapItem(phaseQpixmap)
 
-        return(maskQpixmap)
+        # create transparent rbg overlay to grab colors from for drawing cell regions as QGraphicsPathItems
+        RGBLabelImg = color.label2rgb(maskImg, bg_label=0)
+        RGBLabelImg = (RGBLabelImg*255).astype('uint8')
+        originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
+        RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+        # pprint(regions)
+        time_regions_and_events = self.regions_and_events_by_time[time]
+        regions = time_regions_and_events['regions']
+        time_regions_and_events['time'] = time
 
-    def create_tracking_information(self, labelStack, specs, Cells, All_Cells):
+        for region_id in regions.keys():
+            brush = QBrush()
+            brush.setStyle(Qt.SolidPattern)
+            pen = QPen()
+            pen.setStyle(Qt.SolidLine)
+            props = regions[region_id]['props']
+            min_row, min_col, max_row, max_col = props.bbox
+            label = props.label
+            # coords = props.coords
+            # rr = coords[:,0]
+            # cc = coords[:,1]
+            centroidY,centroidX = props.centroid
+            brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
+            brushColor.setAlphaF(0.25)
+            brush.setColor(brushColor)
+            # brush.setColor(QColor('red'))
+            pen.setColor(brushColor)
+            # brush.setColor(QColor('red'))
 
-        Complete_Lineages = mm3_plots.organize_cells_by_channel(Cells, specs)
-        All_Lineages = mm3_plots.organize_cells_by_channel(All_Cells, specs)
+            # for i in range(len(rr)):
+            #     x = cc[i]
+            #     y = rr[i]
+            #     point = QPoint(x,y)
+            #     if i == 0:
+            #         path = QPainterPath(point)
+            #     else:
+            #         path.moveTo(point)
+            # path.setFillRule(Qt.WindingFill)
+            # region_graphic = QGraphicsPathItem(path)
+            # region_graphic.setPen(pen)
+            # region_graphic.setBrush(brush)
+            regions[region_id]['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
+                                                    'left_x':min_col, 'right_x':max_col,
+                                                    #'path':path,
+                                                    'pen':pen, 'brush':brush}
+
+        return(phaseQpixmap, time_regions_and_events)
+
+    def create_tracking_information(self):
+
+        Complete_Lineages = mm3_plots.organize_cells_by_channel(self.Cells, self.specs)
+        All_Lineages = mm3_plots.organize_cells_by_channel(self.All_Cells, self.specs)
 
         t_adj = 1
 
-        regions_by_time = {frame+t_adj: measure.regionprops(labelStack[frame,:,:]) for frame in range(labelStack.shape[0])}
-        regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(labelStack.shape[0])}
+        regions_by_time = {frame+t_adj: measure.regionprops(self.labelStack[frame,:,:]) for frame in range(self.labelStack.shape[0])}
+        regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(self.labelStack.shape[0])}
 
         # loop through regions and add them to the main dictionary.
         for t, regions in regions_by_time.items():
@@ -224,7 +505,7 @@ class ThreeFrameImgWidget(QWidget):
         # We will go through each cell by its time points and edit the events associated with that region.
         # We will also edit the matrix when appropriate.
         # pull out only the cells in of this FOV
-        cells_tmp = mm3_plots.find_cells_of_fov_and_peak(All_Cells, self.fov_id, self.peak_id)
+        cells_tmp = mm3_plots.find_cells_of_fov_and_peak(self.All_Cells, self.fov_id, self.peak_id)
         print('There are {} cells for this channel'.format(len(cells_tmp)))
 
         for cell_id, cell_tmp in cells_tmp.items():
@@ -253,8 +534,8 @@ class ThreeFrameImgWidget(QWidget):
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
 
                     # daughter 1 and 2 label
-                    d1_label = All_Cells[cell_tmp.daughters[0]].labels[0]
-                    d2_label = All_Cells[cell_tmp.daughters[1]].labels[0]
+                    d1_label = self.All_Cells[cell_tmp.daughters[0]].labels[0]
+                    d2_label = self.All_Cells[cell_tmp.daughters[1]].labels[0]
 
                     regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
                     regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
@@ -289,97 +570,454 @@ class ThreeFrameImgWidget(QWidget):
 
         return(regions_and_events_by_time)
 
-class ThreeFrameScene(QGraphicsScene):
+    def set_frames(self, leftFrame, centerFrame, rightFrame):
+        self.leftFrame = self.addPixmap(leftFrame)
+        self.centerFrame = self.addPixmap(centerFrame)
+        self.rightFrame = self.addPixmap(rightFrame)
 
-    # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
+    def add_regions_to_frame(self, regions_and_events, frame):
+        # loop through cells within this frame and add their ellipses as children of their corresponding qpixmap object
+        regions = regions_and_events['regions']
+        # print(regions_and_events)
+        frame_time = regions_and_events['time']
+        for region_id in regions.keys():
+            region = regions[region_id]
+            # pprint(region)
+            # construct the ellipse
+            graphic = region['region_graphic']
+            top_left = QPoint(graphic['left_x'],graphic['top_y'])
+            bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
+            rect = QRectF(top_left,bottom_right)
+            ellipse = QGraphicsEllipseItem(rect, frame)
 
-    def __init__(self,leftFrame, centerFrame, rightFrame, regions_and_events_by_time, center_frame_index):
-        super(ThreeFrameScene, self).__init__()
+            # add cell information to the QGraphicsEllipseItem
+            ellipse.cellMatrix = regions_and_events['matrix']
+            ellipse.cellEvents = regions_and_events['regions'][region_id]['events']
+            ellipse.cellProps = regions_and_events['regions'][region_id]['props']
+            ellipse.time = frame_time
+            ellipse.setBrush(graphic['brush'])
+            ellipse.setPen(graphic['pen'])
 
-        self.center_frame_index = center_frame_index
+    def draw_cell_events(self):
+        # Here is where we will draw the intial lines and symbols representing
+        #   cell events and linkages between cells.
 
-        self.addPixmap(leftFrame)
-        self.addPixmap(centerFrame)
-        self.addPixmap(rightFrame)
+        # regions_and_events_by_time is a dictionary, the keys of which are 1-indexed frame numbers
+        # for each frame, there is a dictionary with the following keys: 'matrix' and 'regions'
+        #   'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
+        #      If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
+        #   'regions' is a dictionary with each region's label as a separate key.
+        #      Each region in 'regions' is another dictionary, with 'events', which contains a 1D array identifying the events that correspond to the connections in 'matrix',
+        #                                                      and 'props', which contains all region properties that measure.regionprops retuns for the labelled image at time t.
+        # The 'events' array is binary. The events are [migration, division, death, birth, appearance, disappearance, no_data], where a 0 at a given position in the 'events'
+        #      array indicates the given event did not occur, and a 1 indicates it did occur.
 
-        xPos = 0
-        for item in self.items(order=Qt.AscendingOrder):
-            item.setPos(xPos, 0)
-            xPos += item.pixmap().width()
+        if len(self.leftFrame.childItems()) > 0:
+            for self.startItem in self.leftFrame.childItems():
+                # test if this is an ellipse item. If it is, draw event symbols.
+                if self.startItem.type() == 4:
+                    cell_properties = self.startItem.cellProps
+                    cell_label = cell_properties.label
+                    cell_interactions = self.startItem.cellMatrix[cell_label,:]
+                    cell_events = self.startItem.cellEvents
+                    # print(cell_events)
+                    # print(cell_interactions)
+                    # get centroid of cell represented by this qgraphics item
+                    firstPointY = cell_properties.centroid[0]
+                    firstPointX = cell_properties.centroid[1] + self.startItem.parentItem().x()
+                    self.firstPoint = QPoint(firstPointX, firstPointY)
+                    # which events happened to this cell?
+                    event_indices = np.where(cell_events == 1)[0]
 
-        # populate dictionary with cell track info
-        self.regions_and_events = {self.center_frame_index+t: regions_and_events_by_time[self.center_frame_index+t] for t in range(3)}
-        self.
+                    for self.endItem in self.centerFrame.childItems():
+                        # if the item is an ellipse, move on to look into it further
+                        if self.endItem.type() == 4:
+                            end_cell_properties = self.endItem.cellProps
+                            end_cell_label = end_cell_properties.label
+                            # test whether this ellipse represents the
+                            #  cell that interacts with the cell represented
+                            #  by self.startItem
+                            if cell_interactions[end_cell_label] == 1:
+                                # if this is the cell that interacts with the former frame's cell, draw the line.
+                                endPointY = end_cell_properties.centroid[0]
+                                endPointX = end_cell_properties.centroid[1] + self.endItem.parentItem().x()
+                                self.lastPoint = QPoint(endPointX, endPointY)
+                                if 0 in event_indices:
+                                    # If the zero-th element in event_indices was 1, the cell migrates in the next frame
+                                    #  get the information from cell_matrix to figure out to which region
+                                    #  in the next frame it migrated
+                                    # set self.migration = True
+                                    self.set_migration()
+                                if 1 in event_indices:
+                                    self.set_children()
 
-        self.brushSize = 2
-        self.brushColor = QColor('black')
-        self.lastPoint = QPoint()
-        self.origPoint = QPoint()
-        self.pen = QPen()
+                                self.eventItem = self.set_event_item()
+                                self.addItem(self.eventItem)
 
-        # class options
-        self.migration = False
-        self.die = False
-        self.children = False
-        self.birth = False
-        self.appear = False
-        self.disappear = False
+        if len(self.centerFrame.childItems()) > 0:
+            for self.startItem in self.centerFrame.childItems():
+                # test if this is an ellipse item. If it is, draw event symbols.
+                if self.startItem.type() == 4:
+                    cell_properties = self.startItem.cellProps
+                    cell_label = cell_properties.label
+                    cell_interactions = self.startItem.cellMatrix[cell_label,:]
+                    cell_events = self.startItem.cellEvents
+                    # print(cell_events)
+                    # print(cell_interactions)
+                    # get centroid of cell represented by this qgraphics item
+                    firstPointY = cell_properties.centroid[0]
+                    firstPointX = cell_properties.centroid[1] + self.startItem.parentItem().x()
+                    self.firstPoint = QPoint(firstPointX, firstPointY)
+                    # which events happened to this cell?
+                    event_indices = np.where(cell_events == 1)[0]
+
+                    # Start by determining whether the cell dies here
+                    if 2 in event_indices:
+                        # If the second element in event_indices was 1, the cell dies between this frame and the next.
+                        self.set_die()
+                        self.draw_death()
+
+                    for self.endItem in self.rightFrame.childItems():
+                        # if the item is an ellipse, move on to look into it further
+                        if self.endItem.type() == 4:
+                            end_cell_properties = self.endItem.cellProps
+                            end_cell_label = end_cell_properties.label
+                            # test whether this ellipse represents the
+                            #  cell that interacts with the cell represented
+                            #  by self.startItem
+                            if cell_interactions[end_cell_label] == 1:
+                                # if this is the cell that interacts with the former frame's cell, draw the line.
+                                endPointY = end_cell_properties.centroid[0]
+                                endPointX = end_cell_properties.centroid[1] + self.endItem.parentItem().x()
+                                self.lastPoint = QPoint(endPointX, endPointY)
+                                if 0 in event_indices:
+                                    # If the zero-th element in event_indices was 1, the cell migrates in the next frame
+                                    self.set_migration()
+                                if 1 in event_indices:
+                                    # If the one-th element in event_indices was 1, the cell divides into children in the next frame
+                                    self.set_children()
+                                # if 3 in event_indices:
+                                    #
+
+                                self.eventItem = self.set_event_item()
+                                self.addItem(self.eventItem)
+
+    # function for finding the ellipse under your mouse click or mouse release,
+    #  since items can be stacked, a line you previously drew can obscure the
+    #  ellipse you intended to select
+    def get_ellipse(self, point):
+        items = self.items(point)
+        ellipseEncountered = False
+        for item in items:
+
+            itemType = item.type()
+            if itemType == 4:
+                ellipseEncountered = True
+                # once we find an ellipse object under our mouse event we return the ellipse
+                if ellipseEncountered:
+                    return(item)
+
+        # if an ellipse was never found after burrowing through the items, return None
+        print("No cell detected underneath your selection. Ignoring selection.")
+        return(None)
+
+    # def get_event_items(self, point):
+    #     valid_event_types = ["MigrationLine","ChildLine","DieSymbol",
+    #                          "AppearSymbol","DisappearSymbol","BornSymbol"]
+    #     items = self.items(point)
+    #     event_types = [item.type() for item in items if item.type() in valid_event_types]
+    #     event_items = [item for item in items if item.type() in valid_event_types]
+    #
+    #     event_type_counts = {}
+    #     for event_type in valid_event_types:
+    #         event_type_counts[event_type] = 0
+    #
+    #     for event_type in event_types:
+    #         event_type_counts[event_type] += 1
+    #
+    #     return(item_type_counts, event_items)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drawing = True
             self.firstPoint = event.scenePos()
             self.lastPoint = event.scenePos()
-            self.set_line()
-            self.addItem(self.line)
+            self.startItem = self.get_ellipse(point=self.firstPoint)
+            if self.startItem is not None:
+                # get the centroid position for the cell that was clicked
+                firstPointY = self.startItem.cellProps.centroid[0]
+                # here we add the x-position of the detected ellipse' frame, because
+                #   the centroid of each cell is just its centroid within its own frame
+                #   Therefore, by adding the x-offset of the frame in which the cell
+                #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                firstPointX = self.startItem.cellProps.centroid[1] + self.startItem.parentItem().x()
+                self.firstPoint = QPoint(firstPointX, firstPointY)
+                self.eventItem = self.set_event_item()
+                self.addItem(self.eventItem)
 
     def mouseMoveEvent(self, event):
         if (event.buttons() & Qt.LeftButton) & self.drawing:
-
-            self.lastPoint = event.scenePos()
-            self.removeItem(self.line)
-            self.set_line()
-            self.addItem(self.line)
+            if self.startItem is not None:
+                self.lastPoint = event.scenePos()
+                self.removeItem(self.eventItem)
+                self.eventItem = self.set_event_item()
+                self.addItem(self.eventItem)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton & self.drawing:
             self.lastPoint = event.scenePos()
-            self.removeItem(self.line)
-            self.set_line()
-            self.addItem(self.line)
+            self.endItem = self.get_ellipse(point=self.lastPoint)
+            if self.startItem is not None:
+                if self.endItem is None:
+                    self.removeItem(self.eventItem)
+
+            if self.endItem is not None:
+                if self.startItem is not None:
+                    if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in ["MigrationLine","ChildLine"]:
+                        self.removeItem(self.eventItem)
+                        print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
+                    else:
+                        self.removeItem(self.eventItem)
+                        # get the centroid position for the cell that was clicked
+                        endPointY = self.endItem.cellProps.centroid[0]
+                        # here we add the x-position of the detected ellipse' frame, because
+                        #   the centroid of each cell is just its centroid within its own frame
+                        #   Therefore, by adding the x-offset of the frame in which the cell
+                        #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                        endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                        self.lastPoint = QPoint(endPointX, endPointY)
+                        self.eventItem = self.set_event_item()
+                        if self.eventItem.type() == "MigrationLine":
+                            print(self.eventItem.startItem.scenePos().x(), self.eventItem.endItem.scenePos().x())
+
+###############################  TO DO: SORT OUT HOW TO REPLACE EXISTING ANNOTATIONS AND UPDATE UNDERLYING DATA STRUCTURE  ################################
+
+                        # self.end_item_event_counts = self.get_event_items(point=self.lastPoint)
+                        # self.start_item_event_counts = self.get_event_items(point=self.firstPoint)
+                        # print("Start event count: ", self.start_item_event_counts)
+                        # print("End event count: ", self.end_item_event_counts)
+                        self.addItem(self.eventItem)
+                        self.update_cell_info()
+
             self.drawing = False
+
+    def update_cell_info(self):
+        # This function updates the matrix and events for self.startItem and self.endItem,
+        #  given the lines you've drawn from, and to them, respectively.
+        pass
 
     # I need to test whether the cell already has an event of the chosen type
     #   so that the existing one can be replaced by the new one I'm currently drawing.
-    def set_line(self):
-        self.line = QGraphicsLineItem(QLineF(self.firstPoint,self.lastPoint))
+
+    def set_event_item(self):
         if self.migration:
-            self.brushColor = QColor('white')
-        elif self.children:
-            self.brushColor = QColor('green')
-        elif self.die:
-            self.brushColor = QColor('red')
-        self.pen.setColor(self.brushColor)
-        self.pen.setWidth(self.brushSize)
-        self.line.setPen(self.pen)
+            eventItem = MigrationLine(self.firstPoint, self.lastPoint, self.startItem, self.endItem)
+        if self.children:
+            eventItem = ChildLine(self.firstPoint, self.lastPoint, self.startItem, self.endItem)
+        if self.die:
+            eventItem = DieSymbol(self.firstPoint)
+        if self.birth:
+            eventItem = BornSymbol(self.firstPoint)
+        if self.appear:
+            eventItem = AppearSymbol(self.firstPoint)
+        if self.disappear:
+            eventItem = DisappearSymbol(self.firstPoint)
+
+        return(eventItem)
 
     def set_migration(self):
         # print('clicked set_migration')
         self.migration = True
-        self.children = False
         self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
 
     def set_children(self):
         # print('clicked set_children')
-        self.children = True
-        self.die = False
         self.migration = False
+        self.die = False
+        self.children = True
+        self.birth = False
+        self.appear = False
+        self.disappear = False
 
     def set_die(self):
         # print('clicked set_die')
-        self.die = True
         self.migration = False
+        self.die = True
         self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+
+    def set_appear(self):
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = True
+        self.disappear = False
+
+    def set_disappear(self):
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = True
+
+    def set_born(self):
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = True
+        self.appear = False
+        self.disappear = False
+
+class MigrationLine(QGraphicsLineItem):
+    # A class for helping to draw and organize migration events
+    #  within a QGraphicsScene
+    def __init__(self, firstPoint, lastPoint, startItem, endItem):
+        super(MigrationLine, self).__init__()
+
+        brushColor = QColor(1*255,1*255,1*255)
+        brushSize = 2
+        pen = QPen()
+        firstPointX = firstPoint.x()
+        lastPointX = lastPoint.x()
+        if firstPointX < lastPointX:
+            self.start = firstPoint
+            self.startItem = startItem
+            self.end = lastPoint
+            self.endItem = endItem
+        else:
+            self.start = lastPoint
+            self.startItem = endItem
+            self.end = firstPoint
+            self.endItem = startItem
+        line = QLineF(self.start,self.end)
+        pen.setColor(brushColor)
+        pen.setWidth(brushSize)
+        self.setPen(pen)
+        self.setLine(line)
+
+    def type(self):
+        return("MigrationLine")
+
+class DieSymbol(QGraphicsTextItem):
+
+    def __init__(self, point):
+        super(DieSymbol, self).__init__()
+
+        textColor = QColor(1*255,0*255,0*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(16)
+        string = "X"
+        textPosition = QPoint(point.x()-9, point.y()-9)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("DieSymbol")
+
+class ChildLine(QGraphicsLineItem):
+    # A class for helping to draw and organize migration events
+    #  within a QGraphicsScene
+    def __init__(self, firstPoint, lastPoint, startItem, endItem):
+        super(ChildLine, self).__init__()
+
+        brushColor = QColor(0*255,1*255,0*255)
+        brushSize = 2
+        pen = QPen()
+        firstPointX = firstPoint.x()
+        lastPointX = lastPoint.x()
+        if firstPointX < lastPointX:
+            self.start = firstPoint
+            self.startItem = startItem
+            self.end = lastPoint
+            self.endItem = endItem
+        else:
+            self.start = lastPoint
+            self.startItem = endItem
+            self.end = firstPoint
+            self.endItem = startItem
+        line = QLineF(self.start,self.end)
+        pen.setColor(brushColor)
+        pen.setWidth(brushSize)
+        self.setPen(pen)
+        self.setLine(line)
+
+    def type(self):
+        return("ChildLine")
+
+class BornSymbol(QGraphicsTextItem):
+
+    def __init__(self, point):
+        super(BornSymbol, self).__init__()
+
+        textColor = QColor(0*255,1*255,1*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(20)
+        textFont.setWeight(75) # bold
+        string = "o"
+        textPosition = QPoint(point.x()-8, point.y()-17)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("BornSymbol")
+
+class AppearSymbol(QGraphicsTextItem):
+
+    def __init__(self, point):
+        super(AppearSymbol, self).__init__()
+
+        textColor = QColor(1*255,0*255,1*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(24)
+        textFont.setWeight(75) # Bold
+        string = "+"
+        textPosition = QPoint(point.x()-10, point.y()-15)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("AppearSymbol")
+
+class DisappearSymbol(QGraphicsLineItem):
+
+    def __init__(self, point):
+        super(DisappearSymbol, self).__init__()
+
+        brushColor = QColor(1*255,0*255,1*255)
+        brushSize = 2
+        pen = QPen()
+        firstPoint = QPoint(point.x()-4, point.y())
+        lastPoint = QPoint(point.x()+4, point.y())
+        line = QLineF(firstPoint,lastPoint)
+        pen.setColor(brushColor)
+        pen.setWidth(brushSize)
+        self.setPen(pen)
+        self.setLine(line)
+
+    def type(self):
+        return("DisappearSymbol")
+
+
 
 class LabelTransparencyWidget(QWidget):
 
