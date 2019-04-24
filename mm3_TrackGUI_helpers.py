@@ -67,7 +67,7 @@ class Window(QMainWindow):
         width = 800
         height = 600
 
-        self.setWindowTitle("Brent is not a doo-doo head!")
+        self.setWindowTitle("Go ahead. Update your tracking results.")
         self.setGeometry(top,left,width,height)
 
         # load specs file
