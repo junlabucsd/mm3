@@ -90,10 +90,12 @@ class Window(QMainWindow):
         childrenButton.clicked.connect(self.threeFrames.scene.set_children)
         eventButtonGroup.addButton(childrenButton)
 
-        bornButton = QRadioButton("Born")
-        bornButton.setShortcut("Ctrl+C")
-        bornButton.clicked.connect(self.threeFrames.scene.set_born)
-        eventButtonGroup.addButton(bornButton)
+        # born button isn't really necessary, since we can get all that information
+        #   from the children events that are already present
+        # bornButton = QRadioButton("Born")
+        # bornButton.setShortcut("Ctrl+C")
+        # bornButton.clicked.connect(self.threeFrames.scene.set_born)
+        # eventButtonGroup.addButton(bornButton)
 
         dieButton = QRadioButton("Die")
         dieButton.setShortcut("Ctrl+D")
@@ -109,13 +111,18 @@ class Window(QMainWindow):
         disappearButton.clicked.connect(self.threeFrames.scene.set_disappear)
         eventButtonGroup.addButton(disappearButton)
 
+        removeEventsButton = QRadioButton("Remove events")
+        removeEventsButton.clicked.connect(self.threeFrames.scene.remove_all_cell_events)
+        eventButtonGroup.addButton(removeEventsButton)
+
         eventButtonLayout = QVBoxLayout()
         eventButtonLayout.addWidget(migrateButton)
         eventButtonLayout.addWidget(childrenButton)
-        eventButtonLayout.addWidget(bornButton)
+        # eventButtonLayout.addWidget(bornButton)
         eventButtonLayout.addWidget(dieButton)
         eventButtonLayout.addWidget(appearButton)
         eventButtonLayout.addWidget(disappearButton)
+        eventButtonLayout.addWidget(removeEventsButton)
 
         eventButtonGroupWidget = QWidget()
         eventButtonGroupWidget.setLayout(eventButtonLayout)
@@ -226,12 +233,30 @@ class ThreeFrameItem(QGraphicsScene):
         centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
         rightFrame, rightRegions = self.phase_img_and_regions(frame_index=self.center_frame_index+1)
 
+        self.drawing = False
+        self.remove_events = False
         self.brushSize = 2
         self.brushColor = QColor('black')
         self.lastPoint = QPoint()
         self.pen = QPen()
 
         # class options
+        self.event_types_list = ["ChildLine","MigrationLine","DieSymbol","AppearSymbol","BornSymbol","DisappearSymbol"]
+        self.line_events_list = ["ChildLine","MigrationLine"]
+        # the below lookup table may need reworked to handle migration and child lines to/from a cell
+        #   or the handling may be better done in the update_cell_info function
+        self.event_type_index_lookup = {"MigrationLine":0, "ChildLine":1,
+                                        "DieSymbol":2, "BornSymbol":3,
+                                        "AppearSymbol":4, "DisappearSymbol":5}
+        # given an event type for a cell, what are the event types that are incompatible within that same cell?
+        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart"],
+                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd"],
+                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart"],
+                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd"],
+                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol"],
+                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol"],
+                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol"],
+                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol"]}
         self.migration = False
         self.die = False
         self.children = False
@@ -242,14 +267,16 @@ class ThreeFrameItem(QGraphicsScene):
         # set the scene...
         self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
 
-
     def set_scene(self, leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions):
 
         self.clear()
         # Add each image to the scene
         self.leftFrame = self.addPixmap(leftFrame)
+        self.leftFrame.time = leftFrame.time
         self.centerFrame = self.addPixmap(centerFrame)
+        self.centerFrame.time = centerFrame.time
         self.rightFrame = self.addPixmap(rightFrame)
+        self.rightFrame.time = rightFrame.time
 
         # Loop through images and shift each by appropriate x-distance to get them side-by-side, rather than stacked
         xPositions = []
@@ -265,6 +292,8 @@ class ThreeFrameItem(QGraphicsScene):
         self.add_regions_to_frame(rightRegions, self.rightFrame)
 
         self.draw_cell_events()
+
+        self.set_migration()
 
     def advance_frame(self):
         try:
@@ -282,7 +311,7 @@ class ThreeFrameItem(QGraphicsScene):
     def prior_frame(self):
         try:
             self.center_frame_index -= 1
-            print(self.center_frame_index)
+            # print(self.center_frame_index)
             # redefine frames and regions
             leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
             centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
@@ -297,13 +326,13 @@ class ThreeFrameItem(QGraphicsScene):
         self.center_frame_index = 1
         self.peakIndex += 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
-        print(self.peak_id)
+        # print(self.peak_id)
 
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        print(self.phaseImgPath)
-        print(self.labelImgPath)
+        # print(self.phaseImgPath)
+        # print(self.labelImgPath)
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
@@ -322,13 +351,13 @@ class ThreeFrameItem(QGraphicsScene):
         self.center_frame_index = 1
         self.peakIndex -= 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
-        print(self.peak_id)
+        # print(self.peak_id)
 
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        print(self.phaseImgPath)
-        print(self.labelImgPath)
+        # print(self.phaseImgPath)
+        # print(self.labelImgPath)
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
@@ -357,8 +386,8 @@ class ThreeFrameItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        print(self.phaseImgPath)
-        print(self.labelImgPath)
+        # print(self.phaseImgPath)
+        # print(self.labelImgPath)
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
@@ -387,8 +416,8 @@ class ThreeFrameItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        print(self.phaseImgPath)
-        print(self.labelImgPath)
+        # print(self.phaseImgPath)
+        # print(self.labelImgPath)
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
@@ -417,7 +446,7 @@ class ThreeFrameItem(QGraphicsScene):
         phaseQimage = QImage(RGBImg, originalWidth, originalHeight,
                              RGBImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
         phaseQpixmap = QPixmap(phaseQimage)
-        # maskQpixmap = QGraphicsPixmapItem(phaseQpixmap)
+        phaseQpixmap.time = time
 
         # create transparent rbg overlay to grab colors from for drawing cell regions as QGraphicsPathItems
         RGBLabelImg = color.label2rgb(maskImg, bg_label=0)
@@ -629,6 +658,37 @@ class ThreeFrameItem(QGraphicsScene):
                     # which events happened to this cell?
                     event_indices = np.where(cell_events == 1)[0]
 
+                    if 2 in event_indices:
+                        # If the second element in event_indices was 1, the cell dies between this frame and the next.
+                        self.set_die()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    # Ignoring "born" events in the GUI, and keeping their management
+                    #   strictly in the back-end, since we can infer "born" from
+                    #   whether a cell has a ChildLine that terminates within it.
+
+                    # if 3 in event_indices:
+                    #     # if the third element in event_indices was 1,
+                    #     #   the cell cell was born between this frame and the previous one.
+                    #     self.set_born()
+                    #     self.eventItem = self.set_event_item()
+                    #     self.addItem(self.eventItem)
+
+                    if 4 in event_indices:
+                        # if the fourth element in event_indices was 1,
+                        #   the cell cell appeared between this frame and the previous one.
+                        self.set_appear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    if 5 in event_indices:
+                        # if the fifth element in event_indices was 1,
+                        #   the cell cell disappeared between this frame and the previous one.
+                        self.set_disappear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
                     for self.endItem in self.centerFrame.childItems():
                         # if the item is an ellipse, move on to look into it further
                         if self.endItem.type() == 4:
@@ -671,11 +731,32 @@ class ThreeFrameItem(QGraphicsScene):
                     # which events happened to this cell?
                     event_indices = np.where(cell_events == 1)[0]
 
-                    # Start by determining whether the cell dies here
                     if 2 in event_indices:
                         # If the second element in event_indices was 1, the cell dies between this frame and the next.
                         self.set_die()
-                        self.draw_death()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    # if 3 in event_indices:
+                    #     # if the third element in event_indices was 1,
+                    #     #   the cell cell was born between this frame and the previous one.
+                    #     self.set_born()
+                    #     self.eventItem = self.set_event_item()
+                    #     self.addItem(self.eventItem)
+
+                    if 4 in event_indices:
+                        # if the fourth element in event_indices was 1,
+                        #   the cell cell appeared between this frame and the previous one.
+                        self.set_appear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    if 5 in event_indices:
+                        # if the fifth element in event_indices was 1,
+                        #   the cell cell disappeared between this frame and the previous one.
+                        self.set_disappear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
 
                     for self.endItem in self.rightFrame.childItems():
                         # if the item is an ellipse, move on to look into it further
@@ -696,16 +777,58 @@ class ThreeFrameItem(QGraphicsScene):
                                 if 1 in event_indices:
                                     # If the one-th element in event_indices was 1, the cell divides into children in the next frame
                                     self.set_children()
-                                # if 3 in event_indices:
-                                    #
 
                                 self.eventItem = self.set_event_item()
                                 self.addItem(self.eventItem)
 
-    # function for finding the ellipse under your mouse click or mouse release,
-    #  since items can be stacked, a line you previously drew can obscure the
-    #  ellipse you intended to select
+        if len(self.rightFrame.childItems()) > 0:
+            for self.startItem in self.rightFrame.childItems():
+                # test if this is an ellipse item. If it is, draw event symbols.
+                if self.startItem.type() == 4:
+                    cell_properties = self.startItem.cellProps
+                    cell_label = cell_properties.label
+                    cell_interactions = self.startItem.cellMatrix[cell_label,:]
+                    cell_events = self.startItem.cellEvents
+                    # print(cell_events)
+                    # print(cell_interactions)
+                    # get centroid of cell represented by this qgraphics item
+                    firstPointY = cell_properties.centroid[0]
+                    firstPointX = cell_properties.centroid[1] + self.startItem.parentItem().x()
+                    self.firstPoint = QPoint(firstPointX, firstPointY)
+                    # which events happened to this cell?
+                    event_indices = np.where(cell_events == 1)[0]
+
+                    if 2 in event_indices:
+                        # If the second element in event_indices was 1, the cell dies between this frame and the next.
+                        self.set_die()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    # if 3 in event_indices:
+                    #     # if the third element in event_indices was 1,
+                    #     #   the cell cell was born between this frame and the previous one.
+                    #     self.set_born()
+                    #     self.eventItem = self.set_event_item()
+                    #     self.addItem(self.eventItem)
+
+                    if 4 in event_indices:
+                        # if the fourth element in event_indices was 1,
+                        #   the cell cell appeared between this frame and the previous one.
+                        self.set_appear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
+                    if 5 in event_indices:
+                        # if the fifth element in event_indices was 1,
+                        #   the cell cell disappeared between this frame and the previous one.
+                        self.set_disappear()
+                        self.eventItem = self.set_event_item()
+                        self.addItem(self.eventItem)
+
     def get_ellipse(self, point):
+        # function for finding the ellipse under your mouse click or mouse release,
+        #  since items can be stacked, a line you previously drew can obscure the
+        #  ellipse you intended to select
         items = self.items(point)
         ellipseEncountered = False
         for item in items:
@@ -721,42 +844,223 @@ class ThreeFrameItem(QGraphicsScene):
         print("No cell detected underneath your selection. Ignoring selection.")
         return(None)
 
-    # def get_event_items(self, point):
-    #     valid_event_types = ["MigrationLine","ChildLine","DieSymbol",
-    #                          "AppearSymbol","DisappearSymbol","BornSymbol"]
-    #     items = self.items(point)
-    #     event_types = [item.type() for item in items if item.type() in valid_event_types]
-    #     event_items = [item for item in items if item.type() in valid_event_types]
-    #
-    #     event_type_counts = {}
-    #     for event_type in valid_event_types:
-    #         event_type_counts[event_type] = 0
-    #
-    #     for event_type in event_types:
-    #         event_type_counts[event_type] += 1
-    #
-    #     return(item_type_counts, event_items)
+    def get_all_cell_event_items(self, cell, return_as_forbidden_items_list=False):
+        # Fetch all items that collide with the clicked ellipse,
+        #   evalute whether they are "events".
+        # Further evaluate whether the event items' items are the same as
+        #   the clicked ellipse. The reason for this is that some text items take more
+        #   space than they appear to occupy in the GUI, so they may collide with
+        #   ellipses neighboring the clicked ellipse
+
+        items_colliding_with_cell = cell.collidingItems()
+        event_items = []
+        event_types = []
+
+        for item in items_colliding_with_cell:
+            itemType = item.type()
+            if itemType in self.event_types_list:
+                if itemType in self.line_events_list:
+                    # determine whether the child or migration line's start or end point
+                    #   belongs to the clicked cell
+                    if (item.startItem == cell or item.endItem == cell):
+                        # if we're calling this function with return_as_forbidden_items_list=True,
+                        #   we need to figure out whether each migration and child line in this
+                        #   cell represent the endpoint of the line or the startpoint of the line.
+                        if return_as_forbidden_items_list:
+                            # is this cell the endItem or the startItem for this item?
+                            if itemType == "MigrationLine":
+                                if item.startItem == cell:
+                                    item_name = "MigrationStart"
+                                elif item.endItem == cell:
+                                    item_name = "MigrationEnd"
+
+                            elif itemType == "ChildLine":
+                                if item.startItem == cell:
+                                    item_name = "ChildStart"
+                                elif item.endItem == cell:
+                                    item_name = "ChildEnd"
+
+                            event_types.append(item_name)
+
+                        event_items.append(item)
+                else:
+                    # determine whether the die, born, appear, or disappear event
+                    #    belongs to the clicked cell
+                    if item.item == cell:
+                        if return_as_forbidden_items_list:
+                            item_name = itemType
+                            event_types.append(item_name)
+                        event_items.append(item)
+
+        if return_as_forbidden_items_list:
+            return(event_items, event_types)
+
+        return(event_items)
+
+    def update_cell_info(self):
+        # This function updates the matrix and events for all cells in your scene.
+        # First, populate a list with the times of the frames.
+        time_list = []
+        for item in self.items():
+            if item.type() == 7: # if it's a qpixmapItem
+                # print(dir(item))
+                time_list.append(item.time)
+
+        # get the maximum time, so that we do not edit events
+        max_time = np.max(time_list)
+        # Get the cells' times and labels
+        for item in self.items():
+            # if item is an ellipse
+            if item.type() == 4:
+                cell = item
+                time = cell.time
+                # advance loop if this cell is in the right frame
+                if time == max_time:
+                    continue
+
+                cell_label = cell.cellProps.label
+                # Get the cell's currently-annotated events
+                events = self.get_all_cell_event_items(cell)
+
+                # Fetch the cell's original information
+                #   'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
+                #      If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
+                time_matrix = self.regions_and_events_by_time[time]['matrix']
+                # print(time_matrix)
+
+                # set all matrix elements to 0 to fill back in with appropriate 1's
+                time_matrix[cell_label,:] = 0
+
+                cell_events = self.regions_and_events_by_time[time]['regions'][cell_label]['events']
+                # print(cell_events) # for debugging to verify changes are being made appropriately.
+                # set all cell events temporarily to zero to fill back in with appropriate 1's
+                cell_events[...] = 0
+
+                # If an event is a migration or a child line, determine whether
+                #   the migration line starts at the cell to be updated, and whether
+                #   the child line begins or ends at the current cell.
+                #   Update events array and linkage matrix accordingly
+                for event in events:
+                    event_type = event.type()
+                    # if the event is a migration or child line
+                    if event_type in self.line_events_list:
+                        # if the line starts with the cell to be updated, set the appropriate
+                        #  index in cell_events to 1.
+                        if event.startItem == cell:
+                            cell_events[self.event_type_index_lookup[event_type]] = 1
+                        if event_type == "ChildLine":
+                            # if the event is a child line that terminates with this cell,
+                            #   set the 'born' index of cell_events to 1
+                            if event.endItem == cell:
+                                cell_events[self.event_type_index_lookup["BornSymbol"]] = 1
+                        start_cell_label = event.startItem.cellProps.label
+                        end_cell_label = event.endItem.cellProps.label
+                        time_matrix[start_cell_label,end_cell_label] = 1
+                    # if the event is either appear, disappear, or die, do this stuff
+                    else:
+                        cell_events[self.event_type_index_lookup[event_type]] = 1
+                        if event_type == "DissapearSymbol":
+                            cell_label = event.item.cellProps.label
+                            time_matrix[cell_label,0] = 1
+
+                ######################## TO DO: UPDATE CELL INFORMATION FOR MARKOV BLANKET OF CELLS ##################################
+                # will require grabbing old event information
+
+    def remove_old_conflicting_events(self, event):
+        # This function derives the cells involved in a given newly-annotated event and evaluates
+        #   whether a cell has conflicting events, such as two migrations to the
+        #   next frame, or three children, etc.. It then attempts to resolve the conflict by removing
+        #   the older annotation.
+        event_type = event.type()
+        # I need to set this up in a way that will allow me to interrogate whether an event type triggers
+        #   the incompatible event type lookup in __init__. This will save a lot of headache in coding of logic.
+        #
+        # Therefore, prioritize establishing list of cell events for cells that interact with the newly drawn annotation
+
+
+        if event_type in self.line_events_list:
+            start_cell = event.startItem
+            end_cell = event.endItem
+            old_end_cell_events, old_end_cell_event_types = self.get_all_cell_event_items(end_cell, return_as_forbidden_items_list=True)
+
+            # Name the key for fobidden event lookup.
+            if event_type == "MigrationLine":
+                forbidden_event_lookup_key = "MigrationEnd"
+            elif event_type == "ChildLine":
+                forbidden_event_lookup_key = "ChildEnd"
+            else:
+                forbidden_event_lookup_key = event_type
+
+            # retrieve list of forbidden event types, given our drawn event
+            forbidden_events_list = self.forbidden_events_lookup[forbidden_event_lookup_key]
+
+            for i, old_end_cell_event_type in enumerate(old_end_cell_event_types):
+                if old_end_cell_event_type in forbidden_events_list:
+                    self.removeItem(old_end_cell_events[i])
+
+        else:
+            start_cell = event.item
+
+        old_start_cell_events, old_start_cell_event_types = self.get_all_cell_event_items(start_cell, return_as_forbidden_items_list=True)
+
+        # Name the key for fobidden event lookup.
+        if event_type == "MigrationLine":
+            forbidden_event_lookup_key = "MigrationStart"
+        elif event_type == "ChildLine":
+            forbidden_event_lookup_key = "ChildStart"
+        else:
+            forbidden_event_lookup_key = event_type
+
+        # retrieve list of forbidden event types, given our drawn event
+        forbidden_events_list = self.forbidden_events_lookup[forbidden_event_lookup_key]
+
+        child_start_count = 0
+        for i, old_start_cell_event_type in enumerate(old_start_cell_event_types):
+            if old_start_cell_event_type in forbidden_events_list:
+                if old_start_cell_event_type == "ChildStart":
+                    if forbidden_event_lookup_key == "ChildStart":
+                        if child_start_count == 0:
+                            first_child_start_index = i
+                        child_start_count += 1
+                        if child_start_count == 2:
+                            self.removeItem(old_start_cell_events[i])
+                            self.removeItem(old_start_cell_events[first_child_start_index])
+                    else:
+                        self.removeItem(old_start_cell_events[i])
+                else:
+                    self.removeItem(old_start_cell_events[i])
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+
             self.drawing = True
             self.firstPoint = event.scenePos()
             self.lastPoint = event.scenePos()
             self.startItem = self.get_ellipse(point=self.firstPoint)
             if self.startItem is not None:
-                # get the centroid position for the cell that was clicked
-                firstPointY = self.startItem.cellProps.centroid[0]
-                # here we add the x-position of the detected ellipse' frame, because
-                #   the centroid of each cell is just its centroid within its own frame
-                #   Therefore, by adding the x-offset of the frame in which the cell
-                #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
-                firstPointX = self.startItem.cellProps.centroid[1] + self.startItem.parentItem().x()
-                self.firstPoint = QPoint(firstPointX, firstPointY)
-                self.eventItem = self.set_event_item()
-                self.addItem(self.eventItem)
+
+                # if we want to remove all events, do it here
+                if self.remove_events:
+                    events = self.get_all_cell_event_items(self.startItem)
+                    for event in events:
+                        self.removeItem(event)
+                    self.update_cell_info()
+
+                # if we do not want to remove_events, we are adding an event, so do the following
+                else:
+                    # get the centroid position for the cell that was clicked
+                    firstPointY = self.startItem.cellProps.centroid[0]
+                    # here we add the x-position of the detected ellipse' frame, because
+                    #   the centroid of each cell is just its centroid within its own frame
+                    #   Therefore, by adding the x-offset of the frame in which the cell
+                    #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                    firstPointX = self.startItem.cellProps.centroid[1] + self.startItem.parentItem().x()
+                    self.firstPoint = QPoint(firstPointX, firstPointY)
+                    self.eventItem = self.set_event_item()
+                    self.addItem(self.eventItem)
 
     def mouseMoveEvent(self, event):
-        if (event.buttons() & Qt.LeftButton) & self.drawing:
+        if (event.buttons() & Qt.LeftButton) & self.drawing and not self.remove_events:
             if self.startItem is not None:
                 self.lastPoint = event.scenePos()
                 self.removeItem(self.eventItem)
@@ -764,7 +1068,7 @@ class ThreeFrameItem(QGraphicsScene):
                 self.addItem(self.eventItem)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.LeftButton & self.drawing:
+        if event.button() == Qt.LeftButton and self.drawing and not self.remove_events:
             self.lastPoint = event.scenePos()
             self.endItem = self.get_ellipse(point=self.lastPoint)
             if self.startItem is not None:
@@ -773,7 +1077,8 @@ class ThreeFrameItem(QGraphicsScene):
 
             if self.endItem is not None:
                 if self.startItem is not None:
-                    if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in ["MigrationLine","ChildLine"]:
+                    # A migration or child event cannot go from one frame to the same frame.
+                    if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
                     else:
@@ -787,27 +1092,15 @@ class ThreeFrameItem(QGraphicsScene):
                         endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
                         self.lastPoint = QPoint(endPointX, endPointY)
                         self.eventItem = self.set_event_item()
-                        if self.eventItem.type() == "MigrationLine":
-                            print(self.eventItem.startItem.scenePos().x(), self.eventItem.endItem.scenePos().x())
 
-###############################  TO DO: SORT OUT HOW TO REPLACE EXISTING ANNOTATIONS AND UPDATE UNDERLYING DATA STRUCTURE  ################################
-
-                        # self.end_item_event_counts = self.get_event_items(point=self.lastPoint)
-                        # self.start_item_event_counts = self.get_event_items(point=self.firstPoint)
-                        # print("Start event count: ", self.start_item_event_counts)
-                        # print("End event count: ", self.end_item_event_counts)
+                        self.remove_old_conflicting_events(self.eventItem)
                         self.addItem(self.eventItem)
+                        # query the currently-drawn annotations in the scene and update all cells' information
+################ current issue: only updates to left frame properly update to advance to next frame ############################
+################  also: some events are drawn again after advancing frame ######################
                         self.update_cell_info()
 
             self.drawing = False
-
-    def update_cell_info(self):
-        # This function updates the matrix and events for self.startItem and self.endItem,
-        #  given the lines you've drawn from, and to them, respectively.
-        pass
-
-    # I need to test whether the cell already has an event of the chosen type
-    #   so that the existing one can be replaced by the new one I'm currently drawing.
 
     def set_event_item(self):
         if self.migration:
@@ -815,18 +1108,28 @@ class ThreeFrameItem(QGraphicsScene):
         if self.children:
             eventItem = ChildLine(self.firstPoint, self.lastPoint, self.startItem, self.endItem)
         if self.die:
-            eventItem = DieSymbol(self.firstPoint)
-        if self.birth:
-            eventItem = BornSymbol(self.firstPoint)
+            eventItem = DieSymbol(self.firstPoint, self.startItem)
+        # if self.birth:
+        #     eventItem = BornSymbol(self.firstPoint, self.startItem)
         if self.appear:
-            eventItem = AppearSymbol(self.firstPoint)
+            eventItem = AppearSymbol(self.firstPoint, self.startItem)
         if self.disappear:
-            eventItem = DisappearSymbol(self.firstPoint)
+            eventItem = DisappearSymbol(self.firstPoint, self.startItem)
 
         return(eventItem)
 
+    def remove_all_cell_events(self):
+        self.remove_events = True
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+
     def set_migration(self):
         # print('clicked set_migration')
+        self.remove_events = False
         self.migration = True
         self.die = False
         self.children = False
@@ -836,6 +1139,7 @@ class ThreeFrameItem(QGraphicsScene):
 
     def set_children(self):
         # print('clicked set_children')
+        self.remove_events = False
         self.migration = False
         self.die = False
         self.children = True
@@ -845,6 +1149,7 @@ class ThreeFrameItem(QGraphicsScene):
 
     def set_die(self):
         # print('clicked set_die')
+        self.remove_events = False
         self.migration = False
         self.die = True
         self.children = False
@@ -853,6 +1158,7 @@ class ThreeFrameItem(QGraphicsScene):
         self.disappear = False
 
     def set_appear(self):
+        self.remove_events = False
         self.migration = False
         self.die = False
         self.children = False
@@ -861,6 +1167,7 @@ class ThreeFrameItem(QGraphicsScene):
         self.disappear = False
 
     def set_disappear(self):
+        self.remove_events = False
         self.migration = False
         self.die = False
         self.children = False
@@ -869,6 +1176,7 @@ class ThreeFrameItem(QGraphicsScene):
         self.disappear = True
 
     def set_born(self):
+        self.remove_events = False
         self.migration = False
         self.die = False
         self.children = False
@@ -887,6 +1195,7 @@ class MigrationLine(QGraphicsLineItem):
         pen = QPen()
         firstPointX = firstPoint.x()
         lastPointX = lastPoint.x()
+        # ensure that lines' starts are to the left of their ends
         if firstPointX < lastPointX:
             self.start = firstPoint
             self.startItem = startItem
@@ -908,8 +1217,10 @@ class MigrationLine(QGraphicsLineItem):
 
 class DieSymbol(QGraphicsTextItem):
 
-    def __init__(self, point):
+    def __init__(self, point, item):
         super(DieSymbol, self).__init__()
+
+        self.item = item
 
         textColor = QColor(1*255,0*255,0*255)
         textFont = QFont()
@@ -937,6 +1248,7 @@ class ChildLine(QGraphicsLineItem):
         pen = QPen()
         firstPointX = firstPoint.x()
         lastPointX = lastPoint.x()
+        # ensure that lines' starts are to the left of their ends
         if firstPointX < lastPointX:
             self.start = firstPoint
             self.startItem = startItem
@@ -956,31 +1268,35 @@ class ChildLine(QGraphicsLineItem):
     def type(self):
         return("ChildLine")
 
-class BornSymbol(QGraphicsTextItem):
-
-    def __init__(self, point):
-        super(BornSymbol, self).__init__()
-
-        textColor = QColor(0*255,1*255,1*255)
-        textFont = QFont()
-        textFont.setFamily("Times")
-        textFont.setPixelSize(20)
-        textFont.setWeight(75) # bold
-        string = "o"
-        textPosition = QPoint(point.x()-8, point.y()-17)
-
-        self.setPlainText(string)
-        self.setFont(textFont)
-        self.setPos(textPosition)
-        self.setDefaultTextColor(textColor)
-
-    def type(self):
-        return("BornSymbol")
+# class BornSymbol(QGraphicsTextItem):
+    #
+    # def __init__(self, point, item):
+    #     super(BornSymbol, self).__init__()
+    #
+    #     self.item = item
+    #
+    #     textColor = QColor(0*255,1*255,1*255)
+    #     textFont = QFont()
+    #     textFont.setFamily("Times")
+    #     textFont.setPixelSize(20)
+    #     textFont.setWeight(75) # bold
+    #     string = "o"
+    #     textPosition = QPoint(point.x()-8, point.y()-17)
+    #
+    #     self.setPlainText(string)
+    #     self.setFont(textFont)
+    #     self.setPos(textPosition)
+    #     self.setDefaultTextColor(textColor)
+    #
+    # def type(self):
+    #     return("BornSymbol")
 
 class AppearSymbol(QGraphicsTextItem):
 
-    def __init__(self, point):
+    def __init__(self, point, item):
         super(AppearSymbol, self).__init__()
+
+        self.item = item
 
         textColor = QColor(1*255,0*255,1*255)
         textFont = QFont()
@@ -1000,8 +1316,10 @@ class AppearSymbol(QGraphicsTextItem):
 
 class DisappearSymbol(QGraphicsLineItem):
 
-    def __init__(self, point):
+    def __init__(self, point, item):
         super(DisappearSymbol, self).__init__()
+
+        self.item = item
 
         brushColor = QColor(1*255,0*255,1*255)
         brushSize = 2
@@ -1017,435 +1335,6 @@ class DisappearSymbol(QGraphicsLineItem):
     def type(self):
         return("DisappearSymbol")
 
-
-
-class LabelTransparencyWidget(QWidget):
-
-        def __init__(self,imgPaths,fov_id_list,label_dir,frame_index):
-                super(LabelTransparencyWidget, self).__init__()
-
-                self.label_dir = label_dir
-                self.frameIndex = frame_index
-
-                self.imgPaths = imgPaths
-                self.fov_id_list = fov_id_list
-                self.fovIndex = 0
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.labelImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                # print(self.labelImgPath)
-
-                # TO DO: check if re-annotated mask exists in training_dir, and present that instead of original mask
-                #        make indicator appear if we're re-editing the mask again.
-                experiment_name = params['experiment_name']
-                original_file_name = self.labelImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-
-                self.labelStack = io.imread(self.labelImgPath)
-                if os.path.isfile(savePath):
-                    print('Re-annotated mask exists in training directory. Loading it.')
-                    # add widget to express whether this mask is one you already re-annotated
-                    self.labelStack[self.frameIndex,:,:] = io.imread(savePath)
-                    overwriteSegFile = True
-                else:
-                    overwriteSegFile = False
-
-                img = self.labelStack[self.frameIndex,:,:]
-                RGBImg = color.label2rgb(img, bg_label=0).astype('uint8')
-                self.RGBImg = RGBImg*255
-
-                alphaFloat = 0.25
-                alphaArray = np.zeros(img.shape, dtype='uint8')
-                alphaArray = np.expand_dims(alphaArray, -1)
-                self.alpha = int(255*alphaFloat)
-                alphaArray[...] = self.alpha
-                self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
-
-                self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-
-                self.label = QLabel(self)
-                self.label.setPixmap(self.maskQpixmap)
-
-                self.drawing = False
-                self.brushSize = 2
-                self.brushColor = QColor(0,0,0,self.alpha)
-                self.lastPoint = QPoint()
-
-        def mousePressEvent(self, event):
-                if event.button() == Qt.LeftButton:
-                        self.drawing = True
-                        self.lastPoint = event.pos()
-
-        def mouseMoveEvent(self, event):
-                if (event.buttons() & Qt.LeftButton) & self.drawing:
-
-                        # make the mouse position the center of a circle whose radius is defined as self.brushSize
-                        rr,cc = draw.circle(event.y(), event.x(), self.brushSize)
-                        for pix in zip(rr,cc):
-                                rowIndex = pix[0]
-                                colIndex = pix[1]
-                                self.maskQimage.setPixelColor(colIndex, rowIndex, self.brushColor)
-
-                        self.maskQpixmap = QPixmap(self.maskQimage)
-                        self.label.setPixmap(self.maskQpixmap)
-                        self.lastPoint = event.pos()
-                        self.update()
-
-        def mouseReleaseEvent(self, event):
-                if event.button == Qt.LeftButton:
-                        self.drawing = False
-
-        def buttonSave(self):
-                experiment_name = params['experiment_name']
-                original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-                labelSavePath = os.path.join(params['seg_dir'],fileBaseName)
-                print("Saved binary mask image as: ", savePath)
-
-                if not os.path.isdir(self.label_dir):
-                        os.makedirs(self.label_dir)
-
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
-                qimgHeight = saveImg.height()
-                qimgWidth = saveImg.width()
-
-                saveArr = np.zeros((qimgHeight,qimgWidth),dtype='uint8')
-                for rowIndex in range(qimgHeight):
-
-                        for colIndex in range(qimgWidth):
-                                pixVal = qGray(saveImg.pixel(colIndex,rowIndex))
-                                if pixVal > 0:
-                                        saveArr[rowIndex,colIndex] = 1
-
-                io.imsave(savePath, saveArr)
-
-        def reset(self):
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-                self.update()
-
-        def clear(self):
-                self.imgFill = QColor(0, 0, 0, self.alpha)
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQimage.fill(self.imgFill)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-                self.update()
-
-        def threePx(self):
-                self.brushSize = 3
-
-        def fivePx(self):
-                self.brushSize = 5
-
-        def sevenPx(self):
-                self.brushSize = 7
-
-        def ninePx(self):
-                self.brushSize = 9
-
-        def blackColor(self):
-                self.brushColor = QColor(0, 0, 0, self.alpha)
-
-        def redColor(self):
-                self.brushColor = QColor(255, 0, 0, self.alpha)
-
-        def whiteColor(self):
-                self.brushColor = QColor(255, 255, 255, self.alpha)
-
-        def setImg(self, img):
-                self.RGBImg = color.label2rgb(img)
-                # img[img>0] = 255
-                # self.RGBImg = color.gray2rgb(img).astype('uint8')
-                # self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
-                alphaFloat = 0.25
-                alphaArray = np.zeros(img.shape, dtype='uint8')
-                alphaArray = np.expand_dims(alphaArray, -1)
-                self.alpha = int(255*alphaFloat)
-                alphaArray[...] = self.alpha
-                self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
-
-                self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.maskQpixmap = QPixmap(self.maskQimage)
-                self.label.setPixmap(self.maskQpixmap)
-
-        def next_frame(self):
-                self.frameIndex += 1
-                try:
-                    experiment_name = params['experiment_name']
-                    original_file_name = self.maskImgPath
-                    pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                    mat = pat.match(original_file_name)
-                    fovID = mat.groups()[0]
-                    peakID = mat.groups()[1]
-                    fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                    savePath = os.path.join(self.label_dir,fileBaseName)
-
-                    if os.path.isfile(savePath):
-                        print('Re-annotated mask exists in training directory. Loading it.')
-                        # add widget to express whether this mask is one you already re-annotated
-                        self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-                    img = self.maskStack[self.frameIndex,:,:]
-                except IndexError:
-                    sys.exit("You've already edited the final frame's mask. Write in functionality to increment to next peak_id now!")
-
-                self.setImg(img)
-
-        def prior_frame(self):
-                self.frameIndex -= 1
-                try:
-                    experiment_name = params['experiment_name']
-                    original_file_name = self.maskImgPath
-                    pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                    mat = pat.match(original_file_name)
-                    fovID = mat.groups()[0]
-                    peakID = mat.groups()[1]
-                    fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                    savePath = os.path.join(self.label_dir,fileBaseName)
-
-                    if os.path.isfile(savePath):
-                        print('Re-annotated mask exists in training directory. Loading it.')
-                        # add widget to express whether this mask is one you already re-annotated
-                        self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-                    img = self.maskStack[self.frameIndex,:,:]
-                except IndexError:
-                        sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
-                self.setImg(img)
-
-        def next_peak(self):
-                self.imgIndex += 1
-                self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                self.maskStack = io.imread(self.maskImgPath)
-
-                self.frameIndex = 0
-
-                experiment_name = params['experiment_name']
-                original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-
-                if os.path.isfile(savePath):
-                    print('Re-annotated mask exists in training directory. Loading it.')
-                    # add widget to express whether this mask is one you already re-annotated
-                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-
-                img = self.maskStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def prior_peak(self):
-                self.imgIndex -= 1
-                self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                self.maskStack = io.imread(self.maskImgPath)
-
-                self.frameIndex = 0
-
-                experiment_name = params['experiment_name']
-                original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-
-                if os.path.isfile(savePath):
-                    print('Re-annotated mask exists in training directory. Loading it.')
-                    # add widget to express whether this mask is one you already re-annotated
-                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-                img = self.maskStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def next_fov(self):
-                self.fovIndex += 1
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                self.maskStack = io.imread(self.maskImgPath)
-
-                self.frameIndex = 0
-
-                experiment_name = params['experiment_name']
-                original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-
-                if os.path.isfile(savePath):
-                    print('Re-annotated mask exists in training directory. Loading it.')
-                    # add widget to express whether this mask is one you already re-annotated
-                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-                img = self.maskStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def prior_fov(self):
-                self.fovIndex -= 1
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
-                self.maskStack = io.imread(self.maskImgPath)
-
-                self.frameIndex = 0
-                experiment_name = params['experiment_name']
-                original_file_name = self.maskImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.label_dir,fileBaseName)
-
-                if os.path.isfile(savePath):
-                    print('Re-annotated mask exists in training directory. Loading it.')
-                    # add widget to express whether this mask is one you already re-annotated
-                    self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
-                img = self.maskStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-class PhaseWidget(QWidget):
-
-        def __init__(self,imgPaths,fov_id_list,image_dir,frame_index):
-                super(PhaseWidget, self).__init__()
-
-                # print(imgPaths)
-                self.image_dir = image_dir
-
-                self.imgPaths = imgPaths
-                self.fov_id_list = fov_id_list
-                self.fovIndex = 0
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
-                self.phaseStack = io.imread(self.phaseImgPath)
-
-                self.frameIndex = frame_index
-                img = self.phaseStack[self.frameIndex,:,:]
-                self.originalImgMax = np.max(img)
-                originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
-                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
-
-                rescaledImg = img/self.originalImgMax*255
-                RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                self.originalHeight, self.originalWidth, self.originalChannelNumber = RGBImg.shape
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.phaseQpixmap = QPixmap(self.phaseQimage)
-
-                self.label = QLabel(self)
-                self.label.setPixmap(self.phaseQpixmap)
-
-        def setImg(self, img):
-                self.originalImgMax = np.max(img)
-                originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
-                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
-
-                rescaledImg = img/np.max(img)*255
-                RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-                self.phaseQpixmap = QPixmap(self.phaseQimage)
-                self.label.setPixmap(self.phaseQpixmap)
-
-        def next_frame(self):
-                self.frameIndex += 1
-
-                try:
-                        img = self.phaseStack[self.frameIndex,:,:]
-                except IndexError:
-                        sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
-                self.setImg(img)
-
-        def prior_frame(self):
-                self.frameIndex -= 1
-
-                try:
-                        img = self.phaseStack[self.frameIndex,:,:]
-                except IndexError:
-                        sys.exit("You've already edited the last frame's mask. Write in functionality to increment to next peak_id now!")
-                self.setImg(img)
-
-        def next_peak(self):
-
-                self.imgIndex += 1
-                self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
-                self.phaseStack = io.imread(self.phaseImgPath)
-
-                self.frameIndex = 0
-                img = self.phaseStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def prior_peak(self):
-
-                self.imgIndex -= 1
-                self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
-                self.phaseStack = io.imread(self.phaseImgPath)
-
-                self.frameIndex = 0
-                img = self.phaseStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def next_fov(self):
-                self.fovIndex += 1
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
-                self.phaseStack = io.imread(self.phaseImgPath)
-
-                self.frameIndex = 0
-                img = self.phaseStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def prior_fov(self):
-                self.fovIndex -= 1
-                self.fov_id = self.fov_id_list[self.fovIndex]
-
-                self.imgIndex = 0
-                self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
-                self.phaseStack = io.imread(self.phaseImgPath)
-
-                self.frameIndex = 0
-                img = self.phaseStack[self.frameIndex,:,:]
-                self.setImg(img)
-
-        def buttonSave(self):
-                experiment_name = params['experiment_name']
-                original_file_name = self.phaseImgPath
-                pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+')
-                mat = pat.match(original_file_name)
-                fovID = mat.groups()[0]
-                peakID = mat.groups()[1]
-                fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
-                savePath = os.path.join(self.image_dir,fileBaseName)
-                print("Saved phase image as: ", savePath)
-
-                if not os.path.isdir(self.image_dir):
-                        os.makedirs(self.image_dir)
-
-                saveImg = self.originalPhaseQImage.convertToFormat(QImage.Format_Grayscale8)
-                saveImg.save(savePath)
 
 if __name__ == "__main__":
 
