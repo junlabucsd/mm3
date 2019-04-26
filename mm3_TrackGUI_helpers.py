@@ -228,6 +228,9 @@ class ThreeFrameItem(QGraphicsScene):
 
         self.regions_and_events_by_time = self.create_tracking_information()
 
+        # Maybe recode this to plot all frames/cells/events and be able to zoom in/out with mouse wheel
+        frames_and_regions = self.all_phase_img_and_regions()
+
         # keep in mind that regions_and_events_by_time is 1-indexed, whereas the phaseStack and labelStack are 0-indexed
         leftFrame, leftRegions = self.phase_img_and_regions(frame_index=self.center_frame_index-1)
         centerFrame, centerRegions = self.phase_img_and_regions(frame_index=self.center_frame_index)
@@ -431,6 +434,12 @@ class ThreeFrameItem(QGraphicsScene):
 
         # set the scene...
         self.set_scene(leftFrame, centerFrame, rightFrame, leftRegions, centerRegions, rightRegions)
+
+    def add_phase_img_and_regions(self):
+
+        for time in self.regions_and_events_by_time.keys():
+            pass
+
 
     def phase_img_and_regions(self, frame_index):
 
