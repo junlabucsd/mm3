@@ -267,6 +267,9 @@ class FrameItem(QGraphicsScene):
                 print(str(e))
 
     def next_peak(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+
         self.center_frame_index = 1
         self.peakIndex += 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
@@ -281,9 +284,13 @@ class FrameItem(QGraphicsScene):
 
         self.regions_and_events_by_time = self.create_tracking_information()
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
+
         self.draw_cell_events()
 
     def prior_peak(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+
         self.center_frame_index = 1
         self.peakIndex -= 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
@@ -300,11 +307,13 @@ class FrameItem(QGraphicsScene):
 
         self.regions_and_events_by_time = self.create_tracking_information()
 
-        self.regions_and_events_by_time = self.create_tracking_information()
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
 
     def next_fov(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+
         self.center_frame_index = 1
 
         self.fovIndex += 1
@@ -326,11 +335,13 @@ class FrameItem(QGraphicsScene):
 
         self.regions_and_events_by_time = self.create_tracking_information()
 
-        self.regions_and_events_by_time = self.create_tracking_information()
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
 
     def prior_fov(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+
         self.center_frame_index = 1
 
         self.fovIndex -= 1
@@ -352,7 +363,6 @@ class FrameItem(QGraphicsScene):
 
         self.regions_and_events_by_time = self.create_tracking_information()
 
-        self.regions_and_events_by_time = self.create_tracking_information()
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
 
@@ -417,6 +427,7 @@ class FrameItem(QGraphicsScene):
             pen.setColor(brushColor)
             # brush.setColor(QColor('red'))
 
+            ####### NOTE: WOULD BE NICE TO GET A QGRAPHICS PATH ITEM WORKING, BUT IT LOOKS PRETTY INVOLVED ########
             # for i in range(len(rr)):
             #     x = cc[i]
             #     y = rr[i]
@@ -539,11 +550,6 @@ class FrameItem(QGraphicsScene):
 
         return(regions_and_events_by_time)
 
-    def set_frames(self, leftFrame, centerFrame, rightFrame):
-        self.leftFrame = self.addPixmap(leftFrame)
-        self.centerFrame = self.addPixmap(centerFrame)
-        self.rightFrame = self.addPixmap(rightFrame)
-
     def add_regions_to_frame(self, regions_and_events, frame):
         # loop through cells within this frame and add their ellipses as children of their corresponding qpixmap object
         regions = regions_and_events['regions']
@@ -576,7 +582,7 @@ class FrameItem(QGraphicsScene):
         #   events after an update.
         if end_time is not None:
             max_time = end_time
-        else: max_time = np.max([frame.time for frame in self.items() if frame.type() == 7])
+        else: max_time = np.max([item.time for item in self.items() if item.type() == 7])
 
         valid_times = [i for i in range(start_time, max_time+1)]
 
