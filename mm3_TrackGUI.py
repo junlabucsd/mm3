@@ -9,8 +9,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
 from PyQt5.QtGui import (QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QPainterPath, QBrush,
                          QTransform, QPolygonF, QFont)
 from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
-from skimage import io, img_as_ubyte, color, draw, measure
+from skimage import io, img_as_ubyte, color, draw, measure, morphology, feature
 import numpy as np
+from matplotlib import pyplot as plt
 
 import argparse
 import glob
@@ -88,6 +89,15 @@ class Window(QMainWindow):
         removeEventsButton.clicked.connect(self.frames.scene.remove_all_cell_events)
         eventButtonGroup.addButton(removeEventsButton)
 
+        clearAllEventsButton = QPushButton("Remove all\ntracking events")
+        clearAllEventsButton.clicked.connect(self.frames.scene.clear_all_events)
+
+        splitEllipseButton = QPushButton("Delete ellipse")
+        splitEllipseButton.clicked.connect(self.frames.scene.split_ellipse)
+
+        drawEllipseButton = QPushButton("Draw ellipse")
+        drawEllipseButton.clicked.connect(self.frames.scene.draw_ellipse)
+
         eventButtonLayout = QVBoxLayout()
         eventButtonLayout.addWidget(migrateButton)
         eventButtonLayout.addWidget(childrenButton)
@@ -96,6 +106,8 @@ class Window(QMainWindow):
         eventButtonLayout.addWidget(appearButton)
         eventButtonLayout.addWidget(disappearButton)
         eventButtonLayout.addWidget(removeEventsButton)
+        eventButtonLayout.addWidget(clearAllEventsButton)
+        eventButtonLayout.addWidget(splitEllipseButton)
 
         eventButtonGroupWidget = QWidget()
         eventButtonGroupWidget.setLayout(eventButtonLayout)
@@ -210,6 +222,7 @@ class FrameItem(QGraphicsScene):
 
         self.drawing = False
         self.remove_events = False
+        self.watershed_falsely_joined_cells = False
         self.brushSize = 2
         self.brushColor = QColor('black')
         self.lastPoint = QPoint()
@@ -382,7 +395,7 @@ class FrameItem(QGraphicsScene):
 
         return(frame_dict_by_time)
 
-    def phase_img_and_regions(self, frame_index):
+    def phase_img_and_regions(self, frame_index, watershed=False):
 
         time = frame_index+1
         phaseImg = self.phaseStack[frame_index,:,:]
@@ -572,6 +585,9 @@ class FrameItem(QGraphicsScene):
             ellipse.time = frame_time
             ellipse.setBrush(graphic['brush'])
             ellipse.setPen(graphic['pen'])
+
+    def split_ellipse(self, event):
+        self.watershed_falsely_joined_cells = True
 
     def draw_cell_events(self, start_time=1, end_time=None, update=False):
 
@@ -910,6 +926,10 @@ class FrameItem(QGraphicsScene):
                 else:
                     self.removeItem(old_start_cell_events[i])
 
+    def draw_ellipse(self, startPoint, endPoint):
+        ################## TO DO ######################
+        pass
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
 
@@ -926,8 +946,26 @@ class FrameItem(QGraphicsScene):
                         self.removeItem(event)
                     self.update_tracking_info()
 
+                # if instead we've opted to split an ellipse, we'll use watershed here
+                elif self.watershed_falsely_joined_cells:
+
+                    # get the mask associated with the frame in which the cells reside
+                    time = self.startItem.time
+                    frame = self.startItem.parentItem()
+
+                    # remove ellipse and any events belonging to it from frame
+                    events = self.get_all_cell_event_items(self.startItem)
+                    for event in events:
+                        self.removeItem(event)
+                    self.removeItem(self.startItem)
+                    # draw new ellipses onto frame by hand
+                    ########## This really would be the time to implement QGraphicsPathItems
+                    ############################# TO DO ###########################
+
+
+
                 # if we do not want to remove_events, we are adding an event, so do the following
-                else:
+            else:
                     # get the centroid position for the cell that was clicked
                     firstPointY = self.startItem.cellProps.centroid[0]
                     # here we add the x-position of the detected ellipse' frame, because
@@ -949,6 +987,7 @@ class FrameItem(QGraphicsScene):
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.drawing and not self.remove_events:
+
             self.lastPoint = event.scenePos()
             self.endItem = self.get_ellipse(point=self.lastPoint)
             if self.startItem is not None:
@@ -977,6 +1016,8 @@ class FrameItem(QGraphicsScene):
                     elif abs(start_time - end_time) > 1:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells separated by more than a single frame. Ignoring selection.")
+                    elif self.watershed_falsely_joined_cells:
+                        self.watershed_falsely_joined_cells = False
                     else:
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
@@ -1026,6 +1067,13 @@ class FrameItem(QGraphicsScene):
             eventItem = DisappearSymbol(self.firstPoint, self.startItem)
 
         return(eventItem)
+
+    def clear_all_events(self):
+
+        for item in self.items():
+            # if the item isn't an qgraphicsellipseitem, 4, or a qgraphicspixmapitem, 7, remove it from the scene
+            if item.type() not in [4,7]:
+                self.removeItem(item)
 
     def remove_all_cell_events(self):
         self.remove_events = True
