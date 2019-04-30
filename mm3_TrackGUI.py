@@ -92,8 +92,8 @@ class Window(QMainWindow):
         clearAllEventsButton = QPushButton("Remove all\ntracking events")
         clearAllEventsButton.clicked.connect(self.frames.scene.clear_all_events)
 
-        splitEllipseButton = QPushButton("Delete ellipse")
-        splitEllipseButton.clicked.connect(self.frames.scene.split_ellipse)
+        # splitEllipseButton = QPushButton("Delete ellipse")
+        # splitEllipseButton.clicked.connect(self.frames.scene.split_ellipse)
 
         drawEllipseButton = QPushButton("Draw ellipse")
         drawEllipseButton.clicked.connect(self.frames.scene.draw_ellipse)
@@ -107,7 +107,7 @@ class Window(QMainWindow):
         eventButtonLayout.addWidget(disappearButton)
         eventButtonLayout.addWidget(removeEventsButton)
         eventButtonLayout.addWidget(clearAllEventsButton)
-        eventButtonLayout.addWidget(splitEllipseButton)
+        # eventButtonLayout.addWidget(splitEllipseButton)
 
         eventButtonGroupWidget = QWidget()
         eventButtonGroupWidget.setLayout(eventButtonLayout)
@@ -153,8 +153,53 @@ class FrameImgWidget(QWidget):
 
         # add images and cell regions as ellipses to each frame in a QGraphicsScene object
         self.scene = FrameItem(specs)
-        self.view = QGraphicsView(self)
+        self.view = View(self)
         self.view.setScene(self.scene)
+
+class View(QGraphicsView):
+    '''
+    Re-implementation of QGraphicsView to accept mouse+Ctrl event
+    as a zoom transformation
+    '''
+    def __init__(self, parent):
+        super(View, self).__init__(parent)
+        # set upper and lower bounds on zooming
+        self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.maxScale = 2.5
+        self.minScale = 0.3
+
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.ControlModifier:
+            self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+            m11 = self.transform().m11() # horizontal scale factor
+            m12 = self.transform().m12()
+            m13 = self.transform().m13()
+            m21 = self.transform().m21()
+            m22 = self.transform().m22() # vertizal scale factor
+            m23 = self.transform().m23()
+            m31 = self.transform().m31()
+            m32 = self.transform().m32()
+            m33 = self.transform().m33()
+
+            adjust = event.angleDelta().y()/120 * 0.1
+            if (m11 >= self.maxScale) and (adjust > 0):
+                m11 = m11
+                m22 = m22
+            elif (m11 <= self.minScale) and (adjust < 0):
+                m11 = m11
+                m22 = m22
+            else:
+                m11 += adjust
+                m22 += adjust
+            self.setTransform(QTransform(m11, m12, m13, m21, m22, m23, m31, m32, m33))
+
+        elif event.modifiers() == Qt.AltModifier:
+            self.setTransformationAnchor(QGraphicsView.NoAnchor)
+            adjust = event.angleDelta().x()/120 * 50
+            self.translate(adjust,0)
+
+        else:
+            QGraphicsView.wheelEvent(self, event)
 
 class FrameItem(QGraphicsScene):
     # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
@@ -586,10 +631,7 @@ class FrameItem(QGraphicsScene):
             ellipse.setBrush(graphic['brush'])
             ellipse.setPen(graphic['pen'])
 
-    def split_ellipse(self, event):
-        self.watershed_falsely_joined_cells = True
-
-    def draw_cell_events(self, start_time=1, end_time=None, update=False):
+    def draw_cell_events(self, start_time=1, end_time=None, update=False, original_event_type=None):
 
         # Here is where we will draw the intial lines and symbols representing
         #   cell events and linkages between cells.
@@ -620,35 +662,35 @@ class FrameItem(QGraphicsScene):
                 # if the frame has child items
                 if len(frame.childItems()) > 0:
 
-                    for self.startItem in frame.childItems():
+                    for startItem in frame.childItems():
                         # test if this is an ellipse item. If it is, draw event symbols.
-                        if self.startItem.type() == 4:
+                        if startItem.type() == 4:
                             # remove all previously drawn events belonging entirely to,
                             #   or emanating from, this cell.
                             if update:
-                                items, items_list = self.get_all_cell_event_items(self.startItem, return_forbidden_items_list=True)
+                                items, items_list = self.get_all_cell_event_items(startItem, return_forbidden_items_list=True)
                                 for i, item_type in enumerate(items_list):
                                     if item_type not in ["ChildEnd","MigrationEnd"]:
                                         self.removeItem(items[i])
 
-                            cell_properties = self.startItem.cellProps
+                            cell_properties = startItem.cellProps
                             cell_label = cell_properties.label
-                            cell_interactions = self.startItem.cellMatrix[cell_label,:]
-                            cell_events = self.startItem.cellEvents
+                            cell_interactions = startItem.cellMatrix[cell_label,:]
+                            cell_events = startItem.cellEvents
                             # print(cell_events)
                             # print(cell_interactions)
                             # get centroid of cell represented by this qgraphics item
                             firstPointY = cell_properties.centroid[0]
-                            firstPointX = cell_properties.centroid[1] + self.startItem.parentItem().x()
-                            self.firstPoint = QPoint(firstPointX, firstPointY)
+                            firstPointX = cell_properties.centroid[1] + startItem.parentItem().x()
+                            firstPoint = QPoint(firstPointX, firstPointY)
                             # which events happened to this cell?
                             event_indices = np.where(cell_events == 1)[0]
 
                             if 2 in event_indices:
                                 # If the second element in event_indices was 1, the cell dies between this frame and the next.
                                 self.set_die()
-                                self.eventItem = self.set_event_item()
-                                self.addItem(self.eventItem)
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
 
                             # Ignoring "born" events in the GUI, and keeping their management
                             #   strictly in the back-end, since we can infer "born" from
@@ -665,22 +707,22 @@ class FrameItem(QGraphicsScene):
                                 # if the fourth element in event_indices was 1,
                                 #   the cell cell appeared between this frame and the previous one.
                                 self.set_appear()
-                                self.eventItem = self.set_event_item()
-                                self.addItem(self.eventItem)
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
 
                             if 5 in event_indices:
                                 # if the fifth element in event_indices was 1,
                                 #   the cell cell disappeared between this frame and the previous one.
                                 self.set_disappear()
-                                self.eventItem = self.set_event_item()
-                                self.addItem(self.eventItem)
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
 
                             try:
                                 nextFrame = self.all_frames_by_time_dict[time+1]
-                                for self.endItem in nextFrame.childItems():
+                                for endItem in nextFrame.childItems():
                                     # if the item is an ellipse, move on to look into it further
-                                    if self.endItem.type() == 4:
-                                        end_cell_properties = self.endItem.cellProps
+                                    if endItem.type() == 4:
+                                        end_cell_properties = endItem.cellProps
                                         end_cell_label = end_cell_properties.label
                                         # test whether this ellipse represents the
                                         #  cell that interacts with the cell represented
@@ -688,8 +730,8 @@ class FrameItem(QGraphicsScene):
                                         if cell_interactions[end_cell_label] == 1:
                                             # if this is the cell that interacts with the former frame's cell, draw the line.
                                             endPointY = end_cell_properties.centroid[0]
-                                            endPointX = end_cell_properties.centroid[1] + self.endItem.parentItem().x()
-                                            self.lastPoint = QPoint(endPointX, endPointY)
+                                            endPointX = end_cell_properties.centroid[1] + endItem.parentItem().x()
+                                            lastPoint = QPoint(endPointX, endPointY)
                                             if 0 in event_indices:
                                                 # If the zero-th element in event_indices was 1, the cell migrates in the next frame
                                                 #  get the information from cell_matrix to figure out to which region
@@ -699,10 +741,22 @@ class FrameItem(QGraphicsScene):
                                             if 1 in event_indices:
                                                 self.set_children()
 
-                                            self.eventItem = self.set_event_item()
-                                            self.addItem(self.eventItem)
+                                            eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem, lastPoint=lastPoint, endItem=endItem)
+                                            self.addItem(eventItem)
                             except KeyError:
                                 continue
+
+        if original_event_type is not None:
+            if original_event_type == "MigrationLine":
+                self.set_migration()
+            elif original_event_type == "ChildLine":
+                self.set_children()
+            elif original_event_type == "DieSymbol":
+                self.set_die()
+            elif original_event_type == "AppearSymbol":
+                self.set_appear()
+            elif original_event_type == "DisappearSymbol":
+                self.set_disappear()
 
     def get_ellipse(self, point):
         # function for finding the ellipse under your mouse click or mouse release,
@@ -780,11 +834,15 @@ class FrameItem(QGraphicsScene):
         # This function updates the matrix and events for all cells in your scene.
         # First, get the maximum time so we don't get a key error later on
         max_time = np.max([key for key in self.all_frames_by_time_dict.keys()])
+        ###################### TO DO: update so that this works with event removal ###########################
+        if self.remove_events:
+            cell = self.startItem
+            frame = self.all_frames_by_time_dict[cell.time]
+            self.update_frame_info(frame)
 
         # Work with the newly added eventItem
-        ###################### TO DO: update so that this works with event removal ###########################
         # If the event was either child or migration, do this stuff
-        if self.eventItem.type() in self.line_events_list:
+        elif self.eventItem.type() in self.line_events_list:
             # Identify immediatly affected cells
             cell = self.eventItem.startItem
             frame = self.all_frames_by_time_dict[cell.time]
@@ -945,27 +1003,32 @@ class FrameItem(QGraphicsScene):
                     for event in events:
                         self.removeItem(event)
                     self.update_tracking_info()
+                    # remove old events and draw the newly-updated ones. This helps you
+                    #   to ensure you haven't just messed up the underlying tracking data
+                    start_time = self.startItem.parentItem().time
+                    end_time = self.startItem.parentItem().time
+                    self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True)
 
-                # if instead we've opted to split an ellipse, we'll use watershed here
-                elif self.watershed_falsely_joined_cells:
-
-                    # get the mask associated with the frame in which the cells reside
-                    time = self.startItem.time
-                    frame = self.startItem.parentItem()
-
-                    # remove ellipse and any events belonging to it from frame
-                    events = self.get_all_cell_event_items(self.startItem)
-                    for event in events:
-                        self.removeItem(event)
-                    self.removeItem(self.startItem)
-                    # draw new ellipses onto frame by hand
-                    ########## This really would be the time to implement QGraphicsPathItems
-                    ############################# TO DO ###########################
+                # # if instead we've opted to split an ellipse, we'll use watershed here
+                # elif self.watershed_falsely_joined_cells:
+                #
+                #     # get the mask associated with the frame in which the cells reside
+                #     time = self.startItem.time
+                #     frame = self.startItem.parentItem()
+                #
+                #     # remove ellipse and any events belonging to it from frame
+                #     events = self.get_all_cell_event_items(self.startItem)
+                #     for event in events:
+                #         self.removeItem(event)
+                #     self.removeItem(self.startItem)
+                #     # draw new ellipses onto frame by hand
+                #     ########## This really would be the time to implement QGraphicsPathItems
+                #     ############################# TO DO ###########################
 
 
 
                 # if we do not want to remove_events, we are adding an event, so do the following
-            else:
+                else:
                     # get the centroid position for the cell that was clicked
                     firstPointY = self.startItem.cellProps.centroid[0]
                     # here we add the x-position of the detected ellipse' frame, because
@@ -974,7 +1037,7 @@ class FrameItem(QGraphicsScene):
                     #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
                     firstPointX = self.startItem.cellProps.centroid[1] + self.startItem.parentItem().x()
                     self.firstPoint = QPoint(firstPointX, firstPointY)
-                    self.eventItem = self.set_event_item()
+                    self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint)
                     self.addItem(self.eventItem)
 
     def mouseMoveEvent(self, event):
@@ -982,7 +1045,7 @@ class FrameItem(QGraphicsScene):
             if self.startItem is not None:
                 self.lastPoint = event.scenePos()
                 self.removeItem(self.eventItem)
-                self.eventItem = self.set_event_item()
+                self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint)
                 self.addItem(self.eventItem)
 
     def mouseReleaseEvent(self, event):
@@ -992,32 +1055,22 @@ class FrameItem(QGraphicsScene):
             self.endItem = self.get_ellipse(point=self.lastPoint)
             if self.startItem is not None:
                 if self.endItem is None:
-                    if self.migration:
-                        self.set_migration()
-                    elif self.children:
-                        self.set_children()
-                    elif self.die:
-                        self.set_die()
-                    elif self.appear:
-                        self.set_appear()
-                    elif self.disappear:
-                        self.set_disappear()
                     self.removeItem(self.eventItem)
-
 
             if self.endItem is not None:
                 if self.startItem is not None:
                     start_time = self.startItem.parentItem().time
                     end_time = self.endItem.parentItem().time
+                    # Deal with case when we've removed events from a cell
+                    if self.remove_events:
+                        print("Removed outgoing events from clicked cell.")
                     # A migration or child event cannot go from one frame to the same frame.
-                    if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
+                    elif (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
                     elif abs(start_time - end_time) > 1:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells separated by more than a single frame. Ignoring selection.")
-                    elif self.watershed_falsely_joined_cells:
-                        self.watershed_falsely_joined_cells = False
                     else:
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
@@ -1028,7 +1081,7 @@ class FrameItem(QGraphicsScene):
                         #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
                         endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
                         self.lastPoint = QPoint(endPointX, endPointY)
-                        self.eventItem = self.set_event_item()
+                        self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
 
                         self.remove_old_conflicting_events(self.eventItem)
                         self.addItem(self.eventItem)
@@ -1036,44 +1089,38 @@ class FrameItem(QGraphicsScene):
                         self.update_tracking_info()
                         # remove old events and draw the newly-updated ones. This is inefficient, but helps you
                         #   to ensure you haven't just messed up the underlying tracking data
-                        self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True)
-
-                        ## TO DO: FIGURE OUT WHY EVENT TYPE CHANGES AFTER REDRAWING CELL EVENTS, EVEN THOUGH I HAVE THIS CODE BELOW ###############
-                        if self.eventItem.type() == "MigrationLine":
-                            self.set_migration()
-                        elif self.eventItem.type() == "ChildLine":
-                            self.set_children()
-                        elif self.eventItem.type() == "DieSymbol":
-                            self.set_die()
-                        elif self.eventItem.type() == "AppearSymbol":
-                            self.set_appear()
-                        elif self.eventItem.type() == "DisappearSymbol":
-                            self.set_disappear()
+                        self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True, original_event_type=self.eventItem.type())
 
             self.drawing = False
 
-    def set_event_item(self):
+    def set_event_item(self, firstPoint, startItem, lastPoint=None, endItem=None):
         if self.migration:
-            eventItem = MigrationLine(self.firstPoint, self.lastPoint, self.startItem, self.endItem)
+            eventItem = MigrationLine(firstPoint, lastPoint, startItem, endItem)
         if self.children:
-            eventItem = ChildLine(self.firstPoint, self.lastPoint, self.startItem, self.endItem)
+            eventItem = ChildLine(firstPoint, lastPoint, startItem, endItem)
         if self.die:
-            eventItem = DieSymbol(self.firstPoint, self.startItem)
+            eventItem = DieSymbol(firstPoint, startItem)
         # if self.birth:
         #     eventItem = BornSymbol(self.firstPoint, self.startItem)
         if self.appear:
-            eventItem = AppearSymbol(self.firstPoint, self.startItem)
+            eventItem = AppearSymbol(firstPoint, startItem)
         if self.disappear:
-            eventItem = DisappearSymbol(self.firstPoint, self.startItem)
+            eventItem = DisappearSymbol(firstPoint, startItem)
+        if self.remove_events:
+            eventItem = None
 
         return(eventItem)
 
     def clear_all_events(self):
-
+        print("Destroyed all tracking information")
         for item in self.items():
             # if the item isn't an qgraphicsellipseitem, 4, or a qgraphicspixmapitem, 7, remove it from the scene
             if item.type() not in [4,7]:
+                # clear every item we found
                 self.removeItem(item)
+        self.update_tracking_info()
+        # for debugging
+        self.draw_cell_events()
 
     def remove_all_cell_events(self):
         self.remove_events = True
