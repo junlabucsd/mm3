@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
                              QGridLayout, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
                              QGraphicsEllipseItem, QGraphicsTextItem)
 from PyQt5.QtGui import (QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QPainterPath, QBrush,
-                         QTransform, QPolygonF, QFont)
+                         QTransform, QPolygonF, QFont, QPaintDevice)
 from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
 from skimage import io, img_as_ubyte, color, draw, measure, morphology, feature
 import numpy as np
@@ -41,7 +41,7 @@ class Window(QMainWindow):
         width = 800
         height = 600
 
-        self.setWindowTitle("Go ahead. Update your tracking results.")
+        self.setWindowTitle("Update your tracking results and save for deep learning.")
         self.setGeometry(top,left,width,height)
 
         # load specs file
@@ -89,14 +89,24 @@ class Window(QMainWindow):
         removeEventsButton.clicked.connect(self.frames.scene.remove_all_cell_events)
         eventButtonGroup.addButton(removeEventsButton)
 
-        clearAllEventsButton = QPushButton("Remove all\ntracking events")
-        clearAllEventsButton.clicked.connect(self.frames.scene.clear_all_events)
+        falselyJoinedButton = QRadioButton("Falsely joined")
+        falselyJoinedButton.clicked.connect(self.frames.scene.set_falsely_joined)
+        eventButtonGroup.addButton(falselyJoinedButton)
+
+        # clearAllEventsButton = QPushButton("Remove all\ntracking events")
+        # clearAllEventsButton.clicked.connect(self.frames.scene.clear_all_events)
+
+        # maskEditModeButton = QPushButton("Enter mask\nedit mode")
+        # maskEditModeButton.clicked.connect(self.frames.enter_mask_edit_mode)
+        #
+        # trackEditModeButton = QPushButton("Enter track\nedit mode")
+        # trackEditModeButton.clicked.connect(self.frames.enter_track_edit_mode)
 
         # splitEllipseButton = QPushButton("Delete ellipse")
         # splitEllipseButton.clicked.connect(self.frames.scene.split_ellipse)
 
-        drawEllipseButton = QPushButton("Draw ellipse")
-        drawEllipseButton.clicked.connect(self.frames.scene.draw_ellipse)
+        # drawEllipseButton = QPushButton("Draw ellipse")
+        # drawEllipseButton.clicked.connect(self.frames.scene.draw_ellipse)
 
         eventButtonLayout = QVBoxLayout()
         eventButtonLayout.addWidget(migrateButton)
@@ -105,8 +115,11 @@ class Window(QMainWindow):
         eventButtonLayout.addWidget(dieButton)
         eventButtonLayout.addWidget(appearButton)
         eventButtonLayout.addWidget(disappearButton)
+        eventButtonLayout.addWidget(falselyJoinedButton)
         eventButtonLayout.addWidget(removeEventsButton)
-        eventButtonLayout.addWidget(clearAllEventsButton)
+        # eventButtonLayout.addWidget(clearAllEventsButton)
+        # eventButtonLayout.addWidget(maskEditModeButton)
+        # eventButtonLayout.addWidget(trackEditModeButton)
         # eventButtonLayout.addWidget(splitEllipseButton)
 
         eventButtonGroupWidget = QWidget()
@@ -130,6 +143,7 @@ class Window(QMainWindow):
         priorFOVButton.clicked.connect(self.frames.scene.prior_fov)
 
         saveUpdatedTracksButton = QPushButton("Save updated tracking info\nfor neural net training data")
+        saveUpdatedTracksButton.setShortcut("Ctrl+S")
         saveUpdatedTracksButton.clicked.connect(self.frames.scene.save_updates)
 
         fileAdvanceLayout = QVBoxLayout()
@@ -150,11 +164,28 @@ class FrameImgWidget(QWidget):
     # class for setting three frames side-by-side as a central widget in a QMainWindow object
     def __init__(self,specs):
         super(FrameImgWidget, self).__init__()
-
+        print("Starting in track edit mode.")
         # add images and cell regions as ellipses to each frame in a QGraphicsScene object
-        self.scene = FrameItem(specs)
+        self.specs = specs
+        self.scene = TrackItem(self.specs)
         self.view = View(self)
         self.view.setScene(self.scene)
+
+    # def enter_mask_edit_mode(self):
+    #     print("Entering mask edit mode.")
+    #     ###### NOTE: consider prompting to save track edits prior to switching modes
+    #     self.scene.clear()
+    #     self.scene = MaskItem(self.specs)
+    #     self.view = View(self)
+    #     self.view.setScene(self.scene)
+    #
+    # def enter_track_edit_mode(self):
+    #     print("Entering track edit mode.")
+    #     ###### NOTE: consider prompting to save new masks prior to switching modes
+    #     self.scene.clear()
+    #     self.scene = TrackItem(self.specs)
+    #     self.view = View(self)
+    #     self.view.setScene(self.scene)
 
 class View(QGraphicsView):
     '''
@@ -201,11 +232,54 @@ class View(QGraphicsView):
         else:
             QGraphicsView.wheelEvent(self, event)
 
-class FrameItem(QGraphicsScene):
+# class CellItem(QGraphicsItem):
+#     '''
+#     Re-implementation of a QGraphicsItem to enable drawing of cell regions.
+#     '''
+#     def __init__(self, region, parent):
+#         super(CellItem, self).__init__()
+#
+#         graphic = region['region_graphic']
+#
+#         top_left = QPoint(graphic['left_x'],graphic['top_y'])
+#         bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
+#         coords = graphic['coords']
+#
+#         pen = graphic['pen']
+#         brush = graphic['brush']
+#
+#         rr = coords[:,0]
+#         cc = coords[:,1]
+#         for i in range(len(rr)):
+#             x = cc[i]
+#             y = rr[i]
+#             point = QPoint(x,y)
+#             if i == 0:
+#                 path = QPainterPath(point)
+#             else:
+#                 path.moveTo(point)
+#         path.setFillRule(Qt.WindingFill)
+#         self.paint(path, pen, brush, top_left, bottom_right)
+#
+#     def boundingRect(self, top_left, bottom_right):
+#         rect = QRectF(top_left, bottom_right)
+#         return(rect)
+#
+#     def paint(self, path, pen, brush, top_left, bottom_right):
+#         rect = self.boundingRect(top_left, bottom_right)
+#         painter = QPainter()
+#         painter.setPen(pen)
+#         painter.setBrush(brush)
+#         painter.drawPath(path)
+#
+#     def type(self):
+#         return("CellItem")
+
+class TrackItem(QGraphicsScene):
     # add more functionality for setting event type, i.e., parent-child, migrate, death, leave frame, etc..
 
     def __init__(self,specs):
-        super(FrameItem, self).__init__()
+        super(TrackItem, self).__init__()
 
         self.specs = specs
         # add QImages to scene (try three frames)
@@ -262,40 +336,43 @@ class FrameItem(QGraphicsScene):
                 except Exception as e:
                     print("Could not load pickle file specified.")
                     print(e)
-        # TO DO: enable zooming in/out with mouse wheel
+
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
         self.drawing = False
         self.remove_events = False
-        self.watershed_falsely_joined_cells = False
         self.brushSize = 2
         self.brushColor = QColor('black')
         self.lastPoint = QPoint()
         self.pen = QPen()
 
         # class options
-        self.event_types_list = ["ChildLine","MigrationLine","DieSymbol","AppearSymbol","BornSymbol","DisappearSymbol"]
-        self.line_events_list = ["ChildLine","MigrationLine"]
+        self.event_types_list = ["ChildLine","MigrationLine","DieSymbol","AppearSymbol","BornSymbol","DisappearSymbol","FalseJoinLine"]
+        self.line_events_list = ["ChildLine","MigrationLine","FalseJoinLine"]
         # the below lookup table may need reworked to handle migration and child lines to/from a cell
         #   or the handling may be better done in the update_cell_info function
         self.event_type_index_lookup = {"MigrationLine":0, "ChildLine":1,
                                         "DieSymbol":2, "BornSymbol":3,
-                                        "AppearSymbol":4, "DisappearSymbol":5}
+                                        "AppearSymbol":4, "DisappearSymbol":5,
+                                        "FalseJoinLine":6}
         # given an event type for a cell, what are the event types that are incompatible within that same cell?
-        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart"],
-                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd"],
-                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart"],
-                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd"],
-                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol"],
-                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol"],
-                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol"],
-                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol"]}
+        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart","FalseJoinStart"],
+                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","FalseJoinEnd"],
+                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart","FalseJoinStart"],
+                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd","FalseJoinEnd"],
+                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol","FalseJoinEnd"],
+                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol","FalseJoinEnd"],
+                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol","FalseJoinStart"],
+                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart"],
+                                           "FalseJoinStart":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart"],
+                                           "FalseJoinEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd"]}
         self.migration = False
         self.die = False
         self.children = False
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
 
         # apply cell events to the scene
         self.draw_cell_events()
@@ -472,35 +549,18 @@ class FrameItem(QGraphicsScene):
             pen = QPen()
             pen.setStyle(Qt.SolidLine)
             props = regions[region_id]['props']
+            coords = props.coords
             min_row, min_col, max_row, max_col = props.bbox
             label = props.label
-            # coords = props.coords
-            # rr = coords[:,0]
-            # cc = coords[:,1]
             centroidY,centroidX = props.centroid
             brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
-            brushColor.setAlphaF(0.25)
+            brushColor.setAlphaF(0.15)
             brush.setColor(brushColor)
-            # brush.setColor(QColor('red'))
             pen.setColor(brushColor)
-            # brush.setColor(QColor('red'))
 
-            ####### NOTE: WOULD BE NICE TO GET A QGRAPHICS PATH ITEM WORKING, BUT IT LOOKS PRETTY INVOLVED ########
-            # for i in range(len(rr)):
-            #     x = cc[i]
-            #     y = rr[i]
-            #     point = QPoint(x,y)
-            #     if i == 0:
-            #         path = QPainterPath(point)
-            #     else:
-            #         path.moveTo(point)
-            # path.setFillRule(Qt.WindingFill)
-            # region_graphic = QGraphicsPathItem(path)
-            # region_graphic.setPen(pen)
-            # region_graphic.setBrush(brush)
             regions[region_id]['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
                                                     'left_x':min_col, 'right_x':max_col,
-                                                    #'path':path,
+                                                    'coords':coords,
                                                     'pen':pen, 'brush':brush}
 
         return(phaseQpixmap, time_regions_and_events)
@@ -594,8 +654,13 @@ class FrameItem(QGraphicsScene):
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][5] = 1
                     regions_and_events_by_time[t]['matrix'][label_tmp, 0] = 1
 
-                # N no data, 6 - Set this to zero as this region as been checked.
+                # F false join of cells into a single region, 6
+                # set to zero, since this is difficult to infer here, and will
+                # probably need done by our eventual algorithm
                 regions_and_events_by_time[t]['regions'][label_tmp]['events'][6] = 0
+
+                # N no data, 7 - Set this to zero as this region as been checked.
+                regions_and_events_by_time[t]['regions'][label_tmp]['events'][7] = 0
 
         # Set remaining regions to event space [0 0 0 0 1 1]
         # Also make their appropriate matrix value 1, which should be in the first column.
@@ -615,21 +680,48 @@ class FrameItem(QGraphicsScene):
         frame_time = regions_and_events['time']
         for region_id in regions.keys():
             region = regions[region_id]
-            # pprint(region)
             # construct the ellipse
             graphic = region['region_graphic']
             top_left = QPoint(graphic['left_x'],graphic['top_y'])
             bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
             rect = QRectF(top_left,bottom_right)
-            ellipse = QGraphicsEllipseItem(rect, frame)
 
+            # painter_path = graphic['path']
+            pen = graphic['pen']
+            brush = graphic['brush']
+
+            # cell = CellItem(region, parent=frame)
+
+            # instantiate a QGraphicsEllipseItem
+            ellipse = QGraphicsEllipseItem(rect, frame)
             # add cell information to the QGraphicsEllipseItem
             ellipse.cellMatrix = regions_and_events['matrix']
             ellipse.cellEvents = regions_and_events['regions'][region_id]['events']
             ellipse.cellProps = regions_and_events['regions'][region_id]['props']
             ellipse.time = frame_time
-            ellipse.setBrush(graphic['brush'])
-            ellipse.setPen(graphic['pen'])
+            ellipse.setBrush(brush)
+            ellipse.setPen(pen)
+
+            # # add cell information to the QGraphicsPathItem
+            # path = QGraphicsPathItem(painter_path, frame)
+            # path.cellMatrix = regions_and_events['matrix']
+            # path.cellEvents = regions_and_events['regions'][region_id]['events']
+            # path.cellProps = regions_and_events['regions'][region_id]['props']
+            # path.time = frame_time
+            # path.setBrush(brush)
+            # path.setPen(pen)
+
+            # set up QPainter object to actually paint the QGraphicsPathItem
+            # painter = QPainter()
+            # paint_device = QPaintDevice()
+            # painter.begin(paint_device)
+            # painter.setPen(pen)
+            # painter.setBrush(brush)
+            # painter.drawPath(painter_path)
+            # painter.end()
+
+            # path.paint()
+            #
 
     def draw_cell_events(self, start_time=1, end_time=None, update=False, original_event_type=None):
 
@@ -670,7 +762,7 @@ class FrameItem(QGraphicsScene):
                             if update:
                                 items, items_list = self.get_all_cell_event_items(startItem, return_forbidden_items_list=True)
                                 for i, item_type in enumerate(items_list):
-                                    if item_type not in ["ChildEnd","MigrationEnd"]:
+                                    if item_type not in ["ChildEnd","MigrationEnd","FalseJoinEnd"]:
                                         self.removeItem(items[i])
 
                             cell_properties = startItem.cellProps
@@ -738,8 +830,15 @@ class FrameItem(QGraphicsScene):
                                                 #  in the next frame it migrated
                                                 # set self.migration = True
                                                 self.set_migration()
+
                                             if 1 in event_indices:
                                                 self.set_children()
+
+                                            if 6 in event_indices:
+                                                # if the sixth element in event_indices was 1,
+                                                #   the cell cell was falsely joint into a super-region
+                                                #   between this frame and the previous one.
+                                                self.set_falsely_joined()
 
                                             eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem, lastPoint=lastPoint, endItem=endItem)
                                             self.addItem(eventItem)
@@ -757,6 +856,8 @@ class FrameItem(QGraphicsScene):
                 self.set_appear()
             elif original_event_type == "DisappearSymbol":
                 self.set_disappear()
+            elif original_event_type == "FalseJoinLine":
+                self.set_falsely_joined()
 
     def get_ellipse(self, point):
         # function for finding the ellipse under your mouse click or mouse release,
@@ -812,6 +913,12 @@ class FrameItem(QGraphicsScene):
                                     item_name = "ChildStart"
                                 elif item.endItem == cell:
                                     item_name = "ChildEnd"
+
+                            elif itemType == "FalseJoinLine":
+                                if item.startItem == cell:
+                                    item_name = "FalseJoinStart"
+                                elif item.endItem == cell:
+                                    item_name = "FalseJoinEnd"
 
                             event_types.append(item_name)
 
@@ -942,6 +1049,8 @@ class FrameItem(QGraphicsScene):
                 forbidden_event_lookup_key = "MigrationEnd"
             elif event_type == "ChildLine":
                 forbidden_event_lookup_key = "ChildEnd"
+            elif event_type == "FalseJoinLine":
+                forbidden_event_lookup_key = "FalseJoinEnd"
             else:
                 forbidden_event_lookup_key = event_type
 
@@ -962,6 +1071,8 @@ class FrameItem(QGraphicsScene):
             forbidden_event_lookup_key = "MigrationStart"
         elif event_type == "ChildLine":
             forbidden_event_lookup_key = "ChildStart"
+        elif event_type == "FalseJoinLine":
+            forbidden_event_lookup_key = "FalseJoinStart"
         else:
             forbidden_event_lookup_key = event_type
 
@@ -984,10 +1095,6 @@ class FrameItem(QGraphicsScene):
                 else:
                     self.removeItem(old_start_cell_events[i])
 
-    def draw_ellipse(self, startPoint, endPoint):
-        ################## TO DO ######################
-        pass
-
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
 
@@ -1008,23 +1115,6 @@ class FrameItem(QGraphicsScene):
                     start_time = self.startItem.parentItem().time
                     end_time = self.startItem.parentItem().time
                     self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True)
-
-                # # if instead we've opted to split an ellipse, we'll use watershed here
-                # elif self.watershed_falsely_joined_cells:
-                #
-                #     # get the mask associated with the frame in which the cells reside
-                #     time = self.startItem.time
-                #     frame = self.startItem.parentItem()
-                #
-                #     # remove ellipse and any events belonging to it from frame
-                #     events = self.get_all_cell_event_items(self.startItem)
-                #     for event in events:
-                #         self.removeItem(event)
-                #     self.removeItem(self.startItem)
-                #     # draw new ellipses onto frame by hand
-                #     ########## This really would be the time to implement QGraphicsPathItems
-                #     ############################# TO DO ###########################
-
 
 
                 # if we do not want to remove_events, we are adding an event, so do the following
@@ -1108,6 +1198,10 @@ class FrameItem(QGraphicsScene):
             eventItem = DisappearSymbol(firstPoint, startItem)
         if self.remove_events:
             eventItem = None
+        # if self.falsely_joined_cells:
+        #     eventItem = FalseJoinSymbol(firstPoint, startItem)
+        if self.falsely_joined_cells:
+            eventItem = FalseJoinLine(firstPoint, lastPoint, startItem, endItem)
 
         return(eventItem)
 
@@ -1130,6 +1224,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
 
     def set_migration(self):
         # print('clicked set_migration')
@@ -1140,6 +1235,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
 
     def set_children(self):
         # print('clicked set_children')
@@ -1150,6 +1246,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
 
     def set_die(self):
         # print('clicked set_die')
@@ -1160,6 +1257,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
 
     def set_appear(self):
         self.remove_events = False
@@ -1169,6 +1267,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = True
         self.disappear = False
+        self.falsely_joined_cells = False
 
     def set_disappear(self):
         self.remove_events = False
@@ -1178,6 +1277,7 @@ class FrameItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = True
+        self.falsely_joined_cells = False
 
     def set_born(self):
         self.remove_events = False
@@ -1187,6 +1287,17 @@ class FrameItem(QGraphicsScene):
         self.birth = True
         self.appear = False
         self.disappear = False
+        self.falsely_joined_cells = False
+
+    def set_falsely_joined(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.falsely_joined_cells = True
 
 class MigrationLine(QGraphicsLineItem):
     # A class for helping to draw and organize migration events
@@ -1338,6 +1449,61 @@ class DisappearSymbol(QGraphicsLineItem):
 
     def type(self):
         return("DisappearSymbol")
+
+# class FalseJoinSymbol(QGraphicsTextItem):
+#
+#     def __init__(self, point, item):
+#         super(FalseJoinSymbol, self).__init__()
+#
+#         self.item = item
+#
+#         textColor = QColor(0*255,0*255,0*255)
+#         textFont = QFont()
+#         textFont.setFamily("Times")
+#         textFont.setPixelSize(24)
+#         textFont.setWeight(75) # Bold
+#         string = "2"
+#         textPosition = QPoint(point.x()-10, point.y()-15)
+#
+#         self.setPlainText(string)
+#         self.setFont(textFont)
+#         self.setPos(textPosition)
+#         self.setDefaultTextColor(textColor)
+#
+#     def type(self):
+#         return("FalseJoin")
+
+class FalseJoinLine(QGraphicsLineItem):
+    '''
+    A class for handling segmentation errors in tracking algorithm.
+    '''
+    def __init__(self, firstPoint, lastPoint, startItem, endItem):
+        super(FalseJoinLine, self).__init__()
+
+        brushColor = QColor(1*255,0*255,0*255)
+        brushSize = 2
+        pen = QPen()
+        firstPointX = firstPoint.x()
+        lastPointX = lastPoint.x()
+        # ensure that lines' starts are to the left of their ends
+        if firstPointX < lastPointX:
+            self.start = firstPoint
+            self.startItem = startItem
+            self.end = lastPoint
+            self.endItem = endItem
+        else:
+            self.start = lastPoint
+            self.startItem = endItem
+            self.end = firstPoint
+            self.endItem = startItem
+        line = QLineF(self.start,self.end)
+        pen.setColor(brushColor)
+        pen.setWidth(brushSize)
+        self.setPen(pen)
+        self.setLine(line)
+
+    def type(self):
+        return("FalseJoinLine")
 
 if __name__ == "__main__":
 
