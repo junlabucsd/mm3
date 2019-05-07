@@ -307,9 +307,8 @@ class TrackItem(QGraphicsScene):
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
-        # labelImgPath = imgPaths[self.fov_id][self.imgIndex][1]
+        # read in images
         self.labelStack = io.imread(self.labelImgPath)
-        # phaseImgPath = imgPaths[self.fov_id][self.imgIndex][0]
         self.phaseStack = io.imread(self.phaseImgPath)
 
         time_int = params['moviemaker']['seconds_per_time_index']/60
@@ -332,21 +331,8 @@ class TrackItem(QGraphicsScene):
         if not os.path.exists(lin_dir):
             os.makedirs(lin_dir)
 
-        self.pickle_file_name = os.path.join(params['cell_dir'], 'updated_tracks.pkl')
-        # look for previously updated tracking information and load that if it is found.
-        if not os.path.isfile(self.pickle_file_name):
-            # get tracking information in a format usable and updatable by qgraphicsscene
-            self.track_info = self.create_tracks_all_data()
-        else:
-            with open(self.pickle_file_name, 'rb') as pickle_file:
-                try:
-                    print("Found updated track information in {}. Uploading and plotting it.".format(self.pickle_file_name))
-                    self.track_info = pickle.load(pickle_file)
-                except Exception as e:
-                    print("Could not load pickle file specified.")
-                    print(e)
-
-        # pprint(self.track_info)
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
@@ -389,28 +375,42 @@ class TrackItem(QGraphicsScene):
         self.draw_cell_events()
 
     def save_updates(self):
+
         track_info = self.track_info
 
-        for fov_id, fov_info in track_info.items():
-            for peak_id, peak_info in fov_info.items():
-                for t, time_info in peak_info.items():
-                    for region_label, region in time_info['regions'].items():
+        for t, time_info in track_info.items():
+            for region_label, region in time_info['regions'].items():
 
-                        # print([key for key in track_info[fov_id][peak_id][t]['regions'][region_label].keys()])
-                        if 'region_graphic' in track_info[fov_id][peak_id][t]['regions'][region_label]:
-                            if 'pen' in track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic']:
-                                track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic'].pop('pen')
-                            if 'brush' in track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic']:
-                                track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic'].pop('brush')
+                if 'region_graphic' in track_info[t]['regions'][region_label]:
+                    if 'pen' in track_info[t]['regions'][region_label]['region_graphic']:
+                        track_info[t]['regions'][region_label]['region_graphic'].pop('pen')
+                    if 'brush' in track_info[t]['regions'][region_label]['region_graphic']:
+                        track_info[t]['regions'][region_label]['region_graphic'].pop('brush')
 
         with open(self.pickle_file_name, 'wb') as track_file:
             try:
                 pickle.dump(track_info, track_file)
                 track_file.close()
-                print("Saved updated tracking information to {}.".format(os.path.join(params['cell_dir'], 'updated_tracks.pkl')))
+                print("Saved updated tracking information to {}.".format(self.pickle_file_name))
             except Exception as e:
                 track_file.close()
                 print(str(e))
+
+    def get_track_pickle(self):
+
+        self.pickle_file_name = os.path.join(params['cell_dir'], '{}_xy{:0=3}_p{:0=4}_updated_tracks.pkl'.format(params['experiment_name'], self.fov_id, self.peak_id))
+        # look for previously updated tracking information and load that if it is found.
+        if not os.path.isfile(self.pickle_file_name):
+            # get tracking information in a format usable and updatable by qgraphicsscene
+            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+        else:
+            with open(self.pickle_file_name, 'rb') as pickle_file:
+                try:
+                    print("Found updated track information in {}. Uploading and plotting it.".format(self.pickle_file_name))
+                    self.track_info = pickle.load(pickle_file)
+                except Exception as e:
+                    print("Could not load pickle file specified.")
+                    print(e)
 
     def next_peak(self):
         # start by removing all current graphics items from the scene, the scene here being 'self'
@@ -428,7 +428,9 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        # self.track_info[self.fov_id][self.peak_id] = self.create_tracking_information()
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
+
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
         self.draw_cell_events()
@@ -451,9 +453,11 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        # self.regions_and_events_by_time = self.create_tracking_information()
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
+
         self.draw_cell_events()
 
     def next_fov(self):
@@ -479,7 +483,8 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        # self.regions_and_events_by_time = self.create_tracking_information()
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
@@ -501,11 +506,12 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        # print(self.phaseImgPath)
-        # print(self.labelImgPath)
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
@@ -515,7 +521,7 @@ class TrackItem(QGraphicsScene):
         frame_dict_by_time = {}
 
         xPos = 0
-        for time in self.track_info[self.fov_id][self.peak_id].keys():
+        for time in self.track_info.keys():
             frame_index = time-1
             frame, regions = self.phase_img_and_regions(frame_index)
             frame_dict_by_time[time] = self.addPixmap(frame)
@@ -548,7 +554,7 @@ class TrackItem(QGraphicsScene):
         originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
         RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
         # pprint(regions)
-        time_regions_and_events = self.track_info[self.fov_id][self.peak_id][time]
+        time_regions_and_events = self.track_info[time]
         regions = time_regions_and_events['regions']
         time_regions_and_events['time'] = time
 
@@ -573,24 +579,6 @@ class TrackItem(QGraphicsScene):
                                                     'pen':pen, 'brush':brush}
 
         return(phaseQpixmap, time_regions_and_events)
-
-    def create_tracks_all_data(self):
-
-        track_info = {}
-
-        for fov_id in self.fov_id_list:
-
-            track_info[fov_id] = {}
-            peak_id_list = [peak_id for peak_id in self.specs[fov_id].keys() if self.specs[fov_id][peak_id] == 1]
-
-            for peak_id in peak_id_list:
-
-                label_path = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], fov_id, peak_id))
-                # print(label_path)
-                label_stack = io.imread(label_path)
-                track_info[fov_id][peak_id] = self.create_tracking_information(fov_id, peak_id, label_stack)
-
-        return(track_info)
 
     def create_tracking_information(self, fov_id, peak_id, label_stack):
 
@@ -767,7 +755,7 @@ class TrackItem(QGraphicsScene):
 
         valid_times = [i for i in range(start_time, max_time+1)]
 
-        # track_info[self.fov_id][self.peak_id] is a dictionary, the keys of which are 1-indexed frame numbers
+        # track_info is a dictionary, the keys of which are 1-indexed frame numbers
         # for each frame, there is a dictionary with the following keys: 'matrix' and 'regions'
         #   'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
         #      If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
@@ -1015,8 +1003,8 @@ class TrackItem(QGraphicsScene):
             #  # Fetch the cell's original information
             #    'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
             #     If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
-            time_matrix = self.track_info[self.fov_id][self.peak_id][frame_time]['matrix']
-            cell_events = self.track_info[self.fov_id][self.peak_id][frame_time]['regions'][cell_label]['events']
+            time_matrix = self.track_info[frame_time]['matrix']
+            cell_events = self.track_info[frame_time]['regions'][cell_label]['events']
 
             # print("Events and matrix for cell {} at time {}: \n\n".format(cell_label, frame_time),
             #       cell_events, "\n\n", time_matrix, "\n")
