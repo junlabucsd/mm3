@@ -258,7 +258,7 @@ class MaskTransparencyWidget(QWidget):
                 if os.path.isfile(savePath):
                     print('Re-annotated mask exists in training directory. Loading it.')
                     # add widget to express whether this mask is one you already re-annotated
-                    print(self.frameIndex)
+                    # print(self.frameIndex)
                     self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
                     overwriteSegFile = True
                 else:
