@@ -54,13 +54,15 @@ class Window(QMainWindow):
 
         eventButtonGroup = QButtonGroup()
         migrateButton = QRadioButton("Migration")
-        migrateButton.setShortcut("Ctrl+M")
+        migrateButton.setShortcut("Ctrl+V")
+        migrateButton.setToolTip("(Ctrl+V) Draw white migration lines\nbetween cells in adjacent frames.")
         migrateButton.clicked.connect(self.frames.scene.set_migration)
         migrateButton.click()
         eventButtonGroup.addButton(migrateButton)
 
         childrenButton = QRadioButton("Children")
         childrenButton.setShortcut("Ctrl+C")
+        childrenButton.setToolTip("(Ctrl+C) Draw green children lines\nbetween a parent cell and its two children.")
         childrenButton.clicked.connect(self.frames.scene.set_children)
         eventButtonGroup.addButton(childrenButton)
 
@@ -72,25 +74,33 @@ class Window(QMainWindow):
         # eventButtonGroup.addButton(bornButton)
 
         dieButton = QRadioButton("Die")
-        dieButton.setShortcut("Ctrl+D")
+        dieButton.setShortcut("Ctrl+X")
+        dieButton.setToolTip("(Ctrl+X) Indicate a cell died between\nthe current frame and the next frame.")
         dieButton.clicked.connect(self.frames.scene.set_die)
         eventButtonGroup.addButton(dieButton)
 
         appearButton = QRadioButton("Appear")
         appearButton.setShortcut("Ctrl+A")
+        appearButton.setToolTip("(Ctrl+A) Denotes a cell appeared,\nor entered the field of view at this frame.")
         appearButton.clicked.connect(self.frames.scene.set_appear)
         eventButtonGroup.addButton(appearButton)
 
         disappearButton = QRadioButton("Disappear")
+        disappearButton.setShortcut("Ctrl+D")
+        disappearButton.setToolTip("(Ctrl+D) Indicate a cell leaves\nthe field of view after this frame.")
         disappearButton.clicked.connect(self.frames.scene.set_disappear)
         eventButtonGroup.addButton(disappearButton)
 
         removeEventsButton = QRadioButton("Remove events")
+        removeEventsButton.setShortcut("Ctrl+R")
+        removeEventsButton.setToolTip("(Ctrl+R) Eliminate events belonging entirely to this\ncell, and emantating from this cell.")
         removeEventsButton.clicked.connect(self.frames.scene.remove_all_cell_events)
         eventButtonGroup.addButton(removeEventsButton)
 
         falselyJoinedButton = QRadioButton("Falsely joined")
         falselyJoinedButton.clicked.connect(self.frames.scene.set_falsely_joined)
+        falselyJoinedButton.setShortcut("Ctrl+F")
+        falselyJoinedButton.setToolTip("(Ctrl+F) If two cells in frame i join\nto one cell in frame i+1, draw red lines\njoining them.")
         eventButtonGroup.addButton(falselyJoinedButton)
 
         # clearAllEventsButton = QPushButton("Remove all\ntracking events")
@@ -130,7 +140,6 @@ class Window(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, eventButtonDockWidget)
 
         advancePeakButton = QPushButton("Next peak")
-        advancePeakButton.setShortcut("Ctrl+P")
         advancePeakButton.clicked.connect(self.frames.scene.next_peak)
 
         priorPeakButton = QPushButton("Prior peak")
@@ -327,15 +336,17 @@ class TrackItem(QGraphicsScene):
         # look for previously updated tracking information and load that if it is found.
         if not os.path.isfile(self.pickle_file_name):
             # get tracking information in a format usable and updatable by qgraphicsscene
-            self.regions_and_events_by_time = self.create_tracking_information()
+            self.track_info = self.create_tracks_all_data()
         else:
             with open(self.pickle_file_name, 'rb') as pickle_file:
                 try:
                     print("Found updated track information in {}. Uploading and plotting it.".format(self.pickle_file_name))
-                    self.regions_and_events_by_time = pickle.load(pickle_file)
+                    self.track_info = pickle.load(pickle_file)
                 except Exception as e:
                     print("Could not load pickle file specified.")
                     print(e)
+
+        # pprint(self.track_info)
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
@@ -378,23 +389,23 @@ class TrackItem(QGraphicsScene):
         self.draw_cell_events()
 
     def save_updates(self):
-        track_info = self.regions_and_events_by_time
-        pickle_info = {}
-        for time, stuff in track_info.items():
-            time_info = track_info[time]
-            pickle_info[time] = {}
-            pickle_info[time]['matrix'] = time_info['matrix']
-            pickle_info[time]['regions'] = {}
+        track_info = self.track_info
 
-            for region_label, region in time_info['regions'].items():
-                time_region_info = time_info['regions']
-                pickle_info[time]['regions'][region_label] = {}
-                pickle_info[time]['regions'][region_label]['events'] = time_region_info[region_label]['events']
-                pickle_info[time]['regions'][region_label]['props'] = time_region_info[region_label]['props']
+        for fov_id, fov_info in track_info.items():
+            for peak_id, peak_info in fov_info.items():
+                for t, time_info in peak_info.items():
+                    for region_label, region in time_info['regions'].items():
+
+                        # print([key for key in track_info[fov_id][peak_id][t]['regions'][region_label].keys()])
+                        if 'region_graphic' in track_info[fov_id][peak_id][t]['regions'][region_label]:
+                            if 'pen' in track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic']:
+                                track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic'].pop('pen')
+                            if 'brush' in track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic']:
+                                track_info[fov_id][peak_id][t]['regions'][region_label]['region_graphic'].pop('brush')
 
         with open(self.pickle_file_name, 'wb') as track_file:
             try:
-                pickle.dump(pickle_info, track_file)
+                pickle.dump(track_info, track_file)
                 track_file.close()
                 print("Saved updated tracking information to {}.".format(os.path.join(params['cell_dir'], 'updated_tracks.pkl')))
             except Exception as e:
@@ -417,7 +428,7 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        self.regions_and_events_by_time = self.create_tracking_information()
+        # self.track_info[self.fov_id][self.peak_id] = self.create_tracking_information()
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
         self.draw_cell_events()
@@ -440,7 +451,7 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        self.regions_and_events_by_time = self.create_tracking_information()
+        # self.regions_and_events_by_time = self.create_tracking_information()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
@@ -468,7 +479,7 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        self.regions_and_events_by_time = self.create_tracking_information()
+        # self.regions_and_events_by_time = self.create_tracking_information()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
@@ -496,8 +507,6 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        self.regions_and_events_by_time = self.create_tracking_information()
-
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
         self.draw_cell_events()
 
@@ -506,7 +515,7 @@ class TrackItem(QGraphicsScene):
         frame_dict_by_time = {}
 
         xPos = 0
-        for time in self.regions_and_events_by_time.keys():
+        for time in self.track_info[self.fov_id][self.peak_id].keys():
             frame_index = time-1
             frame, regions = self.phase_img_and_regions(frame_index)
             frame_dict_by_time[time] = self.addPixmap(frame)
@@ -539,7 +548,7 @@ class TrackItem(QGraphicsScene):
         originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
         RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
         # pprint(regions)
-        time_regions_and_events = self.regions_and_events_by_time[time]
+        time_regions_and_events = self.track_info[self.fov_id][self.peak_id][time]
         regions = time_regions_and_events['regions']
         time_regions_and_events['time'] = time
 
@@ -565,22 +574,40 @@ class TrackItem(QGraphicsScene):
 
         return(phaseQpixmap, time_regions_and_events)
 
-    def create_tracking_information(self):
+    def create_tracks_all_data(self):
+
+        track_info = {}
+
+        for fov_id in self.fov_id_list:
+
+            track_info[fov_id] = {}
+            peak_id_list = [peak_id for peak_id in self.specs[fov_id].keys() if self.specs[fov_id][peak_id] == 1]
+
+            for peak_id in peak_id_list:
+
+                label_path = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], fov_id, peak_id))
+                # print(label_path)
+                label_stack = io.imread(label_path)
+                track_info[fov_id][peak_id] = self.create_tracking_information(fov_id, peak_id, label_stack)
+
+        return(track_info)
+
+    def create_tracking_information(self, fov_id, peak_id, label_stack):
 
         Complete_Lineages = mm3_plots.organize_cells_by_channel(self.Cells, self.specs)
         All_Lineages = mm3_plots.organize_cells_by_channel(self.All_Cells, self.specs)
 
         t_adj = 1
 
-        regions_by_time = {frame+t_adj: measure.regionprops(self.labelStack[frame,:,:]) for frame in range(self.labelStack.shape[0])}
-        regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(self.labelStack.shape[0])}
+        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
+        regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
 
         # loop through regions and add them to the main dictionary.
         for t, regions in regions_by_time.items():
             # this is a list, while we want it to be a dictionary with the region label as the key
             for region in regions:
-                default_events = np.zeros(7, dtype=np.int)
-                default_events[6] = 1 # set N to 1
+                default_events = np.zeros(8, dtype=np.int)
+                default_events[7] = 1 # set N to 1
                 regions_and_events_by_time[t]['regions'][region.label] = {'props' : region,
                                                                       'events' : default_events}
         # create default interaction matrix
@@ -603,7 +630,7 @@ class TrackItem(QGraphicsScene):
         # We will go through each cell by its time points and edit the events associated with that region.
         # We will also edit the matrix when appropriate.
         # pull out only the cells in of this FOV
-        cells_tmp = mm3_plots.find_cells_of_fov_and_peak(self.All_Cells, self.fov_id, self.peak_id)
+        cells_tmp = mm3_plots.find_cells_of_fov_and_peak(self.All_Cells, fov_id, peak_id)
         print('There are {} cells for this channel'.format(len(cells_tmp)))
 
         for cell_id, cell_tmp in cells_tmp.items():
@@ -635,8 +662,12 @@ class TrackItem(QGraphicsScene):
                     d1_label = self.All_Cells[cell_tmp.daughters[0]].labels[0]
                     d2_label = self.All_Cells[cell_tmp.daughters[1]].labels[0]
 
-                    regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
-                    regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
+                    try:
+                        regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
+                        regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
+
+                    except IndexError as e:
+                        print("At timepoint {} there was an index error in assigning daughters".format(t))
 
                 # A apoptosis, 2
                 # skip for now.
@@ -736,7 +767,7 @@ class TrackItem(QGraphicsScene):
 
         valid_times = [i for i in range(start_time, max_time+1)]
 
-        # regions_and_events_by_time is a dictionary, the keys of which are 1-indexed frame numbers
+        # track_info[self.fov_id][self.peak_id] is a dictionary, the keys of which are 1-indexed frame numbers
         # for each frame, there is a dictionary with the following keys: 'matrix' and 'regions'
         #   'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
         #      If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
@@ -858,6 +889,8 @@ class TrackItem(QGraphicsScene):
                 self.set_disappear()
             elif original_event_type == "FalseJoinLine":
                 self.set_falsely_joined()
+            elif original_event_type == "Removal":
+                self.remove_all_cell_events()
 
     def get_ellipse(self, point):
         # function for finding the ellipse under your mouse click or mouse release,
@@ -982,8 +1015,8 @@ class TrackItem(QGraphicsScene):
             #  # Fetch the cell's original information
             #    'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
             #     If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
-            time_matrix = self.regions_and_events_by_time[frame_time]['matrix']
-            cell_events = self.regions_and_events_by_time[frame_time]['regions'][cell_label]['events']
+            time_matrix = self.track_info[self.fov_id][self.peak_id][frame_time]['matrix']
+            cell_events = self.track_info[self.fov_id][self.peak_id][frame_time]['regions'][cell_label]['events']
 
             # print("Events and matrix for cell {} at time {}: \n\n".format(cell_label, frame_time),
             #       cell_events, "\n\n", time_matrix, "\n")
@@ -1114,8 +1147,9 @@ class TrackItem(QGraphicsScene):
                     #   to ensure you haven't just messed up the underlying tracking data
                     start_time = self.startItem.parentItem().time
                     end_time = self.startItem.parentItem().time
-                    self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True)
-
+                    self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True, original_event_type="Removal")
+                    print("Removed outgoing events from clicked cell.")
+                    self.drawing = False
 
                 # if we do not want to remove_events, we are adding an event, so do the following
                 else:
@@ -1131,7 +1165,7 @@ class TrackItem(QGraphicsScene):
                     self.addItem(self.eventItem)
 
     def mouseMoveEvent(self, event):
-        if (event.buttons() & Qt.LeftButton) & self.drawing and not self.remove_events:
+        if (event.buttons() & Qt.LeftButton) & self.drawing:
             if self.startItem is not None:
                 self.lastPoint = event.scenePos()
                 self.removeItem(self.eventItem)
@@ -1151,11 +1185,8 @@ class TrackItem(QGraphicsScene):
                 if self.startItem is not None:
                     start_time = self.startItem.parentItem().time
                     end_time = self.endItem.parentItem().time
-                    # Deal with case when we've removed events from a cell
-                    if self.remove_events:
-                        print("Removed outgoing events from clicked cell.")
                     # A migration or child event cannot go from one frame to the same frame.
-                    elif (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
+                    if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
                     elif abs(start_time - end_time) > 1:
