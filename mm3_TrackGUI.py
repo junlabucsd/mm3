@@ -962,7 +962,6 @@ class TrackItem(QGraphicsScene):
         # This function updates the matrix and events for all cells in your scene.
         # First, get the maximum time so we don't get a key error later on
         max_time = np.max([key for key in self.all_frames_by_time_dict.keys()])
-        ###################### TO DO: update so that this works with event removal ###########################
         if self.remove_events:
             cell = self.startItem
             frame = self.all_frames_by_time_dict[cell.time]
@@ -1179,6 +1178,10 @@ class TrackItem(QGraphicsScene):
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
                     elif abs(start_time - end_time) > 1:
                         self.removeItem(self.eventItem)
+                        # NOTE: add support for dragging a migration line over many frames, then splitting into component migration events.
+                        #  This would save a lot of time compared to manually making each migration event individually.
+                        
+
                         print("Cannot link cells separated by more than a single frame. Ignoring selection.")
                     else:
                         self.removeItem(self.eventItem)
