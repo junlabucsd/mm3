@@ -55,7 +55,7 @@ class Window(QMainWindow):
         eventButtonGroup = QButtonGroup()
         migrateButton = QRadioButton("Migration")
         migrateButton.setShortcut("Ctrl+V")
-        migrateButton.setToolTip("(Ctrl+V) Draw white migration lines\nbetween cells in adjacent frames.")
+        migrateButton.setToolTip("(Ctrl+V) Draw white migration lines\nbetween cells in adjacent frames.\nHINT: You can draw a migraton line over multiple frames at once.")
         migrateButton.clicked.connect(self.frames.scene.set_migration)
         migrateButton.click()
         eventButtonGroup.addButton(migrateButton)
@@ -1176,13 +1176,68 @@ class TrackItem(QGraphicsScene):
                     if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
+
                     elif abs(start_time - end_time) > 1:
-                        self.removeItem(self.eventItem)
                         # NOTE: add support for dragging a migration line over many frames, then splitting into component migration events.
                         #  This would save a lot of time compared to manually making each migration event individually.
                         
+                        self.removeItem(self.eventItem)
+                        # get the centroid position for the cell that was clicked
+                        endPointY = self.endItem.cellProps.centroid[0]
+                        # here we add the x-position of the detected ellipse' frame, because
+                        #   the centroid of each cell is just its centroid within its own frame
+                        #   Therefore, by adding the x-offset of the frame in which the cell
+                        #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                        endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                        self.lastPoint = QPoint(endPointX, endPointY)
+                        self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
+                        
+                        # get the centroid position for the cell that was clicked
+                        endPointY = self.endItem.cellProps.centroid[0]
+                        # here we add the x-position of the detected ellipse' frame, because
+                        #   the centroid of each cell is just its centroid within its own frame
+                        #   Therefore, by adding the x-offset of the frame in which the cell
+                        #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                        endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                        self.lastPoint = QPoint(endPointX, endPointY)
+                        self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
 
-                        print("Cannot link cells separated by more than a single frame. Ignoring selection.")
+                        # if it's a migration line we're drawing, it can span multiple frames. 
+                        #   We'll just split it up into its component migrations, frame-to-frame
+                        if self.eventItem.type() == "MigrationLine":
+                            # Need to get all cells with which this line collides.
+                            cells_under_line = self.get_cells_under_item(item=self.eventItem)
+                            # No garuantee these cells are sorted by time, sort them now
+                            cells_under_line.sort(key=self.get_time)
+
+                            # loop over sorted cells to add migration events to scene and background data
+                            for cell_index,cell in enumerate(cells_under_line):
+                                if cell_index < len(cells_under_line)-1: # do nothing if we're at the final cell
+                                    self.startItem = cell
+                                    self.endItem = cells_under_line[cell_index+1]
+
+                                    # get the centroid position for the cell that was clicked
+                                    endPointY = self.endItem.cellProps.centroid[0]
+                                    # here we add the x-position of the detected ellipse' frame, because
+                                    #   the centroid of each cell is just its centroid within its own frame
+                                    #   Therefore, by adding the x-offset of the frame in which the cell
+                                    #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                                    endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                                    self.lastPoint = QPoint(endPointX, endPointY)
+                                    self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
+
+                                    self.remove_old_conflicting_events(self.eventItem)
+                                    self.addItem(self.eventItem)
+                                    # query the currently-drawn annotations in the scene and update all cells' information
+                                    self.update_tracking_info()
+                                    # remove old events and draw the newly-updated ones. This is inefficient, but helps you
+                                    #   to ensure you haven't just messed up the underlying tracking data
+                                    self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True, original_event_type=self.eventItem.type())
+
+                        else:
+                            self.removeItem(self.eventItem)
+                            print("Cannot link cells separated by more than a single frame. Ignoring selection.")
+                        
                     else:
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
@@ -1204,6 +1259,26 @@ class TrackItem(QGraphicsScene):
                         self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True, original_event_type=self.eventItem.type())
 
             self.drawing = False
+
+    def get_cells_under_item(self, item):
+        '''
+        A function which returns all cell objects underneath a QGraphicsItem.
+        '''
+
+        # get all colliding items, this will include QPixmapItems and QEllipseItems
+        collisions = self.collidingItems(item)
+        cells = []
+        # evaluate whether each item is an ellipse (cell)
+        for item in collisions:
+            item_type = item.type()
+
+            if item_type == 4:
+                cells.append(item)
+            
+        return(cells)
+
+    def get_time(self, cell):
+        return(cell.time)
 
     def set_event_item(self, firstPoint, startItem, lastPoint=None, endItem=None):
         if self.migration:
@@ -1471,29 +1546,6 @@ class DisappearSymbol(QGraphicsLineItem):
 
     def type(self):
         return("DisappearSymbol")
-
-# class FalseJoinSymbol(QGraphicsTextItem):
-#
-#     def __init__(self, point, item):
-#         super(FalseJoinSymbol, self).__init__()
-#
-#         self.item = item
-#
-#         textColor = QColor(0*255,0*255,0*255)
-#         textFont = QFont()
-#         textFont.setFamily("Times")
-#         textFont.setPixelSize(24)
-#         textFont.setWeight(75) # Bold
-#         string = "2"
-#         textPosition = QPoint(point.x()-10, point.y()-15)
-#
-#         self.setPlainText(string)
-#         self.setFont(textFont)
-#         self.setPos(textPosition)
-#         self.setDefaultTextColor(textColor)
-#
-#     def type(self):
-#         return("FalseJoin")
 
 class FalseJoinLine(QGraphicsLineItem):
     '''
