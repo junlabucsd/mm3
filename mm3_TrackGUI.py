@@ -1209,10 +1209,21 @@ class TrackItem(QGraphicsScene):
                             cells_under_line = self.get_cells_under_item(item=self.eventItem)
                             # No garuantee these cells are sorted by time, sort them now
                             cells_under_line.sort(key=self.get_time)
+                            # Make a list of the times to evaluate whether a timepoint is missing.
+                            cell_times = [cell.time for cell in cells_under_line]
+                            time_diffs = np.diff(cell_times)
 
                             # loop over sorted cells to add migration events to scene and background data
                             for cell_index,cell in enumerate(cells_under_line):
+
                                 if cell_index < len(cells_under_line)-1: # do nothing if we're at the final cell
+
+                                    time_diff = time_diffs[cell_index]
+                                    # if a timepoint was missed, break the loop
+                                    if time_diff > 1:
+                                        # self.removeItem(self.eventItem)
+                                        break
+
                                     self.startItem = cell
                                     self.endItem = cells_under_line[cell_index+1]
 
