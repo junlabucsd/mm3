@@ -23,6 +23,7 @@ import traceback # for error messaging
 import warnings # error messaging
 import copy # not sure this is needed
 import h5py # working with HDF5 files
+import pandas as pd
 # import cv2 # for curating segmentation results for making new training data
 
 # scipy and image analysis
@@ -44,11 +45,11 @@ from skimage.external import tifffile as tiff
 
 # deep learning
 import tensorflow as tf # ignore message about how tf was compiled
-from tensorflow.python.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.python.keras import models
-from tensorflow.python.keras import losses
-from tensorflow.python.keras import utils
-from tensorflow.python.keras import backend as K
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import models
+from tensorflow.keras import losses
+from tensorflow.keras import utils
+from tensorflow.keras import backend as K
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # supress warnings
 
 # Parralelization modules
@@ -2279,7 +2280,7 @@ def tversky_loss(y_true, y_pred):
     alpha = 0.5
     beta  = 0.5
 
-    ones = K.ones(K.shape(y_true))
+    ones = K.ones((512,512,3)) #K.ones(K.shape(y_true))
     p0 = y_pred      # proba that voxels are class i
     p1 = ones-y_pred # proba that voxels are not class i
     g0 = y_true
@@ -2358,8 +2359,9 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
+            int_preds = (predictions * 255).astype('uint8')
             tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
-                            predictions, compress=4)
+                            int_preds, compress=4)
 
         # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
         if cellClassThreshold:
@@ -2666,7 +2668,7 @@ def make_lineages_fov(fov_id, specs):
 
     information('Creating lineage for FOV %d with %d channels.' % (fov_id, len(ana_peak_ids)))
 
-    # just break if there are to peaks to analize
+    # just break if there are no peaks to analize
     if not ana_peak_ids:
         # returning empty dictionary will add nothing to current cells dictionary
         return {}
@@ -2695,6 +2697,162 @@ def make_lineages_fov(fov_id, specs):
         Cells.update(cell_dict) # updates Cells with the entries in cell_dict
 
     return Cells
+
+# get number of cells in each frame and total number of pairwise interactions
+def get_cell_counts(regionprops_list):
+
+    cell_count_list = [len(time_regions) for time_regions in regionprops_list]
+    interaction_count_list = []
+
+    for i,cell_count in enumerate(cell_count_list):
+        if i+1 == len(cell_count_list):
+            break
+        interaction_count_list.append(cell_count*cell_count_list[i+1])
+        
+    total_cells = np.sum(cell_count_list)
+    total_interactions = np.sum(interaction_count_list)
+        
+    return(total_cells, total_interactions, cell_count_list, interaction_count_list)
+
+# get cells' information for track prediction
+def gather_interactions_and_events(regionprops_list):
+    
+    total_cells, total_interactions, cell_count_list, interaction_count_list = get_cell_counts(regionprops_list)
+
+    # instantiate an array with a 2x4 array for each pair of cells' 
+    #   min_y, max_y, centroid_y, and area
+    # in reality it would be much, much more efficient to 
+    #   look this information up in the data generator at run time
+    #   for now, this will work
+    pairwise_cell_data = np.zeros((total_interactions,2,5,1))
+    
+    # make a dictionary, the keys of which will be row indices so that we
+    #   can quickly look up which timepoints/cells correspond to which
+    #   rows of our model's ouput
+    pairwise_cell_lookup = {}
+
+    # populate arrays
+    interaction_count = 0
+    cell_count = 0
+
+    for frame, frame_regions in enumerate(regionprops_list):
+
+        for region in frame_regions:
+
+            cell_label = region.label
+            y,x = region.centroid
+            bbox = region.bbox
+            orientation = region.orientation
+            min_y = bbox[0]
+            max_y = bbox[2]
+            area = region.area
+            cell_label = region.label
+            cell_info = (min_y, max_y, y, area, orientation)
+            cell_count += 1
+
+            try:
+                frame_plus_one_regions = regionprops_list[frame+1]
+            except IndexError as e:
+                # print(e)
+                break
+
+            for region_plus_one in frame_plus_one_regions:
+
+                paired_cell_label = region_plus_one.label
+                y,x = region_plus_one.centroid
+                bbox = region_plus_one.bbox
+                min_y = bbox[0]
+                max_y = bbox[2]
+                area = region_plus_one.area
+                paired_cell_label = region_plus_one.label
+
+                pairwise_cell_data[interaction_count,0,:,0] = cell_info
+                pairwise_cell_data[interaction_count,1,:,0] = (min_y, max_y, y, area, orientation)
+                    
+                pairwise_cell_lookup[interaction_count] = {'frame':frame, 'cell_label':cell_label, 'paired_cell_label':paired_cell_label}
+
+                interaction_count += 1
+                
+    return(pairwise_cell_data, pairwise_cell_lookup)
+
+# look up which cells are interacting according to the track model
+def cell_interaction_lookup(predictions, lookup_table):
+    '''
+    Accepts prediction matrix and 
+    '''
+    frame = []
+    cell_label = []
+    paired_cell_label = []
+    interaction_type = []
+
+    # loop over rows of predictions
+    for row_index in range(predictions.shape[0]):
+        
+        row_predictions = predictions[row_index]
+        row_relationship = np.where(row_predictions > 0.95)[0]
+        if row_relationship.size == 0:
+            continue
+        elif row_relationship[0] == 3:
+            continue
+        elif row_relationship[0] == 0:
+            interaction_type.append('migration')
+        elif row_relationship[0] == 1:
+            interaction_type.append('child')
+        elif row_relationship[0] == 2:
+            interaction_type.append('false_join')
+        
+        frame.append(lookup_table[row_index]['frame'])
+        cell_label.append(lookup_table[row_index]['cell_label'])
+        paired_cell_label.append(lookup_table[row_index]['paired_cell_label'])
+
+    track_df = pd.DataFrame(data={'frame':frame,
+                              'cell_label':cell_label,
+                              'paired_cell_label':paired_cell_label,
+                              'interaction_type':interaction_type})
+    return(track_df)
+
+# Creates lineage for a single channel using deep learning for track prediction
+def deep_lineage_chnl_stack(fov_id, peak_id, model, image_data_seg=None):
+    '''
+    Create the lineage for a set of segmented images for one channel. Start by making the regions in the first time points potenial cells. Go forward in time and map regions in the timepoint to the potential cells in previous time points, building the life of a cell. Used basic checks such as the regions should overlap, and grow by a little and not shrink too much. If regions do not link back in time, discard them. If two regions map to one previous region, check if it is a sensible division event.
+
+    Parameters
+    ----------
+    fov_and_peak_ids : tuple.
+        (fov_id, peak_id)
+
+    Returns
+    -------
+    Cells : dict
+        A dictionary of all the cells from this lineage, divided and undivided
+
+    '''
+
+    # start time is the first time point for this series of TIFFs.
+    start_time_index = min(params['time_table'][fov_id].keys())
+
+    information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
+
+    if image_data_seg is None:
+        # load segmented data
+        image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
+
+    # Calculate all data for all time points.
+    # this list will be length of the number of time points
+    regions_by_time = [regionprops(label_image=timepoint) for timepoint in image_data_seg]
+
+    pairwise_cell_data, pairwise_cell_lookup = gather_interactions_and_events(regions_by_time)
+
+    # predict tracking interactions
+    track_predictions = model.predict(pairwise_cell_data)
+    if len(track_predictions) == 0:
+        return None
+    # print(track_predictions[:20,:])
+
+    track_df = cell_interaction_lookup(track_predictions, pairwise_cell_lookup)
+
+    # return the dictionary with all the cells
+    return track_df
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id):
@@ -2970,6 +3128,7 @@ class Cell():
         self.elong_rate = None
         self.septum_position = None
         self.width = None
+        self.death = None
 
     def grow(self, region, t):
         '''Append data from a region to this cell.
@@ -2992,6 +3151,12 @@ class Cell():
 
         self.orientations.append(region.orientation)
         self.centroids.append(region.centroid)
+
+    def die(self, region, t):
+        '''
+        Annotate cell as dying from current t to next t.
+        '''
+        self.death = t
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -3198,11 +3363,14 @@ def feretdiameter(region):
     return length, width
 
 # take info and make string for cell id
-def create_cell_id(region, t, peak, fov):
+def create_cell_id(region, t, peak, fov, experiment_name=None):
     '''Make a unique cell id string for a new cell'''
-   # cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
-    cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', '%02d' % region.label]
-    cell_id = ''.join(cell_id)
+    # cell_id = ['f', str(fov), 'p', str(peak), 't', str(t), 'r', str(region.label)]
+    if experiment_name is None:
+        cell_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t, 'r', '%02d' % region.label]
+        cell_id = ''.join(cell_id)
+    else:
+        cell_id = ['{}f{:0=2}p{:0=4}t{:0=4}r{:0=2}'.format(experiment_name, fov, peak, t, region.label)]
     return cell_id
 
 # function for a growing cell, used to calculate growth rate
