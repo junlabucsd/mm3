@@ -28,7 +28,7 @@ sns.set_palette('deep')
 
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
-mpl.rcParams['font.family'] = 'Myriad Pro'
+mpl.rcParams['font.family'] = 'sans-serif'
 
 SMALL_SIZE = 6
 MEDIUM_SIZE = 8
@@ -60,55 +60,115 @@ import mm3_helpers as mm3
 # This dataframe contains the titles and units corresponding to
 # parameters in the data.
 pnames = dict(sb=dict(label='birth length', symbol='L$_\mathrm{b}$',
+                    symbol_ai = 'L_b',
                     unit='(' + '\u03BC' +'m)'),
               sd=dict(label='division length', symbol='L$_\mathrm{d}$',
+                    symbol_ai = 'L_d',
                     unit='(' + '\u03BC' +'m)'),
-              delta=dict(label='added length', symbol='$\Delta_\mathrm{d}$',
+              delta=dict(label='added length', symbol='$\Delta_\mathrm{d}$', # '\u0394'
+                    symbol_ai = '\u0394_', # symbol to be replaced in illustrator
                     unit='(' + '\u03BC' +'m)'),
               elong_rate=dict(label='growth rate', symbol='$\\lambda$',
-                    unit='1/hours'),
+                    symbol_ai = '\u03BB',
+                    unit='(1/hours)'),
               tau=dict(label='generation time', symbol='$\\tau$',
-                    unit='minutes'),
+                    symbol_ai = '\u03C4',
+                    unit='(minutes)'),
               septum_position=dict(label='septum position',
                     symbol='L$_\\frac{1}{2}$',
-                    unit='L$_\mathrm{b}$/L$_\mathrm{d}$'),
-              width=dict(label='width', symbol='W', unit='(' + '\u03BC' +'m)'),
+                    symbol_ai='L$_\\frac{1}{2}$',
+                    unit='(L$_\mathrm{b}$/L$_\mathrm{d}$)'),
+              width=dict(label='width', symbol='W',
+                    unit='(' + '\u03BC' +'m)'),
 
               birth_volume=dict(label='birth volume', symbol='V$_\mathrm{b}$',
-                              unit='$\mu$m$^3$'),
+                              unit='(' + '\u03BC' +'m' + '\u00B3' + ')') ,
               division_volume=dict(label='division volume', symbol='V$_\mathrm{d}$',
-                    unit='$\mu$m$^3$'),
+                    symbol_ai = 'V_d',
+                    unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
 
               # cell cycle related ones
               unit_cell=dict(label='unit cell', symbol='S$_\mathrm{0}$',
-                    unit='$\mu$m$^3$'),
-              initiation_volume=dict(label='initiation volume', symbol='v$_\mathrm{i}$',
-                    unit='$\mu$m$^3$'),
+                    symbol_ai='S_0',
+                    unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
+              initiation_volume=dict(label='initiation volume',
+                    symbol='v$_\mathrm{i}$',
+                    symbol_ai = 's_i',
+                    unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
               true_initiation_volume=dict(label='true initiation volume',
                     symbol='V$_\mathrm{i}$',
-                    unit='$\mu$m$^3$'),
+                    symbol_ai = 'V_',
+                    unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
               # this should use l_i to be consistent but it is confusing.
-              initiation_length=dict(label='initiation length', symbol='L$_\mathrm{i}$',
+              initiation_length=dict(label='initiation length', symbol='L' + '\u1d62',
+                    symbol2 = 'S' + '\u1d62',
+                    symbol_ai = 'L_', # symbol must be relaced in adobe illustrator
                     unit='(' + '\u03BC' +'m)'),
               true_initiation_length=dict(label='true initiation length',
                     symbol='L$_\mathrm{i}$',
                     unit='(' + '\u03BC' +'m)'),
               B=dict(label='B period', symbol='B',
-                      unit='minutes'),
+                      unit='(minutes)'),
               C=dict(label='C period', symbol='C',
-                    unit='minutes'),
+                    unit='(minutes)'),
               D=dict(label='D period', symbol='D',
-                    unit='minutes'),
-              tau_cyc=dict(label='$\\tau_\mathrm{cyc}$', symbol='$\\tau_\mathrm{cyc}$',
-                           unit='minutes'),
+                    unit='(minutes)'),
+              tau_cyc=dict(label='C+D', symbol='C+D', #'$\\tau_\mathrm{cyc}$',
+                           unit='(minutes)'),
               initiation_delta=dict(label='added initiation length',
-                    symbol='$\delta_\mathrm{i}$',
+                    symbol='\u03B4\u1d62', #'$\delta_\mathrm{i}$',
+                    symbol_ai = '\u03B4_',
                     unit='(' + '\u03BC' +'m)'),
+              initiation_delta_volume=dict(label='added initiation volume',
+                    symbol='$\delta_\mathrm{vi}$',
+                    symbol_ai = '\u03B4_',
+                    unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
               n_oc=dict(label='overlapping cell cycles', symbol='n$_{oc}$',
-                        unit='n'),
+                        unit='(n)'),
+
+             segregation_length=dict(label='segregation length',
+                                     symbol='L$_\mathrm{seg}$',
+                                     symbol_ai = 'L_seg',
+                                     unit='(' + '\u03BC' +'m)'),
+             segregation_volume=dict(label='segregation volume',
+                                     symbol='V$_\mathrm{seg}$',
+                                     unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
+             S=dict(label='S period', symbol='S$_\mathrm{period}$', unit='(minutes)'),
+             IS=dict(label='IS period', symbol='IS', unit='(minutes)'),
+             TS=dict(label='TS period', symbol='TS', unit='(minutes)'),
+
+              segregation_delta=dict(label='added segregation length',
+                    symbol='$\Delta_\mathrm{seg}$',
+                    symbol_ai = '\u03B4_seg',
+                    unit='(' + '\u03BC' +'m)'),
+
+
+            segregation_length_mother=dict(label='mother segregation length',
+                                    symbol='L$_\mathrm{seg, m}$',
+                                    symbol_ai = 'L_seg_m',
+                                    unit='(' + '\u03BC' +'m)'),
+              segregation_delta_mother=dict(label='added mother segregation length',
+                    symbol='$\Delta_\mathrm{seg, m}$',
+                    symbol_ai = '\u03B4_seg_m',
+                    unit='(' + '\u03BC' +'m)'),
+
+
+             termination_length=dict(label='termination length',
+                                      symbol='L$_\mathrm{ter}$',
+                                      symbol_ai = 'L_ter',
+                                      unit='(' + '\u03BC' +'m)'),
+             termination_volume=dict(label='termination volume',
+                                      symbol='V$_\mathrm{ter}$',
+                                      unit='(' + '\u03BC' +'m' + '\u00B3' + ')'),
+
+              termination_delta=dict(label='added termination length',
+                    symbol='$\Delta_\mathrm{ter}$',
+                    symbol_ai = '\u03B4_ter',
+                    unit='(' + '\u03BC' +'m)'),
 
              # just units for convenience
              um='(' + '\u03BC' +'m)',
+             um3='(' + '\u03BC' +'m' + '\u00B3' + ')',
              uM='\u03BC' +'M')
 
 
@@ -163,7 +223,12 @@ def cells2_ccdf(Cells, add_volume=True):
                'true_initiation_length', 'initiation_length',
                'true_initiation_volume', 'initiation_volume',
                'unit_cell', 'initiation_delta',
-               'B', 'C', 'D', 'tau_cyc']
+               'B', 'C', 'D', 'tau_cyc',
+               'segregation_time', 'segregation_length', 'segregation_volume',
+               'termination_length', 'termination_volume',
+               'S', 'IS', 'TS',
+               'segregation_delta', 'termination_delta',
+               'segregation_delta_mother', 'segregation_length_mother']
 
     # should not need this as of unet
     # for cell_tmp in Cells:
@@ -757,8 +822,8 @@ def add_cc_info(Cells, matlab_df, time_int):
                           C=None,
                           D=None,
                           tau_cyc=None,
-                          initiation_delta=None)
-
+                          initiation_delta=None,
+                          initiation_delta_volume=None)
 
         if matlab_df['cell_id'].str.contains(cell_id).any():
             n_in_cc_df += 1
@@ -778,32 +843,51 @@ def add_cc_info(Cells, matlab_df, time_int):
                 ggmother_id = Cells[gmother_id].parent
 
             # 1 overlapping cell cycle, initiation time is in this cell's times
-            if attributes['initiation_time'] in cell_tmp.times:
-                attributes['n_oc'] = 1
-                init_cell_id = cell_id
-            elif attributes['initiation_time'] in Cells[mother_id].times:
-                attributes['n_oc'] = 2
-                init_cell_id = mother_id
-            elif attributes['initiation_time'] in Cells[gmother_id].times:
-                attributes['n_oc'] = 3
-                init_cell_id = gmother_id
-            elif attributes['initiation_time'] in Cells[ggmother_id].times:
-                attributes['n_oc'] = 4
-                init_cell_id = ggmother_id
-            else:
-                print('Initiation cell not found for {}'.format(cell_id))
-
-            # find index of intiation in that cell. Note if the time was recorded with real time or not
             try:
-                # index in the initaition cell
-                init_index = Cells[init_cell_id].times.index(attributes['initiation_time'])
+                if attributes['initiation_time'] in cell_tmp.times:
+                    attributes['n_oc'] = 1
+                    init_cell_id = cell_id
+                elif attributes['initiation_time'] in Cells[mother_id].times:
+                    attributes['n_oc'] = 2
+                    init_cell_id = mother_id
+                elif attributes['initiation_time'] in Cells[gmother_id].times:
+                    attributes['n_oc'] = 3
+                    init_cell_id = gmother_id
+                elif attributes['initiation_time'] in Cells[ggmother_id].times:
+                    attributes['n_oc'] = 4
+                    init_cell_id = ggmother_id
+                else:
+                    print('Initiation cell not found for {}'.format(cell_id))
             except:
-                print('{} with n_oc {} has initiation index {}'.format(cell_id, attributes['n_oc'], attributes['initiation_time']))
+                print('Issue finding init_cell_id for {}'.format(cell_id))
+
+                # reset attributes to give this cell no information
+                attributes['initiation_time'] = None
+                attributes['termination_time'] = None
+                attributes['n_oc'] = None
+
                 for key, value in attributes.items():
                     setattr(cell_tmp, key, value)
 
                 continue # just skip this cell for the rest of the info
 
+
+            # find index of intiation in that cell. Note if the time was recorded with real time or not
+            try:
+                # index in the initiation cell
+                init_index = Cells[init_cell_id].times.index(attributes['initiation_time'])
+            except:
+                print('{} with n_oc {} has initiation index {}'.format(cell_id, attributes['n_oc'], attributes['initiation_time']))
+
+                # reset attributes to give this cell no information
+                attributes['initiation_time'] = None
+                attributes['termination_time'] = None
+                attributes['n_oc'] = None
+
+                for key, value in attributes.items():
+                    setattr(cell_tmp, key, value)
+
+                continue # just skip this cell for the rest of the info
 
             attributes['true_initiation_length'] = Cells[init_cell_id].lengths_w_div[init_index]
             attributes['initiation_length'] = (Cells[init_cell_id].lengths_w_div[init_index] /
@@ -813,11 +897,11 @@ def add_cc_info(Cells, matlab_df, time_int):
 
             cell_lengths = Cells[init_cell_id].lengths_w_div
             cell_width = Cells[init_cell_id].width # average width
-            cell_volume_avg_width = ((cell_lengths - cell_width) * np.pi * (cell_width/2)**2 +
+            cell_volumes_avg_width = ((cell_lengths - cell_width) * np.pi * (cell_width/2)**2 +
                                      (4/3) * np.pi * (cell_width/2)**3)
 
-            attributes['true_initiation_volume'] = cell_volume_avg_width[init_index]
-            attributes['initiation_volume'] = (cell_volume_avg_width[init_index] /
+            attributes['true_initiation_volume'] = cell_volumes_avg_width[init_index]
+            attributes['initiation_volume'] = (cell_volumes_avg_width[init_index] /
                                                2**(attributes['n_oc'] - 1))
 
             # use population width for unit cell
@@ -847,14 +931,191 @@ def add_cc_info(Cells, matlab_df, time_int):
     for cell_id, cell_tmp in six.iteritems(Cells):
         # this cell must have a unit cell size, a daughter, and that daughter must have an So
         # We always use daughter 1 for cell cycle picking.
-        if cell_tmp.unit_cell != None and cell_tmp.daughters[0] in Cells:
-            if Cells[cell_tmp.daughters[0]].unit_cell != None:
+        if cell_tmp.initiation_length != None and cell_tmp.daughters[0] in Cells:
+            if Cells[cell_tmp.daughters[0]].initiation_length != None:
+                # if cell_tmp.n_oc == Cells[cell_tmp.daughters[0]].n_oc:
                 cell_tmp.initiation_delta = (2*Cells[cell_tmp.daughters[0]].initiation_length -
                                              cell_tmp.initiation_length)
                 n_init_delta += 1
+
+                # added initiation volume is hard to measure really because of width uncertainty
+                # cell_tmp.initiation_delta_volume = (2*Cells[cell_tmp.daughters[0]].initiation_volume -
+                #                              cell_tmp.initiation_volume)
+
+
     print('There are {} cells with an initiation delta'.format(n_init_delta))
 
     return Cells
+
+def add_seg_info(Cells, matlab_df, time_int):
+    '''Adds nucleoid segregation information from the Matlab .csv to the Cell objects.
+    Only cell_id and seg_time are used from the .csv.
+    The times in the information from Matlab should be experimental time index.
+
+    Parameters
+    ----------
+    Cells : dict
+        Dictionary of cell objects
+    matlab_df : DataFrame or Path
+        Dataframe of .csv or Path to the .csv output from Matlab.
+    time_int : int or float
+        Picture taking interval for the experiment.
+    '''
+
+    if isinstance(matlab_df, type(pd.DataFrame())):
+        pass
+    elif isinstance(matlab_df, str):
+        matlab_df = pd.read_csv(matlab_df)
+    else:
+        matlab_df = pd.DataFrame(data=['None'], columns=['cell_id'])
+
+    # counters for which cells do and do not have nuc seg info
+    n_in_seg_df = 0
+    n_not_in_seg_df = 0
+
+    for cell_id, cell_tmp in six.iteritems(Cells):
+
+        # intialize dictionary of attributes to add to cells
+        attributes = dict(segregation_time=None,
+                          segregation_length=None,
+                          segregation_volume=None,
+                          segregation_delta=None, # length added between this segregation and last.
+                          segregation_length_mother=None, # used for better comparison of seg delta
+                          segregation_delta_mother=None,
+                          S=None,
+                          IS=None, # initiation to segregation
+                          TS=None) # termination to segregation
+
+        if matlab_df['cell_id'].str.contains(cell_id).any():
+            n_in_seg_df += 1
+
+            ### pull data straight from dataframe
+            cell_seg_row = matlab_df[matlab_df['cell_id'] == cell_id]
+            attributes['segregation_time'] = cell_seg_row.iloc[0]['seg_time'] # time is image interval
+
+            # find index of intiation in that cell. Note if the time was recorded with real time or not
+            try:
+                # index in the initiation cell
+                seg_index = cell_tmp.times.index(attributes['segregation_time'])
+            except:
+                # these cells do not have lengths at this time.
+                print('{} with segregation time {}'.format(cell_id, attributes['segregation_time']))
+
+                # reset attributes to give this cell no information
+                attributes['segregation_time'] = None
+
+                for key, value in attributes.items():
+                    setattr(cell_tmp, key, value)
+
+                continue # just skip this cell for the rest of the info
+
+            attributes['segregation_length'] = cell_tmp.lengths_w_div[seg_index]
+
+            cell_lengths = cell_tmp.lengths_w_div
+            cell_width = cell_tmp.width # average width
+            cell_volumes_avg_width = ((cell_lengths - cell_width) * np.pi * (cell_width/2)**2 +
+                                     (4/3) * np.pi * (cell_width/2)**3)
+
+            attributes['segregation_volume'] = cell_volumes_avg_width[seg_index]
+
+            attributes['S'] = (cell_tmp.division_time - attributes['segregation_time']) * time_int
+
+            if cell_tmp.initiation_time:
+                attributes['IS'] = (attributes['segregation_time'] - cell_tmp.initiation_time) * time_int
+                attributes['TS'] = (attributes['segregation_time'] - cell_tmp.termination_time) * time_int
+
+        else:
+            n_not_in_seg_df += 1
+
+        for key, value in attributes.items():
+            setattr(cell_tmp, key, value)
+
+    print('There are {} cells with segregation info and {} not.'.format(n_in_seg_df, n_not_in_seg_df))
+
+    n_seg_delta = 0
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        # Checking added segregation size towards daughter
+        if cell_tmp.segregation_length != None and cell_tmp.daughters[0] in Cells:
+            if Cells[cell_tmp.daughters[0]].segregation_length != None:
+                cell_tmp.segregation_delta = (2*Cells[cell_tmp.daughters[0]].segregation_length -
+                                             cell_tmp.segregation_length)
+                n_seg_delta += 1
+
+        # this is added segregation size towards mother, which makes it more comparable do the others.
+        if cell_tmp.segregation_length != None and cell_tmp.parent in Cells:
+            if Cells[cell_tmp.parent].segregation_length != None:
+                cell_tmp.segregation_delta_mother = (2*cell_tmp.segregation_length -
+                                             Cells[cell_tmp.parent].segregation_length)
+
+                cell_tmp.segregation_length_mother = Cells[cell_tmp.parent].segregation_length
+
+    print('There are {} cells with segregation delta.'.format(n_seg_delta))
+
+    return Cells
+
+def add_termination_info(Cells):
+    '''hack to add temination length and volume to the cells. Should be part of add_cc_info'''
+
+    cells_w_termination_length = 0
+    cells_wo_termination_length = 0
+
+    for cell_id, cell_tmp in six.iteritems(Cells):
+
+        # intialize dictionary of attributes to add to cells
+        attributes = dict(termination_length=None,
+                          termination_volume=None,
+                          termination_delta=None) # length added between two terminations
+
+        if cell_tmp.termination_time:
+
+            # find index
+            try:
+                # index in the initiation cell
+                ter_index = cell_tmp.times.index(cell_tmp.termination_time)
+            except:
+                # these cells do not have lengths at this time.
+                print('{} with termination time {} and n_oc {}.'.format(cell_id, cell_tmp.termination_time, cell_tmp.n_oc))
+
+                for key, value in attributes.items():
+                    setattr(cell_tmp, key, value)
+
+                cells_wo_termination_length += 1
+
+                continue # just skip this cell for the rest of the info
+
+            attributes['termination_length'] = cell_tmp.lengths_w_div[ter_index]
+
+            cell_lengths = cell_tmp.lengths_w_div
+            cell_width = cell_tmp.width # average width
+            cell_volumes_avg_width = ((cell_lengths - cell_width) * np.pi * (cell_width/2)**2 +
+                                     (4/3) * np.pi * (cell_width/2)**3)
+            attributes['termination_volume'] = cell_volumes_avg_width[ter_index]
+
+            cells_w_termination_length += 1
+
+        else:
+            cells_wo_termination_length += 1
+
+        for key, value in attributes.items():
+            setattr(cell_tmp, key, value)
+
+    print('There are {} cells with termination length and {} not.'.format(cells_w_termination_length, cells_wo_termination_length))
+
+    n_ter_delta = 0
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        # this cell must have a unit cell size, a daughter, and that daughter must have an So
+        # We always use daughter 1 for cell cycle picking.
+        if cell_tmp.termination_length != None and cell_tmp.daughters[0] in Cells:
+            if Cells[cell_tmp.daughters[0]].termination_length != None:
+                # if cell_tmp.n_oc == Cells[cell_tmp.daughters[0]].n_oc:
+                cell_tmp.termination_delta = (2*Cells[cell_tmp.daughters[0]].termination_length -
+                                             cell_tmp.termination_length)
+                n_ter_delta += 1
+
+    print('There are {} cells with termination delta.'.format(n_ter_delta))
+
+    return Cells
+
 
 # def add_cellcycle_df(df):
 #     '''Adds additional columns to a cell cycle dataframe'''
@@ -869,7 +1130,7 @@ def add_cc_info(Cells, matlab_df, time_int):
 
 ### Plotting functions #############################################################################
 ### Distrbutions -----------------------------------------------------------------------------------
-def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df', disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', legendfontsize=SMALL_SIZE*0.75, orientation='vertical'):
+def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df', disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', legendfontsize=SMALL_SIZE, orientation='vertical'):
     '''
     Plot distributions of on parameter on an axis with multpile experiments
 
@@ -914,6 +1175,8 @@ def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
     xlimmax = 0
 
     for exp in exps:
+        # print(exp)
+
         df_temp = data[exp][df_key]
         color = data[exp]['color']
         if 'line_style' in data[exp].keys():
@@ -936,7 +1199,8 @@ def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
         data_med = data_temp.median()
 
         if legend_stat == 'mean':
-            leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+            # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+            leg_stat = '\u03BC={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
         elif legend_stat == 'median':
             leg_stat = 'Md={:0.2f}, CV={:0.2f}'.format(data_med, data_cv)
         elif legend_stat == 'CV':
@@ -982,11 +1246,11 @@ def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
             bin_vals = np.append(bin_vals, 0)
 
             if orientation == 'vertical':
-                ax[ax_i].plot(bin_centers, bin_vals,
+                ax[ax_i].plot(bin_centers, bin_vals, lw=0.5,
                            color=color, ls=line_style, alpha=0.75,
                            label=leg_stat)
             elif orientation == 'horizontal':
-                ax[ax_i].plot(bin_vals, bin_centers,
+                ax[ax_i].plot(bin_vals, bin_centers, lw=0.5,
                            color=color, ls=line_style, alpha=0.75,
                            label=leg_stat)
 
@@ -994,11 +1258,11 @@ def plot_dist(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
         # produce stepwise histogram
             if orientation == 'vertical':
                 ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
-                           color=color, ls=line_style, alpha=0.5,
+                           lw=0.5, color=color, ls=line_style, alpha=0.75,
                            label=leg_stat, orientation='vertical')
             elif orientation == 'horizontal':
                 ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
-                           color=color, ls=line_style, alpha=0.5,
+                           lw=0.5, color=color, ls=line_style, alpha=0.75,
                            label=leg_stat, orientation='horizontal')
 
     # figure formatting
@@ -1054,20 +1318,26 @@ def plotmulti_dist(data, exps, plot_params=None, df_key='df', disttype='line', n
 
     no_p = len(plot_params)
 
-    # holds number of rows, columns, and fig height. All figs are 8 in width
+    # holds number of rows, columns, and fig height. All figs are 7.5 in width
     fig_dims = ((0,0,0), (1,1,8), (1,2,4), (1,3,3), (1,4,3), (2,3,6), (2,3,6),
                 (3,3,8), (3,3,8), (3,3,8),
-                (4,3,10), (4,3,10), (4,3,10), # 10, 11, 12
-                (4,4,8), (4,4,8), (4,4,8), (4,4,8))
+                (4,3,9), (4,3,9), (4,3,9), # 10, 11, 12
+                (4,4,8), (4,4,8), (4,4,8), (4,4,8), # 13, 14, 15, 16
+                (None), (None), (None), (None), # 17, 18, 19, 20
+                (None), (None), (None), (6, 4, 10)) # 21, 22, 23, 24
     bottom_pad = (0, 0.125, 0.25, 0.35, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125,
                   0.075, 0.075, 0.075,
+                  0.1, 0.1, 0.1, 0.1,
+                  0.1, 0.1, 0.1, 0.1,
                   0.1, 0.1, 0.1, 0.1)
     h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.5,
              0.5, 0.5, 0.5,
-             0.6, 0.6, 0.6, 0.6)
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 1)
 
     fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
-                             figsize=(8,fig_dims[no_p][2]), squeeze=False)
+                             figsize=(7.5, fig_dims[no_p][2]), squeeze=False)
     ax = axes.flat
 
     for ax_i, plot_param in enumerate(plot_params):
@@ -1085,6 +1355,8 @@ def plotmulti_dist(data, exps, plot_params=None, df_key='df', disttype='line', n
             ax[ax_i].set_yticklabels([])
             ax[ax_i].set_yticks([])
 
+    plt.tight_layout()
+
     # legend for whole figure
     if fig_legend:
         fig_legend_labels = [data[exp]['name'] for exp in exps]
@@ -1093,12 +1365,10 @@ def plotmulti_dist(data, exps, plot_params=None, df_key='df', disttype='line', n
         if figlabelcols == None:
             figlabelcols = int(len(exps)/2)
         fig.legend(handles, fig_legend_labels,
-                   ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+                   ncol=figlabelcols, loc=1, fontsize=figlabelfontsize, frameon=False)
         plt.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
     else:
         plt.subplots_adjust(hspace=h_pad[no_p])
-
-    plt.tight_layout()
 
     return fig, ax
 
@@ -1152,12 +1422,12 @@ def plotmulti_phase_dist(data, exps, figlabelcols=None):
             if column == 'tau':
                 bin_edges = np.arange(0, data_temp.max(), step=time_int) + time_int/2
                 ax[i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
-                           color=color, lw=2, alpha=0.5,
+                           color=color, lw=2, alpha=0.75,
                            label=[pnames['um'] + '=%.3f, CV=%.2f' % (data_mean, data_cv)])
 
             else:
                 ax[i].hist(data_temp, bins=20, histtype='step', density=True,
-                           color=color, lw=2, alpha=0.5,
+                           color=color, lw=2, alpha=0.75,
                            label=[pnames['um'] + '=%.3f, CV=%.2f' % (data_mean, data_cv)])
 
     # plot formatting
@@ -1269,13 +1539,19 @@ def plot_violin_birth_label(Cells_df):
     return fig, ax
 
 ### Time series ------------------------------------------------------------------------------------
-def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df', alt_time='birth', window=30):
+def plot_time(data, exps, plot_param=None, x_param='birth_time', fig=None, ax=None, ax_i=0, df_key='df', alt_time='birth', plot_scatter=True, plot_moving_average=False, plot_moving_error=True, window=10, binmin=10):
     '''Plot parameter over time for muliple experiments on one axis
 
+    x_param : 'birth_time'
+        Time which plot param is plotted against. Normally birth time, but initiation time make or division time may also be useful.
     alt_time : float or 'birth'
         Adjusts all time by this value. 'birth' adjust the time so first birth time is at zero.
+    plot_scatter : boolean or float between 0 and 1.
+        Bool to plot scatter plot behind. If float, will plot scatter and set alpha to value.
     window : float
-        Averaging window in minutes
+        Averaging window in time intervals.
+    binmin : int
+        Minimum bin size for moving average.
 
 
     '''
@@ -1299,6 +1575,10 @@ def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
     else:
         adjust_time = False
 
+    # if just one experimental id was passed instead of a list, fix that.
+    if isinstance(exps, str) :
+        exps = [exps]
+
     for exp in exps:
         # Cells = data[key]['Cells']
         df = data[exp]['df']
@@ -1313,20 +1593,19 @@ def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
         except:
             scat_c = lc
 
-        # if using 'birth_time' adjust times indiviually for all experiments.
+        # if using 'birth' adjust times indiviually for all experiments.
         if adjust_time:
             alt_time = df['birth_time'].min()
             alt_time = alt_time * time_int / 60.0
 
         # get out just the data to be plot for one subplot
-        time_df = df[['birth_time', plot_param]].dropna(how='any')
+        time_df = df[[x_param, plot_param]].dropna(how='any')
         if len(time_df) == 0:
             continue # skip if there is no data
 
         # time average window
-        xlims = (time_df['birth_time'].min() * time_int / 60.0 - alt_time,
-                 time_df['birth_time'].max() * time_int / 60.0 - alt_time)
-        bin_edges = np.arange(xlims[0], xlims[1], window / time_int / 60.0)
+        xlims = (time_df[x_param].min() * time_int / 60.0 - alt_time,
+                 time_df[x_param].max() * time_int / 60.0 - alt_time)
 
         # set overall xlims:
         if xlims[0] < xlimmin:
@@ -1334,25 +1613,40 @@ def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
         if xlims[1] > xlimmax:
             xlimmax = xlims[1]
 
-        time_df.sort_values(by='birth_time', inplace=True)
+        time_df.sort_values(by=x_param, inplace=True)
+
+        # change times to the plotting units
+        times = time_df[x_param] * time_int / 60.0 - alt_time
 
         # plot the scatter plot
-        times = time_df['birth_time'] * time_int / 60.0 - alt_time
-        ax[ax_i].scatter(times, time_df[plot_param],
-                      s=5, alpha=0.25, color=scat_c, linewidths=0,
-                      rasterized=True, zorder=1,
-                      label=None)
+        if plot_scatter:
+            if isinstance(plot_scatter, float):
+                scatter_alpha = plot_scatter
+            else:
+                scatter_alpha = 0.25
+            ax[ax_i].scatter(times, time_df[plot_param],
+                          s=5, alpha=scatter_alpha, color=scat_c, linewidths=0,
+                          rasterized=True, zorder=1,
+                          label=None)
 
-        # graph moving average
-        # bin_means, bin_edges, bin_n = sps.binned_statistic(times, time_df[plot_param],
-        #                                                    statistic='mean', bins=bins)
-        bin_centers, bin_means, bin_errors = binned_stat(times, time_df[plot_param],
-                                                         bin_edges=bin_edges, binmin=15)
-        # bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
-        ax[ax_i].plot(bin_centers, bin_means,
-                      lw=1, alpha=0.75, color=lc, ls=ls,
-                      zorder=2,
-                      label=' ')
+        if plot_moving_average or plot_moving_error:
+            # graph moving average
+            bin_edges = np.arange(xlims[0], xlims[1], window * time_int / 60.0)
+            bin_centers, bin_means, bin_errors = binned_stat(times, time_df[plot_param],
+                                                             statistic='mean',
+                                                             bin_edges=bin_edges, binmin=binmin)
+
+        if plot_moving_average:
+            ax[ax_i].plot(bin_centers, bin_means,
+                          lw=0.5, alpha=0.75, color=lc, ls=ls,
+                          zorder=2,
+                          label=None)
+
+        if plot_moving_error:
+            ax[ax_i].errorbar(bin_centers, bin_means, yerr=bin_errors, xerr=None,
+                      lw=0, alpha=0.75, color=lc, ls=ls,
+                      elinewidth=0.5, capsize=1, capthick=0.5,
+                      label=None, zorder=2)
 
         # set y lim to the highest mean. There may be nans if no items in bin
         if np.nanmean(bin_means) > ylimmax:
@@ -1360,9 +1654,14 @@ def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
             ylimstd = np.nanstd(time_df[plot_param]) # added to y max
 
     # formatting
-    xl = 'birth time (hours)'
+    if x_param == 'birth_time':
+        xl = 'birth time (hours)'
+    elif x_param == 'division_time':
+        xl = 'division time (hours)'
+    elif x_param == 'initiation_time':
+        xl = 'initiation time (hours)'
     ax[ax_i].set_xlabel(xl)
-    yl = pnames[plot_param]['label'] + '\n['+pnames[plot_param]['unit'] + ']'
+    yl = pnames[plot_param]['label'] + '\n'+pnames[plot_param]['unit']
     ax[ax_i].set_ylabel(yl)
 
     ax[ax_i].set_xlim(xlimmin, xlimmax)
@@ -1371,12 +1670,12 @@ def plot_time(data, exps, plot_param=None, fig=None, ax=None, ax_i=0, df_key='df
     sns.despine(ax=ax[ax_i])
 
     # do tight layout if this is a standalone
-    if standalone:
-        plt.tight_layout()
+    # if standalone:
+    #     plt.tight_layout()
 
     return fig, ax
 
-def plotmulti_time(data, exps, plot_params=None, alt_time='birth', window=30, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
+def plotmulti_time(data, exps, plot_params=None, x_param='birth_time', alt_time='birth', plot_scatter=True, plot_moving_average=True, plot_moving_error=False, window=10, fig_legend=True, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
     '''
     Plots cell parameters over time using a scatter plot and a moving average.
     '''
@@ -1409,9 +1708,13 @@ def plotmulti_time(data, exps, plot_params=None, alt_time='birth', window=30, fi
 
         fig, ax = plot_time(data=data, exps=exps,
                             plot_param=plot_param,
+                            x_param=x_param,
                             fig=fig, ax=ax, ax_i=ax_i,
                             df_key='df',
                             alt_time=alt_time,
+                            plot_scatter=plot_scatter,
+                            plot_moving_average=plot_moving_average,
+                            plot_moving_error=plot_moving_error,
                             window=window)
 
     # axis formatting
@@ -1432,20 +1735,22 @@ def plotmulti_time(data, exps, plot_params=None, alt_time='birth', window=30, fi
             sns.despine(ax=ax[ax_i])
 
     # legend for whole figure
-    fig_legend_labels = [data[exp]['name'] for exp in exps]
-    handles, _ = ax[0].get_legend_handles_labels()
-    if figlabelcols == None:
-        figlabelcols = int(len(exps)/2)
-    fig.legend(handles, fig_legend_labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+    if fig_legend:
+        fig_legend_labels = [data[exp]['name'] for exp in exps]
+        handles, _ = ax[0].get_legend_handles_labels()
+        if figlabelcols == None:
+            figlabelcols = int(len(exps)/2)
+        fig.legend(handles, fig_legend_labels,
+                   ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     plt.tight_layout()
     fig.align_labels()
-    plt.subplots_adjust(bottom=bottom_pad[no_p])
+    if fig_legend:
+        plt.subplots_adjust(bottom=bottom_pad[no_p])
 
     return fig, ax
 
-def plotmulti_timedist(data, exps, plot_params=None, df_key='df', alt_time='birth', window=30, individual_legends=False, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
+def plotmulti_timedist(data, exps, plot_params=None, x_param='birth_time', df_key='df', alt_time='birth', plot_scatter=True, plot_moving_average=True, plot_moving_error=False, window=10, individual_legends=False, fig_legend=True, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
     '''
     Plots cell parameters over time using a scatter plot and a moving average.
     Plots distribution to the left of each time plot using the same y axis
@@ -1490,7 +1795,11 @@ def plotmulti_timedist(data, exps, plot_params=None, df_key='df', alt_time='birt
         plot_time_params = dict(data=data, exps=exps,
                         plot_param=plot_param,
                         fig=fig, ax=ax, ax_i=ax_i*2,
-                        df_key=df_key, alt_time=alt_time, window=window)
+                        df_key=df_key, alt_time=alt_time,
+                        plot_scatter=plot_scatter,
+                        plot_moving_average=plot_moving_average,
+                        plot_moving_error=plot_moving_error,
+                        window=window)
         fig, ax = plot_time(**plot_time_params)
 
         # distribution plot
@@ -1523,18 +1832,20 @@ def plotmulti_timedist(data, exps, plot_params=None, df_key='df', alt_time='birt
             ax[ax_i].set_title(None)
 
     # legend for whole figure
-    fig_legend_labels = [data[exp]['name'] for exp in exps]
-    handles, _ = ax[0].get_legend_handles_labels()
-    if figlabelcols == None:
-        figlabelcols = int(len(exps)/2)
-    fig.legend(handles, fig_legend_labels,
-               ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+    if fig_legend:
+        fig_legend_labels = [data[exp]['name'] for exp in exps]
+        handles, _ = ax[0].get_legend_handles_labels()
+        if figlabelcols == None:
+            figlabelcols = int(len(exps)/2)
+        fig.legend(handles, fig_legend_labels,
+                   ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     fig.align_labels()
     plt.tight_layout() # cannot be used with constrained_layout=True above. Sometimes it is good to set that to false and use this, sometimes it does not work
-    plt.subplots_adjust(wspace=0.1, bottom=bottom_pad[no_p])
-    # plt.subplots_adjust(wspace=0.1, bottom=bottom_pad[no_p],
-    #                     left=0.1, right=0.975, top=.975)
+    if fig_legend:
+        plt.subplots_adjust(wspace=0.1, bottom=bottom_pad[no_p])
+    else:
+        plt.subplots_adjust(wspace=0.1)
 
     return fig, ax
 
@@ -1732,7 +2043,7 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
 
     # vertical lines for shift up time
     if shift:
-        ax.axvline(x=t_shift*t_int - t_shift*t_int, linewidth=2, color='g', ls='--', alpha=0.5, label='Shift-up time')
+        ax.axvline(x=t_shift*t_int - t_shift*t_int, linewidth=2, color='g', ls='--', alpha=0.75, label='Shift-up time')
 
     # format plot
     ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=22)
@@ -1743,7 +2054,7 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
     return fig, ax
 
 ### Correlations -----------------------------------------------------------------------------------
-def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df', rescale_data=False, plot_scatter=True, plot_mean=True, bin_plot='binmeans', bin_edges='sturges', binmin=None, bin_legend=True, legendfontsize=SMALL_SIZE/2):
+def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df', rescale_data=False, plot_scatter=True, plot_mean=False, plot_binmeans=True, plot_binmedians=False, plot_linreg=True, plot_linreg_error=True, plot_bin_linreg=False, bin_edges='sturges', binmin=None, show_legend=True, legendfontsize=SMALL_SIZE):
     '''
     Make correlation plot. Unlike plotmulti_corr, this just plots a single pair of parameters, but you can pass the fig and ax.
 
@@ -1752,6 +2063,7 @@ def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df
     exps : list of strings
         Key for the experiments being plotted.
     param_pairs : tuple of strings for for x and y axis
+
     fig : matplotlib Figure
     ax : list of matplotlib Axes object
         This is a 1D array of Axes objects.
@@ -1759,19 +2071,31 @@ def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df
         Index of the axis to plot on.
     df_key : str
         String key of the dataframe to use.
+
     rescale_data : bool
+
     plot_scatter : bool
         Plot scatter plot. Uses color light if possible
     plot_mean : bool
         Plot scatter mean or not
-    bin_plot : 'binmeans', 'pearson', 'linreg'
-        Type of binned plot to do.
+    plot_binmeans : bool
+        Whether to plot means on bins or not.
+    plot_binmedians : bool
+        Wheter to plot bin medians or not
+    plot_linreg : bool
+        Whether to plot linear regression line on scatter
+    plot_linreg_error: bool
+        Whether to plot linear rergression 95% confindence interval
+    plot_bin_linreg : bool
+        Whether to plot linear regression on bin means (not really used).
+
     bin_edges : int, sequence or str
-        Edges for binning. Only used if bin_plot is 'binmeans' or 'linreg'.
+        Edges for binning. Used if plot_binmeans or plot_bin_linreg.
     binmin : int
         Minimum number of items per bin for binned average. Only used if bin_plot is 'binmeans' or 'linreg'.
-    bin_legend : boolean
-        Plot legend for bin_plot type.
+
+    show_legend : boolean
+        Plot legend linear regression line.
     legendfontsize : int
         Font size for plot legends
     '''
@@ -1792,6 +2116,10 @@ def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df
             scat_c = data[exp]['color_light']
         except:
             scat_c = c
+        try:
+            marker_shape = data[exp]['marker_shape']
+        except:
+            marker_shape = 'o'
 
         pcol, prow = param_pair
 
@@ -1805,50 +2133,90 @@ def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df
             col /= col.mean()
             row /= row.mean()
 
+        label = ''
+
         # scatter plot on bottom
         if plot_scatter:
             ax[ax_i].scatter(col, row,
                               s=5, alpha=0.25, color=scat_c, lw=0,
-                              label=None,
+                              marker=marker_shape, label=None,
                               rasterized=True, zorder=1)
 
-        # calculate binned lines
-        if bin_plot == 'binmeans' or bin_plot == 'linreg':
+        # calculate bin means
+        if plot_binmeans:
             bin_c, bin_m, bin_e = binned_stat(col, row, bin_edges=bin_edges, binmin=binmin)
 
-        if bin_plot == 'binmeans':
+            # with line connecting
+            # ax[ax_i].errorbar(bin_c, bin_m, yerr=bin_e, xerr=None,
+            #               marker='o', ms=4, alpha=0.75,
+            #               lw=1, mew=0.5, mec='k', color=c, ls=ls,
+            #               elinewidth=1, capsize=2,
+            #               label=None, zorder=2)
+            # without line connecting
             ax[ax_i].errorbar(bin_c, bin_m, yerr=bin_e, xerr=None,
-                          marker='o', ms=4, alpha=0.75,
-                          lw=1, mew=0.5, mec='k', color=c, ls=ls,
-                          elinewidth=1, capsize=2,
-                          label=None, zorder=2)
-            bin_label = None
-
-        elif bin_plot == 'linreg':
-
-            # bins
-            ax[ax_i].errorbar(bin_c, bin_m, yerr=bin_e, xerr=None,
-                          marker='o', ms=4, alpha=0.75,
-                          lw=0, mew=0.5, mec='k', color=c,
-                          elinewidth=1, capsize=2,
+                          marker=marker_shape, ms=6, alpha=1,
+                          lw=0, mew=0.5, mec='white', color=c,
+                          elinewidth=0.5, capsize=1, capthick=0.5,
                           label=None, zorder=2)
 
+        if plot_binmedians:
+            bin_c, bin_m, bin_e = binned_stat(col, row, statistic='median',
+                                              bin_edges=bin_edges, binmin=binmin)
+
+            # without line connecting
+            ax[ax_i].errorbar(bin_c, bin_m, yerr=bin_e, xerr=None,
+                          marker=marker_shape, ms=6, alpha=1,
+                          lw=0, mew=0.5, mec='white', color=c,
+                          elinewidth=0.5, capsize=1, capthick=0.5,
+                          label=None, zorder=2)
+
+        if plot_linreg:
             # linear regression on scatter
-            p1, p0, r, _, _ = sps.linregress(col, row)
+            p1, p0, r, pval, stderr = sps.linregress(col, row)
             x_fit = [col.mean() - 3*col.std(), col.mean() + 3*col.std()]
             y_fit = [p0 + p1*x for x in x_fit]
             ax[ax_i].plot(x_fit, y_fit,
-                          lw=1, alpha=0.75, color=c, ls=ls,
+                          lw=0.5, alpha=0.75, color=c, ls=ls,
                           label=None, zorder=2)
 
-            bin_label = 'Slope = {:.2f}'.format(p1)
+            label = 'Slope = {:.2f}'.format(p1)
+            # bin_label = 'Slope = {:.2f}, r$^2$ = {:.2f}'.format(p1, r)
 
-        elif bin_plot == 'linreg_bins':
+        if plot_linreg_error:
+            # plots wedge indicating error around linear regression of scatter
+            # uses 95% confindence interval assuming n is very large
+            p1, p0, r, pval, stderr = sps.linregress(col, row)
+
+            p1_high = p1 + 1.96*stderr # high slope
+            # intercept for line that goes through mean of data
+            # y1 = y2 - m(x2 - x1), x1=0
+            p0_high = row.mean() - p1_high * col.mean()
+
+            p1_low = p1 - 1.96*stderr # low slope and corresponding intercept
+            p0_low = row.mean() - p1_low * col.mean()
+
+            if rescale_data:
+                # x_fit = [0, 2]
+                x_fit = [col.mean() - 2*col.std(), col.mean() + 2*col.std()]
+            else:
+                x_fit = [col.mean() - 3*col.std(), col.mean() + 3*col.std()]
+
+            y_fit_high = [p0_high + p1_high*x for x in x_fit]
+            y_fit_low = [p0_low + p1_low*x for x in x_fit]
+
+            ax[ax_i].fill_between(x_fit, y_fit_high, y_fit_low,
+                                  where=[True for x in x_fit], interpolate=True,
+                                  color=scat_c, alpha=0.5, lw=0, zorder=0)
+
+            # label = 'Slope = {:.2f}'.format(p1)
+
+        if plot_bin_linreg:
+            bin_c, bin_m, bin_e = binned_stat(col, row, bin_edges=bin_edges, binmin=binmin)
 
             ax[ax_i].errorbar(bin_c, bin_m, yerr=bin_e, xerr=None,
                           marker='o', ms=4, alpha=0.75,
                           lw=0, mew=0.5, mec='k', color=c,
-                          elinewidth=1, capsize=2,
+                          elinewidth=0.5, capsize=2, capthick=0.5,
                           label=None, zorder=2)
 
             # linear regression on bins
@@ -1856,62 +2224,63 @@ def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df
             x_fit = [bin_c[0], bin_c[-1]]
             y_fit = [p0 + p1*x for x in x_fit]
             ax[ax_i].plot(x_fit, y_fit,
-                          lw=1, alpha=0.75, color=c, ls=ls,
+                          lw=0.5, alpha=0.75, color=c, ls=ls,
                           label=None, zorder=2)
 
-            bin_label = 'Slope = {:.2f}'.format(p1)
-
-        # Slope and pearson
-        elif bin_plot == 'pearson':
-            p1, p0, r, _, _ = sps.linregress(col, row)
-
-            x_fit = [col.mean() - 3*col.std(), col.mean() + 3*col.std()]
-            y_fit = [p0 + p1*x for x in x_fit]
-            ax[ax_i].plot(x_fit, y_fit,
-                          lw=1, alpha=0.75, color=c, ls=ls,
-                          label=None, zorder=2)
-
-            bin_label = 'Slope = {:.2f}, r$^2$ = {:.2f}'.format(p1, r)
-
-        # make dummy lines for legend
-        if bin_plot:
-            ax[ax_i].plot([1,1], [0,0],
-                          lw=1, color=c, ls=ls,
-                          label=bin_label)
+            label = 'Slope = {:.2f}'.format(p1)
 
         # plot mean symbol on top
         if plot_mean:
             ax[ax_i].plot(col.mean(), row.mean(),
-                           marker='o', ms=5, alpha=1, color=c, ls=ls,
+                           marker=marker_shape, ms=5, alpha=1, color=c, ls=ls,
                            mec='k', mew=0.5,
                            label=None, zorder=3)
 
+        # make dummy lines for legend
+        if show_legend:
+            if len(exps) > 1:
+                ax[ax_i].plot([-0.1,-0.1], [-0.1,-0.1],
+                              marker=marker_shape, ms=6, alpha=1,
+                              lw=0, mew=0.5, mec='white', color=c,
+                              label=data[exp]['name'] + ' ' + label)
+
+            else: # no marker or experiment label
+                ax[ax_i].plot([-0.1,-0.1], [-0.1,-0.1],
+                              marker=marker_shape, ms=0, alpha=1,
+                              lw=0, mew=0.5, mec='white', color=c,
+                              label=label)
+
     # plot title and labels
     if not rescale_data:
-        xl = pnames[pcol]['label'] + ' ['+pnames[pcol]['unit'] + ']'
+        xl = pnames[pcol]['label'] + ' '+pnames[pcol]['unit']
         ax[ax_i].set_xlabel(xl)
-        yl = pnames[prow]['label'] + ' ['+pnames[prow]['unit'] + ']'
+        yl = pnames[prow]['label'] + ' '+pnames[prow]['unit']
         ax[ax_i].set_ylabel(yl)
     else:
-        xl = 'rescaled ' + pnames[pcol]['label']
+        # xl = 'rescaled ' + pnames[pcol]['label']
+        # ax[ax_i].set_xlabel(xl)
+        # yl = 'rescaled ' + pnames[prow]['label']
+        # ax[ax_i].set_ylabel(yl)
+        xl = pnames[pcol]['symbol']
         ax[ax_i].set_xlabel(xl)
-        yl = 'rescaled ' + pnames[prow]['label']
+        yl = pnames[prow]['symbol']
         ax[ax_i].set_ylabel(yl)
 
     if rescale_data:
         ax[ax_i].set_xlim(0.6, 1.4)
         ax[ax_i].set_ylim(0.6, 1.4)
+        ax[ax_i].set_aspect('equal')
     else:
         ax[ax_i].set_xlim(0, None)
         ax[ax_i].set_ylim(0, None)
 
     # bin line information legend
-    if bin_plot and bin_legend:
+    if show_legend:
         ax[ax_i].legend(loc=1, fontsize=legendfontsize, frameon=False)
 
     return fig, ax
 
-def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figlabelcols=None, figlabelfontsize=SMALL_SIZE, plot_scatter=False, plot_mean=True, bin_plot='pearson', bin_edges='sturges', binmin=None, bin_legend=False):
+def plotmulti_crosscorrs(data, exps, plot_params=None, figlabelcols=None, figlabelfontsize=SMALL_SIZE, rescale_data=False, plot_scatter=True, plot_mean=False, plot_binmeans=True, plot_binmedians=False, plot_linreg=True, plot_linreg_error=True, plot_bin_linreg=False, bin_edges='sturges', binmin=None, show_legend=True, legendfontsize=SMALL_SIZE):
     '''
     Plot cross correlation plot with pairwise comparisons. Plots distributions along diagonal.
 
@@ -1931,7 +2300,7 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
         plot_params = ['sb', 'delta', 'growth rate']
 
     no_p = len(plot_params)
-    fig, axes = plt.subplots(nrows=no_p, ncols=no_p, figsize=(8,8))
+    fig, axes = plt.subplots(nrows=no_p, ncols=no_p, figsize=(7.5,7.5))
     ax = axes.flat
 
     limmaxs = {param : {'limmax' : 0,
@@ -1952,11 +2321,25 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                     data_temp = df[prow]
                     data_temp = data_temp.dropna()
 
+                    if len(data_temp) == 0:
+                        continue
+
+                    data_mean = data_temp.mean()
+                    data_std = data_temp.std()
+
                     if rescale_data:
                         # rescale data to be centered at mean.
-                        data_temp = data_temp / data_temp.mean()
+                        data_temp = data_temp / data_mean
 
-                    bin_vals, _ = np.histogram(data_temp, bins='sturges', density=True)
+                    # determine bin bin_edge
+                    # limit datarange
+                    if not rescale_data:
+                        bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+                    else:
+                        bin_range = (0, 2)
+                    bin_edges_temp = np.histogram_bin_edges(data_temp, bins='sturges', range=bin_range)
+
+                    bin_vals, _ = np.histogram(data_temp, bins=bin_edges_temp, density=True)
 
                     # find x and y lim max
                     limmax = data_temp.mean() + 4*data_temp.std()
@@ -1981,13 +2364,26 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                     data_temp = df[prow]
                     data_temp = data_temp.dropna()
 
+                    if len(data_temp) == 0:
+                        continue
+
+                    data_mean = data_temp.mean()
+                    data_std = data_temp.std()
+
                     if rescale_data:
                         # rescale data to be centered at mean.
-                        data_temp = data_temp / data_temp.mean()
+                        data_temp = data_temp / data_mean
+
+                    # limit data range
+                    if not rescale_data:
+                        bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+                    else:
+                        bin_range = (0, 2)
+                    bin_edges_temp = np.histogram_bin_edges(data_temp, bins='sturges', range=bin_range)
 
                     # line histogram
                     bin_vals, bin_edges_dist = np.histogram(data_temp,
-                                                            bins='sturges', density=True)
+                                                            bins=bin_edges_temp, density=True)
                     bin_steps = np.diff(bin_edges_dist)/2.0
                     bin_centers = bin_edges_dist[:-1] + bin_steps
                     # add zeros to the next points outside this so plot line always goes down
@@ -2002,7 +2398,7 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                         bin_vals = bin_vals / limmaxs[prow]['bin_vals_max'] * limmaxs[prow]['limmax'] * 0.95
 
                     ax[ax_i].plot(bin_centers, bin_vals,
-                               color=c, lw=1, alpha=0.75, ls=ls,
+                               color=c, lw=0.5, alpha=0.75, ls=ls,
                                label=' ')
 
             else: # else plot the scatter plot, use function
@@ -2013,9 +2409,15 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                                     rescale_data=rescale_data,
                                     plot_scatter=plot_scatter,
                                     plot_mean=plot_mean,
-                                    bin_plot=bin_plot,
+                                    plot_binmeans=plot_binmeans,
+                                    plot_binmedians=plot_binmedians,
+                                    plot_linreg=plot_linreg,
+                                    plot_linreg_error=plot_linreg_error,
+                                    plot_bin_linreg=plot_bin_linreg,
                                     bin_edges=bin_edges,
-                                    binmin=None, bin_legend=bin_legend)
+                                    binmin=binmin,
+                                    show_legend=show_legend,
+                                    legendfontsize=legendfontsize)
 
     # figure formatting
     for i, prow in enumerate(plot_params):
@@ -2027,14 +2429,14 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                 if len(plot_params) > 6:
                     yl = pnames[prow]['symbol']
                     ax[ax_i].set_ylabel(yl, fontsize=SMALL_SIZE, rotation=0)
-                    ax[ax_i].tick_params(axis='y', labelsize=SMALL_SIZE*0.75)
+                    ax[ax_i].tick_params(axis='y', labelsize=SMALL_SIZE)
 
                 elif 3 > len(plot_params) <= 6:
-                    yl = pnames[prow]['label']+ '\n['+pnames[prow]['unit']+ ']'
-                    ax[ax_i].set_ylabel(yl, fontsize=SMALL_SIZE*.75)
+                    yl = pnames[prow]['label']+ '\n' +pnames[prow]['unit']
+                    ax[ax_i].set_ylabel(yl, fontsize=SMALL_SIZE)
 
                 else:
-                    yl = pnames[prow]['label']+ '\n['+pnames[prow]['unit']+ ']'
+                    yl = pnames[prow]['label']+ '\n' +pnames[prow]['unit']
                     ax[ax_i].set_ylabel(yl, fontsize=MEDIUM_SIZE)
 
             else:
@@ -2046,14 +2448,14 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
                 if len(plot_params) > 6:
                     xl = pnames[pcol]['symbol']
                     ax[ax_i].set_xlabel(xl, fontsize=SMALL_SIZE, rotation=0)
-                    ax[ax_i].tick_params(axis='x', labelsize=SMALL_SIZE*0.75)
+                    ax[ax_i].tick_params(axis='x', labelsize=SMALL_SIZE)
 
                 elif 3 > len(plot_params) <= 6:
-                    xl = pnames[pcol]['label']+ '\n['+pnames[pcol]['unit']+ ']'
+                    xl = pnames[pcol]['label'] + '\n' + pnames[pcol]['unit']
                     ax[ax_i].set_xlabel(xl, fontsize=SMALL_SIZE)
 
                 else:
-                    xl = pnames[pcol]['label']+ '\n['+pnames[pcol]['unit']+ ']'
+                    xl = pnames[pcol]['label'] + '\n' + pnames[pcol]['unit']
                     ax[ax_i].set_xlabel(xl, fontsize=MEDIUM_SIZE)
             else:
                 ax[ax_i].set_xlabel(None)
@@ -2096,7 +2498,7 @@ def plotmulti_crosscorrs(data, exps, plot_params=None, rescale_data=False, figla
 
     return fig, ax
 
-def plotmulti_corr(data, exps, param_pairs=None, df_key='df', figlabelcols=None, figlabelfontsize=SMALL_SIZE, rescale_data=False, plot_scatter=True, plot_mean=True, bin_plot='binmeans', bin_edges='sturges', binmin=None, legendfontsize=SMALL_SIZE/2):
+def plotmulti_corr(data, exps, param_pairs=None, df_key='df', figlabelcols=None, figlabelfontsize=SMALL_SIZE, rescale_data=False, plot_scatter=True, plot_mean=True, plot_binmeans=True, plot_linreg=True, plot_linreg_error=True, plot_bin_linreg=False, bin_edges='sturges', binmin=None, show_legend=True, legendfontsize=SMALL_SIZE):
     '''
     Plot correlations against one parameter (default is growth rate)
     Currently geared towards the cell cycle dataframe but it's not specific.
@@ -2117,7 +2519,7 @@ def plotmulti_corr(data, exps, param_pairs=None, df_key='df', figlabelcols=None,
     '''
 
     no_p = len(param_pairs)
-    # holds number of rows, columns, and fig height. All figs are 8 in width
+    # holds number of rows, columns, and fig height. All figs are 7.5 in width
     fig_dims = ((0,0,0), (1,1,8), (1,2,4), (1,3,3), (2,2,8), (2,3,6), (2,3,6),
                 (3,3,8), (3,3,8), (3,3,8),
                 (4,3,10), (4,3,10), (4,3,10), # 10, 11, 12
@@ -2130,7 +2532,7 @@ def plotmulti_corr(data, exps, param_pairs=None, df_key='df', figlabelcols=None,
              0.3, 0.3, 0.3, 0.3)
 
     fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
-                             figsize=(8,fig_dims[no_p][2]), squeeze=False)
+                             figsize=(7.5,fig_dims[no_p][2]), squeeze=False)
     ax = axes.flat
 
     for ax_i, param_pair in enumerate(param_pairs):
@@ -2139,10 +2541,7 @@ def plotmulti_corr(data, exps, param_pairs=None, df_key='df', figlabelcols=None,
         fig, ax = plot_corr(data=data, exps=exps,
                             param_pair=param_pair,
                             fig=fig, ax=ax, ax_i=ax_i,
-                            df_key=df_key, rescale_data=rescale_data, binmin=binmin,
-                            plot_scatter=plot_scatter, plot_mean=plot_mean,
-                            bin_plot=bin_plot, bin_edges=bin_edges,
-                            legendfontsize=legendfontsize)
+                            df_key=df_key, rescale_data=rescale_data, plot_scatter=plot_scatter, plot_mean=plot_mean, plot_binmeans=plot_binmeans, plot_linreg=plot_linreg,  plot_linreg_error=plot_linreg_error, plot_bin_linreg=plot_bin_linreg, bin_edges=bin_edges, binmin=binmin, show_legend=show_legend, legendfontsize=legendfontsize)
 
     # remove axis for plots that are not there
     for ax_i in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
@@ -2614,7 +3013,7 @@ def plot_saw_tooth_fl(Cells, time_int=1, fl_plane='c2', fl_int=1, plot_flconc=Fa
                 nuc_z = getattr(cell, 'fl_profiles_' + fl_plane)[i]
                 ax[0].scatter(nuc_x, nuc_y, c=nuc_z, cmap=cmap_c2,
                                marker='s', s=scat_s, norm=color_norm_c2,
-                               rasterized=False)
+                               rasterized=True)
 
         # plot fluorescence concentration
         if plot_flconc:
@@ -2652,7 +3051,7 @@ def plot_saw_tooth_fl(Cells, time_int=1, fl_plane='c2', fl_int=1, plot_flconc=Fa
 
     return fig, ax
 
-def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_int=1, pxl2um=1.0, y_adj_px=3, scat_s=None, foci_size=100, foci_count=True, xlims=None, fig=None, ax=None, ax_i=0):
+def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_int=1, pxl2um=1.0, y_adj_px=3, scat_s=None, plot_fl_profile=True, foci_style='default', foci_size=100, foci_count=True, xlims=None, fig=None, ax=None, ax_i=0):
     '''Plot a cell lineage with profile information. Assumes you want to plot the foci.
 
     Parameters
@@ -2673,8 +3072,12 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
         Y displacement for fluorescent profile information.
     scat_s : int or None
         Size to plot y fluorescent profile information. If None will calculate optimal size based on xlims.
+    plot_fl_profile : boolean
+        whether to plot the flourescent profile or not
+    foci_style : 'default' or 'white' or None
+        'default' draws gray circles scaled by the foci size. 'white' draws white circles the size of foci size.
     foci_size : int
-        Factor by which to reduce foci size
+        Factor by which to reduce foci size or to draw, depending on foci_style.
     foci_count : boolean
         Plot foci count on second y axis or not.
     xlims : [int, int] or None
@@ -2692,7 +3095,9 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
     if fig == None:
         fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(8, 3))
         ax = [axes]
-    if foci_count: ax_foci = ax[ax_i].twinx() # for plotting foci counts
+    if foci_count:
+        ax_foci = ax[ax_i].twinx() # for plotting foci counts
+        ax.append(ax_foci)
 
     # this is to map mothers to daugthers with lines
     last_div_time = None
@@ -2728,23 +3133,25 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
         bbox = ax[ax_i].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         width, height = np.float(bbox.width), np.float(bbox.height)
         scat_s = (((fig.dpi * width) / ((xlims[1] - xlims[0]) * 60.0 / time_int) * fl_int))**2
+        # print(scat_s)
 
     for cell_id, cell in lin:
+        # print(cell_id, cell.birth_time, last_div_time)
         # plot cell length and division lines
         ax[ax_i].plot(np.array(cell.times_w_div) * time_int / 60.0 - alt_time, cell.lengths_w_div,
-                    color=peak_color, lw=0.5, alpha=0.75)
+                    color=peak_color, lw=0.5, alpha=0.75, zorder=3)
         # draw a connecting lines betwee mother and daughter
         if cell.birth_time == last_div_time:
             if division_line == 'half':
                 ax[ax_i].plot([last_div_time * time_int / 60.0 - alt_time,
                              cell.birth_time * time_int / 60.0 - alt_time],
                             [last_length, cell.sb],
-                            color=peak_color, lw=0.5, ls='-', alpha=0.75)
+                            color=peak_color, lw=0.5, ls='-', alpha=0.75, zorder=3)
             elif division_line == 'full':
                 ax[ax_i].plot([last_div_time * time_int / 60.0 - alt_time,
                              cell.birth_time * time_int / 60.0 - alt_time],
                             [last_length, 0],
-                            color=peak_color, lw=0.5, ls=':', alpha=0.75)
+                            color=peak_color, lw=0.5, ls=':', alpha=0.75, zorder=3)
 
         # record the last division time and length for next time
         last_div_time = cell.division_time
@@ -2753,48 +3160,56 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
 
         # plot fluorescence on every time point for which it exists.
         # determine coloring on a cell by cell basis
-        max_c2_int = 0
-        min_c2_int = float('inf')
-        for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
-            if max(profile_t) > max_c2_int:
-                max_c2_int = max(profile_t)
-            if min(profile_t) < min_c2_int:
-                min_c2_int = min(profile_t)
-        cmap_c2 = cmap_helix = sns.cubehelix_palette(start=0, rot=-0.4, dark=0.2, light=1,
-                                                     as_cmap=True)
-        color_norm_c2 = mpl.colors.Normalize(vmin=min_c2_int, vmax=max_c2_int)
+        if plot_fl_profile:
+            max_c2_int = 0
+            min_c2_int = float('inf')
+            for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
+                if max(profile_t) > max_c2_int:
+                    max_c2_int = max(profile_t)
+                if min(profile_t) < min_c2_int:
+                    min_c2_int = min(profile_t)
+            cmap_c2 = sns.cubehelix_palette(start=0, rot=-0.4, dark=0.2, light=1,
+                                                         as_cmap=True)
+            color_norm_c2 = mpl.colors.Normalize(vmin=min_c2_int, vmax=max_c2_int)
 
-        for i, t in enumerate(cell.times):
-            if t % fl_int == 1 or fl_int == 1:
-            # if t % fl_int == 0:
-                nuc_x = np.ones(len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) * t * time_int / 60.0 - alt_time
-                nuc_y = (np.arange(0, len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) - y_adj_px) * pxl2um
-                nuc_z = getattr(cell, 'fl_profiles_' + fl_plane)[i]
-                ax[ax_i].scatter(nuc_x, nuc_y, c=nuc_z, cmap=cmap_c2,
-                               marker='s', s=scat_s, norm=color_norm_c2,
-                               rasterized=False)
+            for i, t in enumerate(cell.times):
+                if t % fl_int == 1 or fl_int == 1:
+                # if t % fl_int == 0:
+                    nuc_x = np.ones(len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) * t * time_int / 60.0 - alt_time
+                    nuc_y = (np.arange(0, len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) - y_adj_px) * pxl2um
+                    nuc_z = getattr(cell, 'fl_profiles_' + fl_plane)[i]
+                    ax[ax_i].scatter(nuc_x, nuc_y, c=nuc_z, cmap=cmap_c2,
+                                   marker='s', s=scat_s, norm=color_norm_c2,
+                                   rasterized=True, zorder=1)
 
         # plot foci
-        foci_counts = np.zeros_like(cell.times)
-        foci_total_h = np.zeros_like(cell.times).astype(np.float)
-        for i, t in enumerate(cell.times):
-            for j, foci_y in enumerate(cell.disp_l[i]):
-                foci_y_pos = (foci_y + cell.lengths[i]/2) * pxl2um
-                ax[ax_i].scatter(t * time_int / 60.0 - alt_time, foci_y_pos,
-                               s=cell.foci_h[i][j]/foci_size, linewidth=0.5,
-                               edgecolors='k', facecolors='none', alpha=0.5,
-                               rasterized=False)
-            foci_counts[i] = len(cell.disp_l[i])
-            foci_total_h[i] = sum(cell.foci_h[i])
+        if foci_style:
+            foci_counts = np.zeros_like(cell.times)
+            foci_total_h = np.zeros_like(cell.times).astype(np.float)
+            for i, t in enumerate(cell.times):
+                for j, foci_y in enumerate(cell.disp_l[i]):
+                    foci_y_pos = (foci_y + cell.lengths[i]/2) * pxl2um
+                    if foci_style == 'default':
+                        ax[ax_i].scatter(t * time_int / 60.0 - alt_time, foci_y_pos,
+                                       s=cell.foci_h[i][j]/foci_size, linewidth=0.5,
+                                       edgecolors='k', facecolors='none', alpha=0.5,
+                                       zorder=2, rasterized=False)
+                    elif foci_style == 'white':
+                        ax[ax_i].scatter(t * time_int / 60.0 - alt_time, foci_y_pos,
+                                       s=foci_size, linewidth=0.5,
+                                       edgecolors='white', facecolors='white', alpha=1,
+                                       zorder=2, rasterized=False)
+                foci_counts[i] = len(cell.disp_l[i])
+                foci_total_h[i] = sum(cell.foci_h[i])
 
         # plot foci counts
         # pull out time point and data when there is foci data
         # foci_data = [(t, foci_total_h[i]) for i, t in enumerate(cell.times) if (t - 1) % fl_int == 0]
-        foci_data = [(t, foci_counts[i]) for i, t in enumerate(cell.times) if (t - 1) % fl_int == 0]
-        foci_times, foci_info = zip(*foci_data)
         if foci_count:
+            foci_data = [(t, foci_counts[i]) for i, t in enumerate(cell.times) if (t - 1) % fl_int == 0]
+            foci_times, foci_info = zip(*foci_data)
             ax_foci.plot(np.array(foci_times) * time_int / 60.0 - alt_time, foci_info,
-                       color='green', lw=1, ls='--', alpha=0.75)
+                       color='green', lw=1, ls='--', alpha=0.75, zorder=3)
 
     # axis and figure formatting options
     ax[ax_i].set_xlabel('time (hours)')
@@ -2818,6 +3233,140 @@ def plot_saw_tooth_foci(Cells, fl_plane='c2', alt_time='birth', time_int=1, fl_i
         ax_foci.set_yticks(yticks)
         ax_foci.set_yticklabels([str(l) for l in yticks])
         ax_foci.spines['top'].set_visible(False)
+
+    ax[ax_i].spines['top'].set_visible(False)
+    ax[ax_i].spines['right'].set_visible(False)
+    plt.tight_layout()
+
+    return fig, ax
+
+def plot_saw_tooth_nuc(Cells, fl_plane='c3', alt_time='birth', time_int=1, fl_int=1, pxl2um=1.0, y_adj_px=3, scat_s=None, plot_fl_profile=True, xlims=None, fig=None, ax=None, ax_i=0):
+    '''Plot a cell lineage with profile information. Designed for use with nucleoid data.
+
+    Parameters
+    ----------
+    Cells : dict of Cell objects
+        All the cells should come from a single peak.
+    fl_plane : str
+        Plane from which to get florescent data
+    alt_time : None, 'birth', or float
+        Time by which to shift X axis. If 'birth', time will be shited to start with 0.
+    time_int : int or float
+        Used to adjust the X axis to plot in hours
+    fl_int : int
+        Used to plot the florescence at the correct interval. Interval is relative to time interval, i.e., every time is 1, every other time is 2, etc.
+    plx2um : float
+        Conversion factor between pixels and microns.
+    y_adj_px : int
+        Y displacement for fluorescent profile information.
+    scat_s : int or None
+        Size to plot y fluorescent profile information. If None will calculate optimal size based on xlims.
+    plot_fl_profile : boolean
+        whether to plot the flourescent profile or not
+    xlims : [int, int] or None
+        Manually set xlims. If None then set automatically.
+    fig : matplotlib Figure
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects.
+    ax_i : int
+        Index of the axis to plot on.
+    '''
+
+    peak_color = 'k'
+    division_line = 'full' # 'half' or 'full'
+
+    if fig == None:
+        fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(8, 3))
+        ax = [axes]
+
+    # this is to map mothers to daugthers with lines
+    last_div_time = None
+    last_length = None
+
+    # turn it into a list so it retains time order
+    lin = [(cell_id, cell) for cell_id, cell in six.iteritems(Cells)]
+    # sort cells by birth time for the hell of it.
+    lin = sorted(lin, key=lambda x: x[1].birth_time)
+    # align time to first birth or shift time
+    if alt_time == None:
+        alt_time = 0
+    elif alt_time == 'birth':
+        alt_time = lin[0][1].birth_time * time_int / 60.0
+
+    # determine last time for xlims
+    if xlims == None:
+        last_time = (lin[-1][1].times[-1] + 10) * time_int / 60.0 - alt_time
+        if alt_time == 0 or alt_time == 'birth':
+            first_time = 0
+        else:
+            first_time = (lin[0][1].times[0] - 10) * time_int / 60.0 - alt_time
+        xlims = (first_time, last_time)
+
+    elif xlims[1] == None: # just replace the last time
+        last_time = (lin[-1][1].times[-1] + 10) * time_int / 60.0 - alt_time
+        xlims[1] = last_time
+
+    if scat_s == None:
+        # adjust scatter marker size so colors touch but do not overlap
+        # uses size of figure in inches, with the dpi (ppi) to convert to points.
+        # scatter marker size is points squared.
+        bbox = ax[ax_i].get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        width, height = np.float(bbox.width), np.float(bbox.height)
+        scat_s = (((fig.dpi * width) / ((xlims[1] - xlims[0]) * 60.0 / time_int) * fl_int))**2
+        # print(scat_s)
+
+    for cell_id, cell in lin:
+        # print(cell_id, cell.birth_time, last_div_time)
+        # plot cell length and division lines
+        ax[ax_i].plot(np.array(cell.times_w_div) * time_int / 60.0 - alt_time, cell.lengths_w_div,
+                    color=peak_color, lw=0.5, alpha=0.75, zorder=3)
+        # draw a connecting lines betwee mother and daughter
+        if cell.birth_time == last_div_time:
+            if division_line == 'half':
+                ax[ax_i].plot([last_div_time * time_int / 60.0 - alt_time,
+                             cell.birth_time * time_int / 60.0 - alt_time],
+                            [last_length, cell.sb],
+                            color=peak_color, lw=0.5, ls='-', alpha=0.75, zorder=3)
+            elif division_line == 'full':
+                ax[ax_i].plot([last_div_time * time_int / 60.0 - alt_time,
+                             cell.birth_time * time_int / 60.0 - alt_time],
+                            [last_length, 0],
+                            color=peak_color, lw=0.5, ls=':', alpha=0.75, zorder=3)
+
+        # record the last division time and length for next time
+        last_div_time = cell.division_time
+        # save the last length to check for division
+        last_length = cell.sd
+
+        # plot fluorescence on every time point for which it exists.
+        # determine coloring on a cell by cell basis
+        if plot_fl_profile:
+            max_int = 0
+            min_int = float('inf')
+            for profile_t in getattr(cell, 'fl_profiles_' + fl_plane):
+                if max(profile_t) > max_int:
+                    max_int = max(profile_t)
+                if min(profile_t) < min_int:
+                    min_int = min(profile_t)
+            cmap = sns.cubehelix_palette(start=1, rot=-0.4, dark=0.2, light=1,
+                                                         as_cmap=True)
+            color_norm = mpl.colors.Normalize(vmin=min_int, vmax=max_int)
+
+            for i, t in enumerate(cell.times):
+                if t % fl_int == 1 or fl_int == 1:
+                # if t % fl_int == 0:
+                    nuc_x = np.ones(len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) * t * time_int / 60.0 - alt_time
+                    nuc_y = (np.arange(0, len(getattr(cell, 'fl_profiles_' + fl_plane)[i])) - y_adj_px) * pxl2um
+                    nuc_z = getattr(cell, 'fl_profiles_' + fl_plane)[i]
+                    ax[ax_i].scatter(nuc_x, nuc_y, c=nuc_z, cmap=cmap,
+                                   marker='s', s=scat_s, norm=color_norm,
+                                   rasterized=True, zorder=1)
+
+    # axis and figure formatting options
+    ax[ax_i].set_xlabel('time (hours)')
+    ax[ax_i].set_xlim(xlims[0], xlims[1])
+    ax[ax_i].set_ylabel('length ' + pnames['um'])
+    ax[ax_i].set_ylim(0, None)
 
     ax[ax_i].spines['top'].set_visible(False)
     ax[ax_i].spines['right'].set_visible(False)
@@ -3049,7 +3598,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
             for region in regions_by_time[i]:
                 rescaled_color_index = region.centroid[0]/image_data_seg.shape[1] * vmax
                 seg_relabeled[seg_relabeled == region.label] = int(rescaled_color_index)-0.1 # subtract small value to make it so there is not overlabeling
-            ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.55, vmin=vmin, vmax=vmax)
+            ax[i].imshow(seg_relabeled, cmap=cmap, alpha=0.5, vmin=vmin, vmax=vmax)
 
         ax[i].set_title(str(i + t_adj), color='white')
 
@@ -3215,7 +3764,7 @@ def plot_lineage_images(Cells, fov_id, peak_id, Cells2=None, bgcolor='c1', fgcol
     return fig, ax
 
 ### Miscelaneous
-def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_start=1, pxl2um=1, cell_min=50, colorbar=True, plot_mean_sizes=True, x_unit='length', fl_plot_data='foci_avg', labelfontsize=MEDIUM_SIZE):
+def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_start=1, pxl2um=1, cell_min=50, colorbar=True, plot_mean_sizes=True, x_unit='length', fl_plot_data='foci_avg', plot_profile_ensemble=True, labelfontsize=MEDIUM_SIZE):
     '''For plotting replisome trace ensemble in order to determine cell cycle parameters using an Ergodic method.
 
     Parameters
@@ -3224,7 +3773,7 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
         Cells must have fl_profile_sub_c2 information.
     fig : matplotlib Figure
     ax : list of matplotlib Axes object
-        This is a 1D array of Axes objects.
+        This is a 1D array of Axes objects. If the fluorescent profiles are plotted, the extra axes will be appended to this.
     ax_i : int
         Index of the axis to plot on.
     time_int : int or float
@@ -3232,7 +3781,7 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
     fl_int : int
         Used to plot the florescence at the correct interval. Interval is relative to time interval, i.e., every time is 1, every other time is 2, etc.
     fl_start : int
-        Time point on which fluorscent imaging begins. Normally, but can be 2.
+        Time point on which fluorscent imaging begins. Normally 1, but can be 2.
     plx2um : float
         Conversion factor between pixels and microns.
     cell_min : int
@@ -3243,8 +3792,10 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
         Whether to plot cell length or volume along the x axis
     colorbar : boolean
         Whether to display the colorbar or not.
-    foci_plot_data : None, 'foci_avg' or 'foci_roc'
-        Indicates what to plot on the second axis.
+    foci_plot_data : None, 'foci_avg', 'foci_roc', 'bin_n', 'fl_sum'
+        Indicates what to plot on the first axis
+    plot_profile_ensemble : boolean
+        Whether or not to plot the fluorescent profile ensembles. Uses second axis
     labelfontsize : float
         X and Y label font size.
     '''
@@ -3258,7 +3809,7 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
     length_bins = np.linspace(0, max_length_int, max_length_int*10+1)
     length_bin_data = {np.around(l_bin,1) : dict(bin_n=0,
                                                  bin_volume=0,
-                                                 fl_profile=np.zeros(len(length_bins)),
+                                                 fl_profile=np.zeros(int(max_length_int/pxl2um)),
                                                  fl_sum=0,
                                                  fl_max=0,
                                                  foci_count=0) for l_bin in length_bins}
@@ -3274,6 +3825,7 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
 
     # add information cell by cell
     for cell_id, cell_tmp in Cells.items():
+        # print(cell_id)
         # find calculated growth rate and length # Ld = Lb * exp(growth_rate * tau)
         growth_rate_calc = np.log(cell_tmp.sd/cell_tmp.sb) / cell_tmp.tau
         times_for_length_calc = (np.array(cell_tmp.times) - cell_tmp.times[0]) * time_int
@@ -3281,15 +3833,29 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
 
         # go through times with calculated lengths and get corresponding fluorescent information.
         # go ahead and filter out lengths and times that don't have fl information
-        if fl_start == 1:
-            times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % fl_int == 1 or t==1]
-        elif fl_start == 2:
+        if fl_start == 1 and fl_int != 1:
+            times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % fl_int==1 or t==1]
+
+        elif fl_start == 2 and fl_int != 1:
             times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % 2 == 0]
 
+        elif fl_start == 1 and fl_int == 1:
+            times_w_lengths = list(zip(cell_tmp.times, lengths_calc))
+
+        # print(list(times_w_lengths))
+
+        # add fluorescent data to array.
+        # Becaues the fluorescent profile is not necessarily the exact same length as the cell length, it should be trimmed from the ends so that each fl_profile is the same length.
         for t, l in times_w_lengths:
             l_bin = np.around(l, 1)
             fl_profile = cell_tmp.fl_profiles_sub_c2[cell_tmp.times.index(t)]
-            # print(l_bin, len(fl_profile), fl_profile)
+            fl_profile_px_len = int(np.around(np.around(l_bin,1)/pxl2um, 0))
+
+            start_trim = int((len(fl_profile) - fl_profile_px_len) / 2)
+            end_trim = int(np.ceil((len(fl_profile) - fl_profile_px_len) / 2))
+            fl_profile = fl_profile[start_trim:-end_trim]
+            # print(len(fl_profile) - fl_profile_px_len)
+            # print(end_trim, len(fl_profile), l_bin)
             # add fl profile to data dicionary
             # try:
             length_bin_data[l_bin]['bin_n'] += 1
@@ -3297,10 +3863,12 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
             # except:
             #     print(l_bin, len(fl_profile), fl_profile)
 
-
             # calculate number of foci
             length_bin_data[l_bin]['foci_count'] += len(cell_tmp.foci_h[cell_tmp.times.index(t)])
 
+        # break
+
+    # print(length_bin_data)
 
     # average data at each bin, but only if there are enough cells for that datapoint
     for l_bin, bin_data in length_bin_data.items():
@@ -3312,63 +3880,34 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
             bin_data['fl_profile_norm'] = np.zeros_like(bin_data['fl_profile'])
             bin_data['foci_avg'] = 0
 
-    # find addiaional data from the normed profile
+    # find additional data from the normed profile
     for l_bin, bin_data in length_bin_data.items():
         if bin_data['bin_n'] > cell_min:
             bin_data['fl_sum'] = sum(bin_data['fl_profile_norm'])
-
             bin_data['fl_max'] = max(bin_data['fl_profile_norm'])
+            # raise all elements by 6 and then sum.
+            bin_data['fl_amp'] = sum(np.power(bin_data['fl_profile_norm'], 4))
 
     # adjust position so it is centered
-    noise_floor = 1
+    noise_floor = 0 # this was needed to sort out data when fl_profiles were of different lengths. It is unused now because I ensure a certain length for each bin above.
     for l_bin, bin_data in sorted(length_bin_data.items()):
         bin_data['fl_profile_center'] = np.zeros(len(length_bins))
         fl_length = sum(bin_data['fl_profile_norm'] > noise_floor)
         # print(l_bin, fl_length, fl_length*pxl2um, bin_data['fl_profile_norm'])
         fl_data = bin_data['fl_profile_norm'][bin_data['fl_profile_norm'] > noise_floor]
-        fl_ystart = int((len(length_bins) - fl_length) / 2)+1
-        fl_yend = int((len(length_bins) + fl_length) / 2)+1
+        fl_ystart = int((len(length_bins) - fl_length) / 2)
+        fl_yend = int((len(length_bins) + fl_length) / 2)
         bin_data['fl_profile_center'][fl_ystart:fl_yend] = fl_data
 
     ### Do ploting ############################################################
     # make your own figure if one is not suplied. Otherwise you should add to that one
+    supplied_fig = True
     if fig == None:
         fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(4, 4))
         ax = [axes]
+        supplied_fig = False
 
-    ax_fl = ax[ax_i].twinx() # for plotting fluorecent sum or similar data
-
-    # Set up data for colormesh plot and make it.
-    fl_x = []
-    fl_y = []
-    fl_z = []
-
-    for l_bin, bin_data in sorted(length_bin_data.items()):
-        if x_unit == 'length':
-            fl_x.append(np.ones(len(length_bins)) * l_bin) # length bin, x position for scatter
-        elif x_unit == 'volume':
-            fl_x.append(np.ones(len(length_bins)) * bin_data['bin_volume'])
-
-        fl_y.append(np.arange(-1*(len(length_bins)-1)/2, (len(length_bins)-1)/2 + 1,
-                    1) * pxl2um) # cell length, y position for scatter
-        fl_z.append(length_bin_data[l_bin]['fl_profile_center'])
-    fl_x = np.stack(fl_x)
-    fl_y = np.stack(fl_y)
-    fl_z = np.stack(fl_z)
-
-    # normalize z height to between 0 and 1
-    fl_z = fl_z - np.min(fl_z)
-    fl_z = fl_z / np.max(fl_z)
-
-    # choose colormap see https://seaborn.pydata.org/generated/seaborn.cubehelix_palette.html#seaborn.cubehelix_palette
-    cmap_helix = sns.cubehelix_palette(start=0, rot=-0.4, dark=0.2, light=1, as_cmap=True)
-    colors = ax[ax_i].pcolormesh(fl_x, fl_y, fl_z,
-                              cmap=cmap_helix, shading='flat',
-                              rasterized=True) # shading can be flat or gouraud
-    if colorbar:
-        plt.colorbar(colors, ax=ax[ax_i], orientation='vertical', fraction=0.15, pad=0.2)
-
-    # plot average birth and division and growth lines
+    # plot average birth and division size
     if x_unit == 'length':
         sb = stats['sb']['mean']
         sd = stats['sd']['mean']
@@ -3383,36 +3922,20 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
         sb_label = 'mean birth volume'
         sd_label = 'mean birth volume'
 
-    # plot sb and sd
     if plot_mean_sizes:
         ax[ax_i].axvline(sb,
-                      lw=1, ls='--', c=sns.xkcd_rgb['light blue'], alpha=0.5,
-                      label=sb_label)
+                      lw=0.5, ls=':', c='k', alpha=0.75,
+                      label=sb_label, zorder=1)
         ax[ax_i].axvline(sd,
-                      lw=1, ls='--', c=sns.xkcd_rgb['dark blue'], alpha=0.5,
-                      label=sd_label)
+                      lw=0.5, ls=':', c='k', alpha=0.75,
+                      label=sd_label, zorder=1)
 
-    # plot lines of size
-    cell_lengths = sorted(length_bin_data.keys())
-    cell_volumes = np.array([bin_data['bin_volume'] for l_bin, bin_data in sorted(length_bin_data.items())])
-    cell_up = np.array([])
-    cell_down = np.array([])
-    for length in cell_lengths:
-        cell_up = np.append(cell_up, length/2)
-        cell_down = np.append(cell_down, -length/2) #  - 1 * pxl2um
-
-    if x_unit == 'length' : cell_x = cell_lengths
-    elif x_unit == 'volume' : cell_x = cell_volumes
-    ax[ax_i].plot(cell_x, cell_up,
-               lw=0.5, ls='-', c='k', alpha=0.75)
-    ax[ax_i].plot(cell_x, cell_down,
-               lw=0.5, ls='-', c='k', alpha=0.75)
-
-    # plot fluorescent sum and other data
+    # determine foci count and fl profile information
     cell_x = np.array([])
     cell_fl_sums = np.array([])
     cell_fl_maxs = np.array([])
     cell_foci_avg = np.array([])
+    cell_fl_amps = np.array([])
     for l_bin, bin_data in sorted(length_bin_data.items()): # this is good for py3
         if bin_data['bin_n'] > cell_min:
             if x_unit == 'length':
@@ -3422,9 +3945,10 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
             cell_fl_sums = np.append(cell_fl_sums, bin_data['fl_sum'])
             cell_fl_maxs = np.append(cell_fl_maxs, bin_data['fl_max'])
             cell_foci_avg = np.append(cell_foci_avg, bin_data['foci_avg'])
+            cell_fl_amps = np.append(cell_fl_amps, bin_data['fl_amp'])
 
     # foci count derivative
-    diff_step = 3
+    diff_step = 2
     cell_foci_diff = np.diff(cell_foci_avg[::diff_step])
     cell_x_mid = (cell_x[:-diff_step:diff_step] +
                  (cell_x[diff_step] - cell_x[0])/2)
@@ -3435,37 +3959,108 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
 
     # average foci count
     if fl_plot_data == 'foci_avg':
-        ax_fl.plot(cell_x, cell_foci_avg,
-                   lw=1, ls='-', c=sns.xkcd_rgb['dark blue'], alpha=0.5)
-        ax_fl.set_ylim(0, 3)
-        ax_fl.set_ylabel('mean replisome count', fontsize=labelfontsize)
+        ax[ax_i].plot(cell_x, cell_foci_avg,
+                   lw=1, ls='-', c='k', alpha=0.75,
+                   zorder=3)
+        ax[ax_i].set_ylabel('pairs of replisomes', fontsize=labelfontsize)
 
-        # ax_fl.get_yticks().set_visible(False)
-        ax_fl.set_yticks([0, 1, 2])
-        ax_fl.set_yticklabels([0, 2, 4])
-        # ax_fl.set_ylabel('fluorsecent sum')
-        # ax_fl.set_ylabel('fluorsecent max')
+        ax[ax_i].set_yticks([0, 1, 2, 4])
+        ax[ax_i].set_yticklabels([0, 1, 2, 4])
+        # ax[ax_i].set_yticklabels([1, 2, 4, 8])
+
+        ax[ax_i].set_ylim(0, None)
 
     elif fl_plot_data == 'foci_roc':
-        ax_fl.plot(cell_x_mid, cell_foci_diff,
-                   lw=1, ls='-', c=sns.xkcd_rgb['dark blue'], alpha=0.5)
-        ax_fl.set_ylim(0, None)
-        # ax_fl.set_ylabel('average number of foci derivative', fontsize=labelfontsize)
+        ax[ax_i].plot(cell_x_mid, cell_foci_diff,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('average number of foci derivative', fontsize=labelfontsize)
 
     elif fl_plot_data == 'bin_n':
-        if x_unit == 'length' : cell_x = cell_lengths
-        elif x_unit == 'volume' : cell_x = cell_volumes
+        # use full length for this, not the one which has a bin_n mininmum
+        if x_unit == 'length':
+            cell_x = np.array(sorted(length_bin_data.keys()))
+        elif x_unit == 'volume':
+            cell_x = np.array([bin_data['bin_volume'] for l_bin, bin_data in
+                              sorted(length_bin_data.items())])
         bin_ns = np.array([bin_data['bin_n'] for l_bin, bin_data in
                           sorted(length_bin_data.items())])
-        ax_fl.plot(cell_x, bin_ns,
-                   lw=1, ls='-', c=sns.xkcd_rgb['dark blue'], alpha=0.5)
-        ax_fl.set_ylim(0, None)
+        ax[ax_i].plot(cell_x, bin_ns,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('bin number', fontsize=labelfontsize)
 
-    else:
-        ax_fl.get_yaxis().set_visible(False)
-        ax_fl.spines['right'].set_visible(False)
+    # plot sum of fluorescent profile
+    elif fl_plot_data == 'fl_sum':
+        ax[ax_i].plot(cell_x, cell_fl_sums,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('fluorescent sum', fontsize=labelfontsize)
 
-    ax_fl.spines['top'].set_visible(False)
+    # plot sum of non linear amplification
+    elif fl_plot_data == 'fl_amp':
+        ax[ax_i].plot(cell_x, cell_fl_amps,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('fluorescent amplification', fontsize=labelfontsize)
+
+    # for plotting fluorecent profile
+    if plot_profile_ensemble:
+        ax_fl = ax[ax_i].twinx()
+        ax = np.append(ax, ax_fl)
+
+        # Set up data for colormesh plot and make it.
+        fl_x = []
+        fl_y = []
+        fl_z = []
+
+        for l_bin, bin_data in sorted(length_bin_data.items()):
+            if x_unit == 'length':
+                fl_x.append(np.ones(len(length_bins)) * l_bin) # length bin, x position for scatter
+            elif x_unit == 'volume':
+                fl_x.append(np.ones(len(length_bins)) * bin_data['bin_volume'])
+
+            fl_y.append(np.arange(-1*(len(length_bins)-1)/2, (len(length_bins)-1)/2 + 1,
+                        1) * pxl2um) # cell length, y position for scatter
+            fl_z.append(length_bin_data[l_bin]['fl_profile_center'])
+        fl_x = np.stack(fl_x)
+        fl_y = np.stack(fl_y)
+        fl_z = np.stack(fl_z)
+
+        # normalize z height to between 0 and 1
+        fl_z = fl_z - np.min(fl_z)
+        fl_z = fl_z / np.max(fl_z)
+
+        # choose colormap see https://seaborn.pydata.org/generated/seaborn.cubehelix_palette.html#seaborn.cubehelix_palette
+        cmap_helix = sns.cubehelix_palette(start=0, rot=-0.4, dark=0.2, light=1, as_cmap=True)
+        colors = ax_fl.pcolormesh(fl_x, fl_y, fl_z,
+                                  cmap=cmap_helix, shading='flat',
+                                  zorder=0, rasterized=True) # shading can be flat or gouraud
+
+        # plot lines of size
+        cell_lengths = sorted(length_bin_data.keys())
+        cell_volumes = np.array([bin_data['bin_volume'] for l_bin, bin_data in sorted(length_bin_data.items())])
+        cell_up = np.array([])
+        cell_down = np.array([])
+        for length in cell_lengths:
+            cell_up = np.append(cell_up, length/2)
+            cell_down = np.append(cell_down, -length/2) #  - 1 * pxl2um
+
+        if x_unit == 'length' : cell_x = cell_lengths
+        elif x_unit == 'volume' : cell_x = cell_volumes
+        ax_fl.plot(cell_x, cell_up,
+                   lw=0.5, ls='-', c='k', alpha=0.75)
+        ax_fl.plot(cell_x, cell_down,
+                   lw=0.5, ls='-', c='k', alpha=0.75)
+
+        # special formatting for second axis
+        ax_fl.spines['top'].set_visible(False)
+        # need to set the z order of this whole axis below the other one
+        ax_fl.set_zorder(ax[ax_i].get_zorder()-1)
+        ax[ax_i].patch.set_visible(False) # remove canvas of top plot
+
+        if colorbar:
+            plt.colorbar(colors, ax=ax[ax_i], orientation='vertical', fraction=0.15, pad=0.2)
 
     ### formatting
     # set axis limits and labels
@@ -3477,16 +4072,294 @@ def plot_cc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_
         ax[ax_i].set_xlim(sb-0.5, sd+0.5) # should be volumes due to above
         ax[ax_i].set_xlabel('cell volume ($\mu$m$^3$)', fontsize=labelfontsize)
 
-    ax[ax_i].set_ylim(-np.ceil(stats['sd']['mean']+1)/2, np.ceil(stats['sd']['mean']+1)/2)
-    ax[ax_i].set_ylabel('replisome position along long axis ' + pnames['um'],
-                        fontsize=labelfontsize)
+    if plot_profile_ensemble:
+        ax_fl.set_ylim(-np.ceil(stats['sd']['mean']+1)/2, np.ceil(stats['sd']['mean']+1)/2)
 
-    if fig == None:
+        if supplied_fig == False:
+            ax_fl.set_ylabel('replisome position\nalong long axis ' + pnames['um'],
+                                fontsize=labelfontsize)
+
+    if supplied_fig == False:
         plt.tight_layout()
-        plt.suptitle('Fluorescence ensemble plot aligned by size', fontsize=MEDIUM_SIZE*1.2)
-        plt.subplots_adjust(top=0.9, bottom=0.5)
+        plt.suptitle('Fluorescence ensemble plot aligned by size', fontsize=MEDIUM_SIZE)
+        plt.subplots_adjust(top=0.9, bottom=0.05)
 
     return fig, ax, length_bin_data, foci_roc_data
+
+def plot_nuc_ensemble(Cells, fig=None, ax=None, ax_i=0, time_int=1, fl_int=2, fl_start=1, pxl2um=1, cell_min=50, colorbar=True, plot_mean_sizes=True, x_unit='length', fl_plot_data='foci_avg', plot_profile_ensemble=True, labelfontsize=MEDIUM_SIZE):
+    '''For nucleoid signal ensemble.
+    Assumes nucleoid signal information is on c3.
+
+    Parameters
+    ----------
+    Cells : dict of Cell objects
+        Cells must have fl_profile_sub_c2 information.
+    fig : matplotlib Figure
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects. If the fluorescent profiles are plotted, the extra axes will be appended to this.
+    ax_i : int
+        Index of the axis to plot on.
+    time_int : int or float
+        Used to adjust the X axis to plot in hours
+    fl_int : int
+        Used to plot the florescence at the correct interval. Interval is relative to time interval, i.e., every time is 1, every other time is 2, etc.
+    fl_start : int
+        Time point on which fluorscent imaging begins. Normally 1, but can be 2.
+    plx2um : float
+        Conversion factor between pixels and microns.
+    cell_min : int
+        Minimum number of cells which must contribute to a size bin for it to be plotted.
+    plot_mean_sizes : boolean
+        Whether to plot average birth and division size
+    x_unit : 'length' or 'volume'
+        Whether to plot cell length or volume along the x axis
+    colorbar : boolean
+        Whether to display the colorbar or not.
+    fl_plot_data : None, 'n_bin', 'fl_sum'
+        Indicates what to plot on the first axis
+    plot_profile_ensemble : boolean
+        Whether or not to plot the fluorescent profile ensembles. Uses second axis
+    labelfontsize : float
+        X and Y label font size.
+    '''
+    ### Calculate ensemble data
+    # recover stats for setting bounds and calculating volume
+    stats = stats_table(cells2df(Cells))
+
+    # initialize bins for different lengths.
+    # Will do spacing of 10th of a micron
+    max_length_int = np.ceil(stats['sd']['max']+1)
+    length_bins = np.linspace(0, max_length_int, max_length_int*10+1)
+    length_bin_data = {np.around(l_bin,1) : dict(bin_n=0,
+                                                 bin_volume=0,
+                                                 fl_profile=np.zeros(int(max_length_int/pxl2um)),
+                                                 fl_sum=0,
+                                                 fl_max=0) for l_bin in length_bins}
+    # calculate corresponding volume for this length bin
+    population_width = stats['width']['mean']
+    pop_radius = population_width / 2
+    for l_bin, bin_data in sorted(length_bin_data.items()):
+        # volume is cylinder + sphere using width as radius
+        cyl_length = l_bin - population_width
+        volume = (((4/3) * np.pi * np.power(pop_radius, 3)) +
+                  (np.pi * np.power(pop_radius, 2) * cyl_length))
+        bin_data['bin_volume'] = volume
+
+    # add information cell by cell
+    for cell_id, cell_tmp in Cells.items():
+        # print(cell_id)
+        # find calculated growth rate and length # Ld = Lb * exp(growth_rate * tau)
+        growth_rate_calc = np.log(cell_tmp.sd/cell_tmp.sb) / cell_tmp.tau
+        times_for_length_calc = (np.array(cell_tmp.times) - cell_tmp.times[0]) * time_int
+        lengths_calc = cell_tmp.sb * np.exp(growth_rate_calc * times_for_length_calc)
+
+        # go through times with calculated lengths and get corresponding fluorescent information.
+        # go ahead and filter out lengths and times that don't have fl information
+        if fl_start == 1 and fl_int != 1:
+            times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % fl_int==1 or t==1]
+
+        elif fl_start == 2 and fl_int != 1:
+            times_w_lengths = [(t, l) for t, l in zip(cell_tmp.times, lengths_calc) if t % 2 == 0]
+
+        elif fl_start == 1 and fl_int == 1:
+            times_w_lengths = list(zip(cell_tmp.times, lengths_calc))
+
+        # print(list(times_w_lengths))
+
+        # add fluorescent data to array.
+        # Becaues the fluorescent profile is not necessarily the exact same length as the cell length, it should be trimmed from the ends so that each fl_profile is the same length.
+        for t, l in times_w_lengths:
+            l_bin = np.around(l, 1)
+            fl_profile = cell_tmp.fl_profiles_sub_c3[cell_tmp.times.index(t)]
+            fl_profile_px_len = int(np.around(np.around(l_bin,1)/pxl2um, 0))
+
+            start_trim = int((len(fl_profile) - fl_profile_px_len) / 2)
+            end_trim = int(np.ceil((len(fl_profile) - fl_profile_px_len) / 2))
+            fl_profile = fl_profile[start_trim:-end_trim]
+            # print(len(fl_profile) - fl_profile_px_len)
+            # print(end_trim, len(fl_profile), l_bin)
+            # add fl profile to data dicionary
+            # try:
+            length_bin_data[l_bin]['bin_n'] += 1
+            length_bin_data[l_bin]['fl_profile'][:len(fl_profile)] += fl_profile
+            # except:
+            #     print(l_bin, len(fl_profile), fl_profile)
+
+        # break
+
+    # print(length_bin_data)
+
+    # average data at each bin, but only if there are enough cells for that datapoint
+    for l_bin, bin_data in length_bin_data.items():
+        if bin_data['bin_n'] > cell_min:
+            bin_data['fl_profile_norm'] = bin_data['fl_profile'] / bin_data['bin_n']
+        else:
+            # print(bin_data['fl_profile'])
+            bin_data['fl_profile_norm'] = np.zeros_like(bin_data['fl_profile'])
+
+    # find additional data from the normed profile
+    for l_bin, bin_data in length_bin_data.items():
+        if bin_data['bin_n'] > cell_min:
+            bin_data['fl_sum'] = sum(bin_data['fl_profile_norm'])
+            bin_data['fl_max'] = max(bin_data['fl_profile_norm'])
+
+    # adjust position so it is centered
+    noise_floor = 0 # this was needed to sort out data when fl_profiles were of different lengths. It is unused now because I ensure a certain length for each bin above.
+    for l_bin, bin_data in sorted(length_bin_data.items()):
+        bin_data['fl_profile_center'] = np.zeros(len(length_bins))
+        fl_length = sum(bin_data['fl_profile_norm'] > noise_floor)
+        # print(l_bin, fl_length, fl_length*pxl2um, bin_data['fl_profile_norm'])
+        fl_data = bin_data['fl_profile_norm'][bin_data['fl_profile_norm'] > noise_floor]
+        fl_ystart = int((len(length_bins) - fl_length) / 2)
+        fl_yend = int((len(length_bins) + fl_length) / 2)
+        bin_data['fl_profile_center'][fl_ystart:fl_yend] = fl_data
+
+    ### Do ploting ############################################################
+    # make your own figure if one is not suplied. Otherwise you should add to that one
+    supplied_fig = True
+    if fig == None:
+        fig, axes = plt.subplots(ncols=1, nrows=1, figsize=(4, 4))
+        ax = [axes]
+        supplied_fig = False
+
+    # plot average birth and division size
+    if x_unit == 'length':
+        sb = stats['sb']['mean']
+        sd = stats['sd']['mean']
+        sb_label = 'mean birth length'
+        sd_label = 'mean birth length'
+
+    elif x_unit == 'volume':
+        sb = (((4/3) * np.pi * np.power(pop_radius, 3)) +
+                    (np.pi * np.power(pop_radius, 2) * (stats['sb']['mean'] - population_width)))
+        sd = (((4/3) * np.pi * np.power(pop_radius, 3)) +
+                    (np.pi * np.power(pop_radius, 2) * (stats['sd']['mean'] - population_width)))
+        sb_label = 'mean birth volume'
+        sd_label = 'mean birth volume'
+
+    if plot_mean_sizes:
+        ax[ax_i].axvline(sb,
+                      lw=0.5, ls=':', c='k', alpha=0.75,
+                      label=sb_label, zorder=1)
+        ax[ax_i].axvline(sd,
+                      lw=0.5, ls=':', c='k', alpha=0.75,
+                      label=sd_label, zorder=1)
+
+    # determine foci count and fl profile information
+    cell_x = np.array([])
+    cell_fl_sums = np.array([])
+    cell_fl_maxs = np.array([])
+    for l_bin, bin_data in sorted(length_bin_data.items()): # this is good for py3
+        if bin_data['bin_n'] > cell_min:
+            if x_unit == 'length':
+                cell_x = np.append(cell_x, l_bin)
+            elif x_unit == 'volume':
+                cell_x = np.append(cell_x, bin_data['bin_volume'])
+            cell_fl_sums = np.append(cell_fl_sums, bin_data['fl_sum'])
+            cell_fl_maxs = np.append(cell_fl_maxs, bin_data['fl_max'])
+
+    if fl_plot_data == 'bin_n':
+        # use full length for this, not the one which has a bin_n mininmum
+        if x_unit == 'length':
+            cell_x = np.array(sorted(length_bin_data.keys()))
+        elif x_unit == 'volume':
+            cell_x = np.array([bin_data['bin_volume'] for l_bin, bin_data in
+                              sorted(length_bin_data.items())])
+        bin_ns = np.array([bin_data['bin_n'] for l_bin, bin_data in
+                          sorted(length_bin_data.items())])
+        ax[ax_i].plot(cell_x, bin_ns,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('bin number', fontsize=labelfontsize)
+
+    # plot sum of fluorescent profile
+    elif fl_plot_data == 'fl_sum':
+        ax[ax_i].plot(cell_x, cell_fl_sums,
+                   lw=1, ls='-', c='k', alpha=0.75)
+        ax[ax_i].set_ylim(0, None)
+        ax[ax_i].set_ylabel('fluorescent sum', fontsize=labelfontsize)
+
+    # for plotting fluorecent profile
+    if plot_profile_ensemble:
+        ax_fl = ax[ax_i].twinx()
+        ax = np.append(ax, ax_fl)
+
+        # Set up data for colormesh plot and make it.
+        fl_x = []
+        fl_y = []
+        fl_z = []
+
+        for l_bin, bin_data in sorted(length_bin_data.items()):
+            if x_unit == 'length':
+                fl_x.append(np.ones(len(length_bins)) * l_bin) # length bin, x position for scatter
+            elif x_unit == 'volume':
+                fl_x.append(np.ones(len(length_bins)) * bin_data['bin_volume'])
+
+            fl_y.append(np.arange(-1*(len(length_bins)-1)/2, (len(length_bins)-1)/2 + 1,
+                        1) * pxl2um) # cell length, y position for scatter
+            fl_z.append(length_bin_data[l_bin]['fl_profile_center'])
+        fl_x = np.stack(fl_x)
+        fl_y = np.stack(fl_y)
+        fl_z = np.stack(fl_z)
+
+        # normalize z height to between 0 and 1
+        fl_z = fl_z - np.min(fl_z)
+        fl_z = fl_z / np.max(fl_z)
+
+        # choose colormap see https://seaborn.pydata.org/generated/seaborn.cubehelix_palette.html#seaborn.cubehelix_palette
+        cmap_helix = sns.cubehelix_palette(start=1, rot=-0.4, dark=0.2, light=1, as_cmap=True)
+        colors = ax_fl.pcolormesh(fl_x, fl_y, fl_z,
+                                  cmap=cmap_helix, shading='flat',
+                                  zorder=0, rasterized=True) # shading can be flat or gouraud
+
+        # plot lines of size
+        cell_lengths = sorted(length_bin_data.keys())
+        cell_volumes = np.array([bin_data['bin_volume'] for l_bin, bin_data in sorted(length_bin_data.items())])
+        cell_up = np.array([])
+        cell_down = np.array([])
+        for length in cell_lengths:
+            cell_up = np.append(cell_up, length/2)
+            cell_down = np.append(cell_down, -length/2) #  - 1 * pxl2um
+
+        if x_unit == 'length' : cell_x = cell_lengths
+        elif x_unit == 'volume' : cell_x = cell_volumes
+        ax_fl.plot(cell_x, cell_up,
+                   lw=0.5, ls='-', c='k', alpha=0.75)
+        ax_fl.plot(cell_x, cell_down,
+                   lw=0.5, ls='-', c='k', alpha=0.75)
+
+        # special formatting for second axis
+        ax_fl.spines['top'].set_visible(False)
+        # need to set the z order of this whole axis below the other one
+        ax_fl.set_zorder(ax[ax_i].get_zorder()-1)
+        ax[ax_i].patch.set_visible(False) # remove canvas of top plot
+
+        if colorbar:
+            plt.colorbar(colors, ax=ax[ax_i], orientation='vertical', fraction=0.15, pad=0.2)
+
+    ### formatting
+    # set axis limits and labels
+    if x_unit == 'length':
+        xlims = (np.floor(stats['sb']['mean'])-0.5, np.ceil(stats['sd']['mean']+1))
+        ax[ax_i].set_xlim(xlims[0], xlims[1])
+        ax[ax_i].set_xlabel('cell length ' + pnames['um'], fontsize=labelfontsize)
+    elif x_unit == 'volume':
+        ax[ax_i].set_xlim(sb-0.5, sd+0.5) # should be volumes due to above
+        ax[ax_i].set_xlabel('cell volume ($\mu$m$^3$)', fontsize=labelfontsize)
+
+    if plot_profile_ensemble:
+        ax_fl.set_ylim(-np.ceil(stats['sd']['mean']+1)/2, np.ceil(stats['sd']['mean']+1)/2)
+
+        if supplied_fig == False:
+            ax_fl.set_ylabel('nucleoid position\nalong long axis ' + pnames['um'],
+                                fontsize=labelfontsize)
+
+    if supplied_fig == False:
+        plt.tight_layout()
+        plt.suptitle('Fluorescence ensemble plot aligned by size', fontsize=MEDIUM_SIZE)
+        plt.subplots_adjust(top=0.9, bottom=0.05)
+
+    return fig, ax, length_bin_data
 
 ### Fitting functions ##############################################################################
 def produce_cell_fit(Cell):
@@ -3669,8 +4542,8 @@ def merge_two_dicts(x, y):
     z.update(y)    # modifies z with y's keys and values & returns None
     return z
 
-def binned_stat(x, y, bin_edges='sturges', binmin=None):
-    '''Calculate binned mean on X. Returns plotting variables
+def binned_stat(x, y, statistic='mean', bin_edges='sturges', binmin=None):
+    '''Calculate binned mean or median on X. Returns plotting variables
 
     bin_edges : int or list/array
         If int, this is the number of bins. If it is a list it defines the bin edges.
@@ -3687,7 +4560,7 @@ def binned_stat(x, y, bin_edges='sturges', binmin=None):
 
     # calculate mean
     bin_result = sps.binned_statistic(x, y,
-                                      statistic='mean', bins=bin_edges)
+                                      statistic=statistic, bins=bin_edges)
     bin_means, bin_edges, bin_n = bin_result
     bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
 
@@ -3695,6 +4568,10 @@ def binned_stat(x, y, bin_edges='sturges', binmin=None):
     bin_error_result = sps.binned_statistic(x, y,
                                             statistic=np.std, bins=bin_edges)
     bin_stds, _, _ = bin_error_result
+
+    # if using median, multiply this number by 1.253. Holds for large samples only
+    if statistic == 'median':
+        bin_stds = bin_stds * 1.253
 
     bin_count_results = sps.binned_statistic(x, y,
                                              statistic='count', bins=bin_edges)
@@ -3719,7 +4596,6 @@ def binned_stat(x, y, bin_edges='sturges', binmin=None):
         bin_errors = bin_errors[~np.isnan(bin_means)]
 
     return bin_centers, bin_means, bin_errors
-
 
 ### Unicode table
 def unicode_table():
