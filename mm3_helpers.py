@@ -261,8 +261,12 @@ def load_specs():
     try:
         with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
             specs = yaml.safe_load(specs_file)
-    except ValueError:
-        warning('Could not load specs file.')
+    except:
+        try:
+            with open(os.path.join(params['ana_dir'], 'specs.pkl'), 'rb') as specs_file:
+                specs = pickle.load(specs_file)
+        except ValueError:
+            warning('Could not load specs file.')
 
     return specs
 
@@ -2340,11 +2344,11 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                            mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
-        image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
-        #image_datagen = ImageDataGenerator()
-        #image_generator = image_datagen.flow(x=img_stack,
-        #                                     batch_size=batch_size,
-        #                                     shuffle=False) # keep same order
+        # image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
+        image_datagen = ImageDataGenerator()
+        image_generator = image_datagen.flow(x=img_stack,
+                                             batch_size=batch_size,
+                                             shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
         predictions = model.predict_generator(image_generator, **predict_args)
@@ -2527,8 +2531,6 @@ class CellSegmentationDataGenerator(utils.Sequence):
             X[i,:,:,0] = tmpImg
 
         return (X)
-
-
 
 # class for image generation for predicting trap locations in phase-contrast images
 class TrapSegmentationDataGenerator(utils.Sequence):
@@ -2732,6 +2734,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # load segmented data
     image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
+    # image_data_seg = load_stack(fov_id, peak_id, color='seg')
 
     # Calculate all data for all time points.
     # this list will be length of the number of time points
