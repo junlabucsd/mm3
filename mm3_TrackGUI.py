@@ -370,7 +370,7 @@ class TrackItem(QGraphicsScene):
 
         with open(cell_filename, 'rb') as cell_file:
             self.Cells = pickle.load(cell_file)
-        mm3.calculate_pole_age(self.Cells) # add poleage
+        # mm3.calculate_pole_age(self.Cells) # add poleage
 
         with open(cell_filename_all, 'rb') as cell_file:
             self.All_Cells = pickle.load(cell_file)
@@ -768,10 +768,10 @@ class TrackItem(QGraphicsScene):
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
 
                     # daughter 1 and 2 label
-                    d1_label = self.All_Cells[cell_tmp.daughters[0]].labels[0]
-                    d2_label = self.All_Cells[cell_tmp.daughters[1]].labels[0]
+                    d1_label = self.All_Cells[cell_tmp.daughters[0].id].labels[0]
 
                     try:
+                        d2_label = self.All_Cells[cell_tmp.daughters[1].id].labels[0]
                         regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
                         regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
 
@@ -779,8 +779,13 @@ class TrackItem(QGraphicsScene):
                         print("At timepoint {} there was an index error in assigning daughters: {}".format(t,e))
 
                 # A apoptosis, 2
-                # skip here. Will update data with input from user.
-
+                try:
+                    if cell_tmp.death and i == len(cell_tmp.times)-1:
+                        regions_and_events_by_time[t]['regions'][label_tmp]['events'][2] = 1
+                # skip here if no death attribute. Of course can update data with input from user.
+                except AttributeError as e:
+                    print(e)
+                
                 # B birth, 3
                 if cell_tmp.parent and i == 0:
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][3] = 1
