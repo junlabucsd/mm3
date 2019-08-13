@@ -17,6 +17,7 @@ except:
 import numpy as np
 from scipy.io import savemat
 
+from skimage import measure
 from tensorflow.keras import models
 
 # user modules
@@ -45,6 +46,8 @@ if __name__ == "__main__":
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
+    # parser.add_argument('-p', '--peak', type=str,
+    #                     required=False, help='List of peak ids to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc', type=int,
                         required=False, help='Number of processors to use.')
     parser.add_argument('-m', '--modelfile', type=str,
@@ -69,6 +72,15 @@ if __name__ == "__main__":
     else:
         user_spec_fovs = []
 
+    # if namespace.peak:
+    #     if '-' in namespace.peak:
+    #         user_spec_peaks = range(int(namespace.fov.split("-")[0]),
+    #                                int(namespace.fov.split("-")[1])+1)
+    #     else:
+    #         user_spec_peaks = [int(val) for val in namespace.fov.split(",")]
+    # else:
+    #     user_spec_peaks = []
+
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
@@ -86,7 +98,7 @@ if __name__ == "__main__":
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-
+    
     # remove fovs if the user specified so
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
@@ -94,9 +106,12 @@ if __name__ == "__main__":
     mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     mm3.information("Creating cell lineages.")
-    mm3.information("Reading track model in {}.".format(p['tracking']['track_model']))
+    mm3.information("Reading track models. This could take a few minutes.")
 
-    track_model = models.load_model(p['tracking']['track_model'])
+    # read in models as dictionary
+    # keys are 'migrate_model', 'child_model', 'appear_model', 'die_model', 'disappear_model', etc.
+    # NOTE on 2019-07-15: For now, some of the models are ignored by the tracking algorithm, as they don't yet perform well
+    model_dict = mm3.get_tracking_model_dict()
 
     # Load time table, which goes into params
     mm3.load_time_table()
@@ -104,44 +119,61 @@ if __name__ == "__main__":
     # This dictionary holds information for all cells
     # Cells = {}
 
-    # do lineage creation per fov
-    tracks = None
+    # do lineage creation per fov, per trap
+    tracks = {}
     for i,fov_id in enumerate(fov_id_list):
+        # tracks[fov_id] = {}
         # update will add the output from make_lineages_function, which is a
         # dict of Cell entries, into Cells
         ana_peak_ids = [peak_id for peak_id in specs[fov_id].keys() if specs[fov_id][peak_id] == 1]
+        # ana_peak_ids = [9,13,15,19,25,33,36,37,38,39] # was used for debugging
         for j,peak_id in enumerate(ana_peak_ids):
-            if tracks is None:
-                tracks = mm3.deep_lineage_chnl_stack(fov_id, peak_id, track_model)
-                if tracks is not None:
-                    tracks['fov_id'] = fov_id
-                    tracks['peak_id'] = peak_id
-            else:
-                tmp_df = mm3.deep_lineage_chnl_stack(fov_id, peak_id, track_model)
-                if tmp_df is not None:
-                    tmp_df['fov_id'] = fov_id
-                    tmp_df['peak_id'] = peak_id
-                    tracks = tracks.append(tmp_df, ignore_index=True)
+
+            seg_stack = mm3.load_stack(fov_id, peak_id, color=p['seg_img'])
+            # run predictions for each tracking class
+            # consider only the top six cells for a given trap when doing tracking
+            cell_number = 6
+            frame_number = seg_stack.shape[0]
+            # get region properties
+            regions_by_time = [measure.regionprops(label_image=img) for img in seg_stack]
+
+            # have generator yield info for top six cells in all frames
+            prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,9))
+            cell_info = prediction_generator.__getitem__(0)
+
+            predictions_dict = {}
+            # run data through each classification model
+            for key,mod in model_dict.items():
+
+                # Run predictions and add to dictionary
+                if key in ['zero_cell_model', 'one_cell_model' , 'two_cell_model', 'geq_three_cell_model']:
+                    continue
+
+                mm3.information('Predicting probability of {} events in FOV {}, trap {}.'.format('_'.join(key.split('_')[:-1]), fov_id, peak_id))
+                predictions_dict['{}_predictions'.format(key)] =  mod.predict(cell_info)
+
+            G,graph_df = mm3.initialize_track_graph(peak_id=peak_id, 
+                                                    fov_id=fov_id, 
+                                                    experiment_name=p['experiment_name'], 
+                                                    predictions_dict=predictions_dict,
+                                                    regions_by_time = regions_by_time,
+                                                    born_threshold=0.85,
+                                                    appear_threshold=0.85)
+
+            # tracks[fov_id][peak_id] = mm3.create_lineages_from_graph_2(G, graph_df, fov_id, peak_id)
+            tracks.update(mm3.create_lineages_from_graph(G, graph_df, fov_id, peak_id))
 
     mm3.information("Finished lineage creation.")
 
     ### Now prune and save the data.
-    mm3.information("Curating and saving cell data.")
-
-    with open(os.path.join(p['cell_dir'], '{}_tracks.csv'.format(p['experiment_name'])), 'w') as track_file:
-        tracks.to_csv(track_file, index=False)
-
-    # # this returns only cells with a parent and daughters
-    # Complete_Cells = mm3.find_complete_cells(Cells)
+    mm3.information("Saving cell data.")
 
     ### save the cell data. Use the script mm3_OutputData for additional outputs.
     # All cell data (includes incomplete cells)
-    # with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
-    #     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+    if not os.path.isdir(p['cell_dir']):
+        os.mkdir(p['cell_dir'])
 
-    # # Just the complete cells, those with mother and daugther
-    # # This is a dictionary of cell objects.
-    # with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
-    #     pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+    with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
+        pickle.dump(tracks, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     mm3.information("Finished curating and saving cell data.")

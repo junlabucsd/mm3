@@ -55,6 +55,12 @@ if __name__ == "__main__":
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-t', '--traindir', type=str,
                         required=True, help='Absolute path to the directory where you want your "images" and "masks" training data directories to be created and images to be saved.')
+    parser.add_argument('-c', '--channel', type=int,
+                        required=False, default=1,
+                        help='Which channel, e.g. phase or some fluorescence image, should be used for creating masks. \
+                            Accepts integers. Default is 1, which is usually your phase contrast images.')
+    parser.add_argument('-n', '--no_prior_mask', action='store_true',
+                        help='Apply this argument is you are making masks de novo, i.e., if no masks exist yet for your images.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -95,12 +101,18 @@ if __name__ == "__main__":
     # get paired phase file names and mask file names for each fov
     fov_filename_dict = {}
     for fov_id in fov_id_list:
-        mask_filenames = [os.path.join(p['seg_dir'],fname) for fname in glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*{}.tif'.format(fov_id,p['seg_img'])))]
-        phase_filenames = [fname.replace(p['seg_dir'], p['chnl_dir']).replace(p['seg_img'], p['phase_plane']) for fname in mask_filenames]
+        if namespace.no_prior_mask:
+            mask_filenames = None
+        else:
+            mask_filenames = [os.path.join(p['seg_dir'],fname) for fname in glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*{}.tif'.format(fov_id,p['seg_img'])))]
+        image_filenames = [fname.replace(p['seg_dir'], p['chnl_dir']).replace(p['seg_img'], 'c{}'.format(namespace.channel)) for fname in mask_filenames]
 
         fov_filename_dict[fov_id] = []
-        for i in range(len(mask_filenames)):
-            fov_filename_dict[fov_id].append((phase_filenames[i],mask_filenames[i]))
+        if mask_filenames is not None:
+            for i in range(len(mask_filenames)):
+                fov_filename_dict[fov_id].append((image_filenames[i],mask_filenames[i]))
+        else:
+            fov_filename_dict[fov_id].append((image_filenames[i], None))
 
     # print([names for names in fov_filename_dict[1]]) # for debugging
 
