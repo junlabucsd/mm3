@@ -5278,7 +5278,7 @@ def find_mother_cells(Cells):
 
 ### functions for additional cell centric analysis
 
-def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='sub_c2'):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
@@ -5286,7 +5286,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False):
     '''
 
     # Load fluorescent images and segmented images for this channel
-    fl_stack = load_stack(fov_id, peak_id, color='sub_c2')
+    fl_stack = load_stack(fov_id, peak_id, color=channel_name)
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # determine absolute time index
