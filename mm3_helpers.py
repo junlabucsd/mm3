@@ -38,6 +38,7 @@ from skimage.transform import rotate
 from skimage.feature import match_template # used to align images
 from skimage.feature import blob_log # used for foci finding
 from skimage.filters import threshold_otsu, median # segmentation
+from skimage import filters
 from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
@@ -5277,6 +5278,74 @@ def find_mother_cells(Cells):
     return Mother_Cells
 
 ### functions for additional cell centric analysis
+
+def find_all_cell_intensities(fov_id, peak_id, Cells, 
+                              specs, time_table, channel_name='sub_c2',
+                              apply_background_correction=True):
+    '''
+    Finds fluorescenct information for cells. All the cells in Cells
+    should be from one fov/peak. 
+    '''
+
+    # iterate over each fov in specs
+    for fov_id,fov_peaks in specs.items():
+        
+        # iterate over each peak in fov
+        for peak_id,peak_value in fov_peaks.items():
+        
+            # if peak_id's value is not 1, go to next peak
+            if peak_value != 1:
+                continue
+
+            # Load fluorescent images and segmented images for this channel
+            fl_stack = load_stack(fov_id, peak_id, color=channel_name)
+            corrected_stack = np.zeros(fl_stack.shape)
+
+            for frame in range(fl_stack.shape[0]):
+                # median filter will be applied to every image
+                median_filtered = median(fl_stack[frame,...], selem=morphology.disk(1))
+
+                # subtract the gaussian-filtered image from true image to correct 
+                #   uneven background fluorescence
+                if apply_background_correction:
+                    blurred = filters.gaussian(median_filtered, sigma=10, preserve_range=True)
+                    corrected_stack[frame,:,:] = median_filtered-blurred
+                else:
+                    corrected_stack[frame,:,:] = median_filtered
+
+            seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
+
+            # evaluate whether each cell is in this fov/peak combination
+            for cell_id,cell in Cells.items():
+                cell_fov = cell.fov
+                if cell_fov != fov_id:
+                    continue
+
+                cell_peak = cell.peak
+                if cell_peak != peak_id:
+                    continue
+
+                cell_times = cell.times
+                cell_labels = cell.labels
+                cell.area_mean_fluorescence = {channel_name:[]}
+                cell.volume_mean_fluorescence = {channel_name:[]}
+                cell.total_fluorescence = {channel_name:[]}
+
+                # loop through cell's times
+                for i,t in enumerate(cell_times):
+                    frame = t-1
+                    seconds = time_table[fov_id][t]
+                    cell_label = cell_labels[i]
+
+                    total_fluor = np.sum(corrected_stack[frame, seg_stack[frame, :,:] == cell_label])
+
+                    cell.area_mean_fluorescence[channel_name].append(total_fluor/cell.areas[i])
+                    cell.volume_mean_fluorescence[channel_name].append(total_fluor/cell.volumes[i])
+                    cell.total_fluorescence[channel_name].append(total_fluor)
+
+    # The cell objects in the original dictionary will be updated,
+    # no need to return anything specifically.
+    return
 
 def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='sub_c2'):
     '''
