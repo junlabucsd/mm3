@@ -275,7 +275,7 @@ class MaskTransparencyWidget(QWidget):
                 self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
 
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
 
                 self.label = QLabel(self)
@@ -341,11 +341,19 @@ class MaskTransparencyWidget(QWidget):
                 print("Saved binary mask image as: ", savePath)
 
                 if not os.path.isdir(self.mask_dir):
-                        os.makedirs(self.mask_dir)
+                    os.makedirs(self.mask_dir)
 
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+                # saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8)
+
+                # This was bugging out and making the image not the same size as it started
+                # saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+
+                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaledToHeight(self.originalHeight)
+
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
+
+                print(self.originalHeight, self.originalWidth, qimgHeight, qimgWidth)
 
                 saveArr = np.zeros((qimgHeight,qimgWidth),dtype='uint8')
                 for rowIndex in range(qimgHeight):
@@ -364,14 +372,14 @@ class MaskTransparencyWidget(QWidget):
 
 
         def reset(self):
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
                 self.update()
 
         def clear(self):
                 self.imgFill = QColor(0, 0, 0, self.alpha)
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQimage.fill(self.imgFill)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
@@ -416,7 +424,7 @@ class MaskTransparencyWidget(QWidget):
                 self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
 
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
 
@@ -586,7 +594,7 @@ class PhaseWidget(QWidget):
                 rescaledImg = img/self.originalImgMax*255
                 RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = RGBImg.shape
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
 
                 self.label = QLabel(self)
@@ -599,7 +607,7 @@ class PhaseWidget(QWidget):
 
                 rescaledImg = img/np.max(img)*255
                 RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
                 self.label.setPixmap(self.phaseQpixmap)
 
