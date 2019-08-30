@@ -216,19 +216,20 @@ def cells2_ccdf(Cells, add_volume=True):
     '''
 
     # columns to include
-    columns = ['fov', 'peak', 'birth_label',
-               'birth_time', 'division_time',
-               'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position',
-               'initiation_time', 'termination_time', 'n_oc',
-               'true_initiation_length', 'initiation_length',
-               'true_initiation_volume', 'initiation_volume',
-               'unit_cell', 'initiation_delta',
-               'B', 'C', 'D', 'tau_cyc',
-               'segregation_time', 'segregation_length', 'segregation_volume',
-               'termination_length', 'termination_volume',
-               'S', 'IS', 'TS',
-               'segregation_delta', 'termination_delta',
-               'segregation_delta_mother', 'segregation_length_mother']
+    columns_w_seg = ['fov', 'peak', 'birth_label',
+                   'birth_time', 'division_time',
+                   'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position',
+                   'initiation_time', 'termination_time', 'n_oc',
+                   'true_initiation_length', 'initiation_length',
+                   'true_initiation_volume', 'initiation_volume',
+                   'unit_cell', 'initiation_delta',
+                   'B', 'C', 'D', 'tau_cyc',
+                   'segregation_time', 'segregation_length', 'segregation_volume',
+                   'termination_length', 'termination_volume',
+                   'S', 'IS', 'TS',
+                   'segregation_delta', 'termination_delta',
+                   'segregation_delta_mother', 'segregation_length_mother']
+    columns_no_seg = columns_w_seg[:25]
 
     # should not need this as of unet
     # for cell_tmp in Cells:
@@ -238,7 +239,12 @@ def cells2_ccdf(Cells, add_volume=True):
     Cells_dict = cells2dict(Cells)
     Cells_df = pd.DataFrame(Cells_dict).transpose() # must be transposed so data is in columns
     Cells_df = Cells_df.sort_values(by=['fov', 'peak', 'birth_time', 'birth_label'])
-    Cells_df = Cells_df[columns].apply(pd.to_numeric)
+
+    try:
+        Cells_df = Cells_df[columns_w_seg].apply(pd.to_numeric)
+    except:
+        print('No nucleoid segregation or termination size data.')
+        Cells_df = Cells_df[columns_no_seg].apply(pd.to_numeric)
 
     # add birth and division volume
     if add_volume:
