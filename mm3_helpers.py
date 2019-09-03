@@ -204,6 +204,8 @@ def load_stack(fov_id, peak_id, color='c1', image_return_number=None):
             img_dir = params['chnl_dir']
         elif 'sub' in color:
             img_dir = params['sub_dir']
+        elif 'foci' in color:
+            img_dir = params['foci_seg_dir']
         elif 'seg' in color:
             img_dir = params['seg_dir']
 
@@ -3754,6 +3756,10 @@ class CellFromGraph():
         self.width = None
         self.death = None
         self.disappear = None
+        self.area_mean_fluorescence = {}
+        self.volume_mean_fluorescence = {}
+        self.total_fluorescence = {}
+        self.foci = []
 
     def add_parent(self, parent):
         self.parent = parent
@@ -3883,6 +3889,10 @@ class CellFromGraph():
         self.orientations = [np.float16(orientation) for orientation in self.orientations]
         self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
 
+    def add_focus(self, focus):
+        '''Adds a focus to the cell. See function foci_info_unet'''
+        self.foci.append(focus)
+
     def print_info(self):
         '''prints information about the cell'''
         print('id = %s' % self.id)
@@ -3892,6 +3902,304 @@ class CellFromGraph():
             print('daughters = {}'.format(', '.join('{}'.format(daughter.id) for daughter in self.daughters)))
         if self.parent is not None:
             print('parent = {}'.format(self.parent.id))
+
+    def make_wide_df(self):
+
+        data = {}
+        data['id'] = self.id
+        data['fov'] = self.fov
+        data['trap'] = self.peak
+        data['parent'] = self.parent
+        data['child1'] = None
+        data['child2'] = None
+        data['division_time']: self.division_time
+        data['birth_label']: self.birth_label
+        data['birth_time']: self.birth_time
+        data['sb']: self.sb
+        data['sd']: self.sd
+        data['delta']: self.delta
+        data['tau']: self.tau
+        data['elong_rate']: self.elong_rate
+        data['septum_position']: self.septum_position
+        data['death']: self.death
+        data['disappear']: self.disappear
+        
+
+        if self.daughters is not None:
+            data['child1'] = self.daughters[0]
+
+            if len(self.daughters) == 2:
+                data['child2'] = self.daughters[1]
+
+        df = pd.DataFrame(data, index=[self.id])
+        return(df)
+
+    def make_long_df(self):
+        
+        data = {}
+        data['id'] = [self.id]*len(self.times)
+        data['times'] = self.times
+        data['length'] = self.lengths
+        data['volume'] = self.volumes
+        data['area'] = self.areas
+
+        # if a cell divides then there is one extra value in abs_times
+        if self.division_time is None:
+            data['seconds'] = self.abs_times    
+        else:
+            data['seconds'] = self.abs_times[:-1]
+
+        # if there is fluorescence data, place it into the dataframe
+        if len(self.area_mean_fluorescence.keys()) != 0:
+
+            for fluorescence_channel in self.area_mean_fluorescence.keys():
+
+                data['{}_area_mean_fluorescence'.format(fluorescence_channel)] = self.area_mean_fluorescence[fluorescence_channel]
+                data['{}_volume_mean_fluorescence'.format(fluorescence_channel)] = self.volume_mean_fluorescence[fluorescence_channel]
+                data['{}_total_fluorescence'.format(fluorescence_channel)] = self.total_fluorescence[fluorescence_channel]
+
+        df = pd.DataFrame(data, index=data['id'])
+
+        return(df)
+
+# this is the object that holds all information for a fluorescent focus
+# this class can eventually be used in focus tracking, much like the Cell class
+# is used for cell tracking
+class Focus():
+    '''
+    The Focus class is one focus that has appeared.
+    '''
+
+    # initialize the focus
+    def __init__(self,
+                 parent_cell,
+                 region,
+                 seg_img,
+                 intensity_image,
+                 t):
+        '''The cell must be given a unique cell_id and passed the region
+        information from the segmentation
+
+        Parameters
+        __________
+
+        parent_cell : a Cell object
+            
+        region : region properties object
+            Information about the labeled region from
+            skimage.measure.regionprops()
+
+        seg_img : 2D numpy array
+            Labelled image of cell segmentations
+
+        intensity_image : 2D numpy array
+            Fluorescence image with foci
+        '''
+
+        # create all the attributes
+        # id
+        self.id = '{}_focus{:0=2}'.format(parent_cell.id, region.label)
+
+        # identification convenience
+        self.birth_label = int(region.label)
+        self.regions = [region]
+
+        # cell is a CellFromGraph object, can be None
+        self.cell = parent_cell
+
+        # daughters is updated when focus splits
+        # if this is none then the focus did not split
+        self.parent = None
+        self.daughters = None
+
+        # appearance and split time
+        self.appear_time = t
+        self.split_time = None # filled out if focus splits
+
+        # the following information is on a per timepoint basis
+        self.times = [t]
+        self.abs_times = [params['time_table'][parent_cell.fov][t]] # elapsed time in seconds
+        self.labels = [region.label]
+        self.bboxes = [region.bbox]
+        self.areas = [region.area]
+
+        # calculating focus length and width by using Feret Diamter. 
+        #   These values are in pixels
+        # NOTE: in the future, update to straighten a focus an get straightened length/width
+        print(region)
+        length_tmp = region.major_axis_length
+        width_tmp = region.minor_axis_length
+        # length_tmp, width_tmp = feretdiameter(region)
+        # if length_tmp == None:
+            # mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
+        self.lengths = [length_tmp]
+        self.widths = [width_tmp]
+
+        # calculate focus volume as cylinder plus hemispherical ends (sphere). Unit is px^3
+        self.volumes = [(length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                       (4/3) * np.pi * (width_tmp/2)**3]
+
+        # angle of the fit elipsoid and centroid location
+        self.orientations = [region.orientation]
+        self.centroids = [region.centroid]
+
+        # special information for focci
+        self.elong_rate = None
+        self.disappear = None
+        self.area_mean_fluorescence = []
+        self.volume_mean_fluorescence = []
+        self.total_fluorescence = []
+        self.median_fluorescence = []
+        self.sd_fluorescence = []
+
+        self.calculate_fluorescence(seg_img, intensity_image, label=region.label)
+            
+    def add_parent_focus(self, parent):
+        self.parent = parent
+
+    def grow(self,
+             region,
+             t,
+             seg_img,
+             intensity_image):
+        '''Append data from a region to this focus.
+        use self.times[-1] to get most current value'''
+
+        self.times.append(t)
+        self.abs_times.append(params['time_table'][self.fov][t])
+        self.labels.append(region.label)
+        self.bboxes.append(region.bbox)
+        self.areas.append(region.area)
+        self.regions.append(region)
+
+        #calculating focus length and width by using Feret Diamter
+        length_tmp = region.major_axis_length
+        width_tmp = region.minor_axis_length
+        # length_tmp, width_tmp = feretdiameter(region)
+        # if length_tmp == None:
+            # mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
+        self.lengths.append(length_tmp)
+        self.widths.append(width_tmp)
+        self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
+                            (4/3) * np.pi * (width_tmp/2)**3)
+
+        self.orientations.append(region.orientation)
+        self.centroids.append(region.centroid)
+
+        self.calculate_fluorescence(seg_img, intensity_image, label=region.label)
+
+    def calculate_fluorescence(self,
+                               seg_img,
+                               intensity_image,
+                               label):
+        
+        total_fluor = np.sum(intensity_image[seg_img == label])
+        self.total_fluorescence.append(total_fluor)
+        self.area_mean_fluorescence.append(total_fluor/self.areas[-1])
+        self.volume_mean_fluorescence.append(total_fluor/self.volumes[-1])
+        self.median_fluorescence.append(np.median(intensity_image[seg_img == label]))
+        self.sd_fluorescence.append(np.std(intensity_image[seg_img == label]))
+
+    def disappears(self, region, t):
+        '''
+        Annotate focus as disappearing from current t to next t.
+        '''
+        self.disappear = t
+
+    def add_daughter(self, daughter, t):
+
+        if self.daughters is None:
+            self.daughters = [daughter]
+        else:
+            self.daughters.append(daughter)
+            # assert len(self.daughters) < 3, "Too many daughter foci cell {}".format(self.id)
+            # sort daughters by y position, with smaller y-value first.
+            # this will cause the daughter closer to the closed end of the trap to be listed first.
+            self.daughters.sort(key=lambda cell: cell.centroids[0][0])
+            self.divide(t)
+
+    def divide(self, t):
+        '''Divide the cell and update stats.
+        daughter1 is the daugther closer to the closed end.'''
+
+        # put the daugther ids into the cell
+        # self.daughters = [daughter1.id, daughter2.id]
+
+        # give this guy a division time
+        self.split_time = self.daughters[0].appear_time
+
+        # convert data to smaller floats. No need for float64
+        # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
+        convert_to = 'float16' # numpy datatype to convert to
+
+        self.lengths = [length.astype(convert_to) for length in self.lengths]
+        self.widths = [width.astype(convert_to) for width in self.widths]
+        self.volumes = [vol.astype(convert_to) for vol in self.volumes]
+        # note the float16 is hardcoded here
+        self.orientations = [np.float16(orientation) for orientation in self.orientations]
+        self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
+
+    def print_info(self):
+        '''prints information about the focus'''
+        print('id = %s' % self.id)
+        print('times = {}'.format(', '.join('{}'.format(t) for t in self.times)))
+        print('lengths = {}'.format(', '.join('{:.2f}'.format(l) for l in self.lengths)))
+        if self.daughters is not None:
+            print('daughters = {}'.format(', '.join('{}'.format(daughter.id) for daughter in self.daughters)))
+        if self.parent_cell is not None:
+            print('parent_cell = {}'.format(self.parent_cell.id))
+
+    def make_wide_df(self):
+
+        data = {}
+        data['id'] = self.id
+        data['fov'] = self.fov
+        data['trap'] = self.peak
+        data['parent_cell'] = self.parent_cell
+        data['parent'] = self.parent
+        data['child1'] = None
+        data['child2'] = None
+        data['division_time']: self.division_time
+        data['appear_label']: self.appear_label
+        data['appear_time']: self.appear_time
+        data['disappear']: self.disappear
+
+        if self.daughters is not None:
+            data['child1'] = self.daughters[0]
+
+            if len(self.daughters) == 2:
+                data['child2'] = self.daughters[1]
+
+        df = pd.DataFrame(data, index=[self.id])
+        return(df)
+
+    def make_long_df(self):
+        
+        data = {}
+        data['id'] = [self.id]*len(self.times)
+        data['times'] = self.times
+        data['length'] = self.lengths
+        data['volume'] = self.volumes
+        data['area'] = self.areas
+
+        # if a cell divides then there is one extra value in abs_times
+        if self.division_time is None:
+            data['seconds'] = self.abs_times    
+        else:
+            data['seconds'] = self.abs_times[:-1]
+
+        # if there is fluorescence data, place it into the dataframe
+        if len(self.area_mean_fluorescence.keys()) != 0:
+
+            for fluorescence_channel in self.area_mean_fluorescence.keys():
+
+                data['area_mean_fluorescence'] = self.area_mean_fluorescence
+                data['volume_mean_fluorescence'] = self.volume_mean_fluorescence
+                data['total_fluorescence'] = self.total_fluorescence
+
+        df = pd.DataFrame(data, index=data['id'])
+
+        return(df)
 
 class PredictTrackDataGenerator(utils.Sequence):
     '''Generates data for running tracking class preditions
@@ -4770,11 +5078,13 @@ def feretdiameter(region):
 
     # y: along vertical axis of the image; x: along horizontal axis of the image;
     # calculate the relative centroid in the bounding box (non-rotated)
+    # print(region.centroid)
     y0, x0 = region.centroid
     y0 = y0 - np.int16(region.bbox[0]) + 1
     x0 = x0 - np.int16(region.bbox[1]) + 1
     cosorient = np.cos(region.orientation)
     sinorient = np.sin(region.orientation)
+    # print(cosorient, sinorient)
     amp_param = 1.2 #amplifying number to make sure the axis is longer than actual cell length
 
     # coordinates relative to bounding box
@@ -5277,9 +5587,48 @@ def find_mother_cells(Cells):
 
     return Mother_Cells
 
+
+def filter_cells(Cells, attr, val, idx=None):
+    '''Return only cells whose designated attribute equals "val".'''
+
+    Filtered_Cells = {}
+
+    for cell_id, cell in Cells.items():
+
+        at_val = getattr(cell, attr)
+        if idx is not None:
+            at_val = at_val[idx]
+        if at_val == val:
+            Filtered_Cells[cell_id] = cell
+
+    return Filtered_Cells
+
 ### functions for additional cell centric analysis
 
-def find_all_cell_intensities(fov_id, peak_id, Cells, 
+def compile_cell_info_df(Cells):
+
+    counter = 0
+    cell_count = len(Cells.keys())
+    for cell_id,cell in Cells.items():
+
+        if counter % 100 == 0:
+            print("Generating information for cell {} out of {}.".format(counter, cell_count))
+
+        if counter == 0:
+            wide_df = cell.make_wide_df()
+            long_df = cell.make_long_df()
+            counter += 1
+        else:
+            wide_df = wide_df.append(cell.make_wide_df())
+            long_df = long_df.append(cell.make_long_df())
+            counter += 1
+
+    long_df.reset_index(drop=True, inplace=True)
+    wide_df.reset_index(drop=True, inplace=True)
+    
+    return(wide_df, long_df)
+
+def find_all_cell_intensities(Cells, 
                               specs, time_table, channel_name='sub_c2',
                               apply_background_correction=True):
     '''
@@ -5297,13 +5646,16 @@ def find_all_cell_intensities(fov_id, peak_id, Cells,
             if peak_value != 1:
                 continue
 
+            print("Quantifying channel {} fluorescence in cells in fov {}, peak {}.".format(channel_name, fov_id, peak_id))
             # Load fluorescent images and segmented images for this channel
             fl_stack = load_stack(fov_id, peak_id, color=channel_name)
             corrected_stack = np.zeros(fl_stack.shape)
 
             for frame in range(fl_stack.shape[0]):
                 # median filter will be applied to every image
-                median_filtered = median(fl_stack[frame,...], selem=morphology.disk(1))
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    median_filtered = median(fl_stack[frame,...], selem=morphology.disk(1))
 
                 # subtract the gaussian-filtered image from true image to correct 
                 #   uneven background fluorescence
@@ -5317,6 +5669,7 @@ def find_all_cell_intensities(fov_id, peak_id, Cells,
 
             # evaluate whether each cell is in this fov/peak combination
             for cell_id,cell in Cells.items():
+                
                 cell_fov = cell.fov
                 if cell_fov != fov_id:
                     continue
@@ -5327,14 +5680,13 @@ def find_all_cell_intensities(fov_id, peak_id, Cells,
 
                 cell_times = cell.times
                 cell_labels = cell.labels
-                cell.area_mean_fluorescence = {channel_name:[]}
-                cell.volume_mean_fluorescence = {channel_name:[]}
-                cell.total_fluorescence = {channel_name:[]}
+                cell.area_mean_fluorescence[channel_name] = []
+                cell.volume_mean_fluorescence[channel_name] = []
+                cell.total_fluorescence[channel_name] = []
 
                 # loop through cell's times
                 for i,t in enumerate(cell_times):
                     frame = t-1
-                    seconds = time_table[fov_id][t]
                     cell_label = cell_labels[i]
 
                     total_fluor = np.sum(corrected_stack[frame, seg_stack[frame, :,:] == cell_label])
@@ -5747,6 +6099,154 @@ def foci_lap(img, img_foci, cell, t):
     #     img_overlay[y_temp+1,x_temp+1] = 12
 
     return disp_l, disp_w, foci_h
+
+# actual worker function for foci detection
+def foci_info_unet(Cells,
+                   specs,
+                   time_table,
+                   channel_name='sub_c2'):
+    
+    '''foci_info_unet operates on cells in which foci have been found using
+    using Unet.
+
+    Updates cells' .foci attribute in-place
+
+    Parameters
+    ----------
+    Cells : dictionary of Cell objects to which foci will be added
+    specs : dictionary containing information on which fov/peak ids
+        are to be used, and which are to be excluded from analysis
+    time_table : dictionary containing information on which time
+        points correspond to which absolute times in seconds
+    channel_name : name of fluorescent channel for reading in 
+        fluorescence images for focus quantification
+
+    Returns
+    -------
+    Updates cell information in Cells in-place.
+    Cells must have .foci attribute
+    '''
+
+    # iterate over each fov in specs
+    for fov_id,fov_peaks in specs.items():
+        
+        # iterate over each peak in fov
+        for peak_id,peak_value in fov_peaks.items():
+        
+            print(fov_id, peak_id)
+            # if peak_id's value is not 1, go to next peak
+            if peak_value != 1:
+                continue
+
+            print("Quantifying channel {} focus information in cells in fov {}, peak {}.".format(channel_name, fov_id, peak_id))
+            # Load fluorescent images and segmented images for this channel
+            fl_stack = load_stack(fov_id, peak_id, color=channel_name)
+            seg_foci_stack = load_stack(fov_id, peak_id, color='foci_seg_unet')
+            seg_cell_stack = load_stack(fov_id, peak_id, color='seg_unet')
+
+            # evaluate whether each cell is in this fov/peak combination
+            for cell_id,cell in Cells.items():
+
+                cell_fov = cell.fov
+                if cell_fov != fov_id:
+                    continue
+
+                cell_peak = cell.peak
+                if cell_peak != peak_id:
+                    continue
+
+                cell_times = cell.times
+                # loop through cell's times to add focus info to its
+                #   .foci attribute
+                for i,t in enumerate(cell_times):
+                    frame = t-1
+
+                    fl_img = fl_stack[frame,...]
+                    seg_foci_img = seg_foci_stack[frame,...]
+                    seg_cells_img = seg_cell_stack[frame,...]
+
+                    foci_info_cell_unet(cell,
+                                        fov_id,
+                                        peak_id,
+                                        fl_img,
+                                        seg_foci_img,
+                                        seg_cells_img,
+                                        t)
+    # cells' info is updated in place, so return nothing
+    return
+
+def foci_info_cell_unet(Cell,
+                        fov_id,
+                        peak_id,
+                        fl_img,
+                        seg_foci_img,
+                        seg_cells_img,
+                        t):
+
+    '''foci_info_cell_unet operates on a single cell.
+    It adds focus information to a cell in which foci were found
+    by Unet.
+
+    Parameters
+    ----------
+    Cell : a Cell object
+    fov_id : int
+        the fov in which the cell is found.
+    peak_id : int
+        the trap in which the cell is found.
+    fl_img : 2D np.array
+        fluorescent image stack with foci.
+    seg_foci_img : 2D np.array
+        labelled image corresponding to detections of foci.
+    seg_cells_img : 2D np.array
+        Labelled image corresponding to detections of cells.
+        Used here for masking fl_stack image and determining
+        whether a focus belongs to a cell.
+    t : int
+        time point to which the images correspond
+    '''
+
+    # pull out useful information for just this time point
+    i = Cell.times.index(t) # find position of the time point in lists (time points may be missing)
+    bbox = Cell.bboxes[i]
+    orientation = Cell.orientations[i]
+    centroid = Cell.centroids[i]
+    cell_label = Cell.labels[i]
+
+    # if there are no foci in this image, do the following.
+    if np.max(seg_foci_img) == 0:
+        return
+
+    else:
+
+        # get regionprops for each region
+        regions = measure.regionprops(seg_foci_img)
+
+        for region in regions:
+            
+            # get cell to which this focus belongs
+            # if focus is more than 50% contained within cell, add to cell
+            masked_cell_img = np.zeros(seg_cells_img.shape)
+            masked_cell_img[seg_cells_img == cell_label] = 1
+
+            masked_focus_img = np.zeros(seg_foci_img.shape)
+            masked_focus_img[seg_foci_img == region.label] = 1
+
+            intersect_img = masked_cell_img + masked_focus_img
+
+            pixels_two = len(np.where(intersect_img == 2))
+            pixels_one = len(np.where(masked_focus_img == 1))
+
+            if pixels_one/pixels_two >= 0.5:
+                # set up the focus
+                focus = Focus(parent_cell = Cell,
+                            region = region,
+                            seg_img = seg_foci_img,
+                            intensity_image = fl_img,
+                            t = t)
+                Cell.add_focus(focus)
+            
+        return
 
 # finds best fit for 2d gaussian using functin above
 def fitgaussian(data):
