@@ -2302,15 +2302,39 @@ def cce_tversky_loss(y_true, y_pred):
     return loss
 
 def get_pad_distances(unet_shape, img_height, img_width):
+    '''Finds padding and trimming sizes to make the input image the same as the size expected by the U-net model.
+
+    Padding is done evenly to the top and bottom of the image. Trimming is only done from the right or bottom.
+    '''
 
     half_width_pad = (unet_shape[1]-img_width)/2
-    left_pad = int(np.floor(half_width_pad))
-    right_pad = int(np.ceil(half_width_pad))
-    half_height_pad = (unet_shape[0]-img_height)/2
-    top_pad = int(np.floor(half_height_pad))
-    bottom_pad = int(np.ceil(half_height_pad))
+    if half_width_pad > 0:
+        left_pad = int(np.floor(half_width_pad))
+        right_pad = int(np.ceil(half_width_pad))
+        right_trim = 0
+    else:
+        left_pad = 0
+        right_pad = 0
+        right_trim = img_width - unet_shape[1]
 
-    return(half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad)
+    half_height_pad = (unet_shape[0]-img_height)/2
+    if half_height_pad > 0:
+        top_pad = int(np.floor(half_height_pad))
+        bottom_pad = int(np.ceil(half_height_pad))
+        bottom_trim = 0
+    else:
+        top_pad = 0
+        bottom_pad = 0
+        bottom_trim = img_height - unet_shape[0]
+
+    pad_dict = {'top_pad' : top_pad,
+                'bottom_pad' : bottom_pad,
+                'right_pad' : right_pad,
+                'left_pad' : left_pad,
+                'bottom_trim' : bottom_trim,
+                'right_trim' : right_trim}
+
+    return pad_dict
 
 def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
@@ -2332,17 +2356,17 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     for peak_id in ana_peak_ids:
         information('Segmenting peak {}.'.format(peak_id))
-        # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        # pad image to correct size
+        # trim and pad image to correct size
+        img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
         img_stack = np.pad(img_stack,
                            ((0,0),
-                           (pad_dict['top'],pad_dict['bottom']),
-                           (pad_dict['left'],pad_dict['right'])),
+                           (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                           (pad_dict['left_pad'],pad_dict['right_pad'])),
                            mode='constant')
-        img_stack = np.expand_dims(img_stack, -1)
+        img_stack = np.expand_dims(img_stack, -1) # TF expects images to be 4D
         # set up image generator
         # image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
         image_datagen = ImageDataGenerator()
@@ -2355,8 +2379,15 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         # post processing
         # remove padding including the added last dimension
-        predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
-                                     pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
+        predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
+                                     pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
+
+        # pad back incase the image had been trimmed
+        predictions = np.pad(predictions,
+                             ((0,0),
+                             (0,pad_dict['bottom_trim']),
+                             (0,pad_dict['right_trim'])),
+                             mode='constant')
 
         if params['segment']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
@@ -2411,7 +2442,6 @@ def segment_peaks_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
 
-
 def segment_fov_unet(fov_id, specs, model):
     '''
     Segments the channels from one fov using the U-net CNN model.
@@ -2440,13 +2470,9 @@ def segment_fov_unet(fov_id, specs, model):
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
 
-    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
-    pad_dict = {'top':top_pad,
-               'bottom':bottom_pad,
-               'right':right_pad,
-               'left':left_pad}
-
-    timepoints = img_stack.shape[0]
+    # find padding and trimming distances
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
+    # timepoints = img_stack.shape[0]
 
     # dermine how many channels we have to analyze for this FOV
     ana_peak_ids = []

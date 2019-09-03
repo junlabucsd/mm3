@@ -45,8 +45,8 @@ class Window(QMainWindow):
 
         top = 400
         left = 400
-        width = 800
-        height = 600
+        width = 400
+        height = 1200
 
         # icon = "icons/pain.png"
 
@@ -233,7 +233,7 @@ class MaskTransparencyWidget(QWidget):
                 super(MaskTransparencyWidget, self).__init__(parent)
 
                 self.mask_dir = mask_dir
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 self.imgPaths = imgPaths
                 self.fov_id_list = fov_id_list
@@ -267,7 +267,7 @@ class MaskTransparencyWidget(QWidget):
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
                 self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
-                alphaFloat = 0.25
+                alphaFloat = 0.15
                 alphaArray = np.zeros(img.shape, dtype='uint8')
                 alphaArray = np.expand_dims(alphaArray, -1)
                 self.alpha = int(255*alphaFloat)
@@ -416,7 +416,7 @@ class MaskTransparencyWidget(QWidget):
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
                 self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
-                alphaFloat = 0.25
+                alphaFloat = 0.15
                 alphaArray = np.zeros(img.shape, dtype='uint8')
                 alphaArray = np.expand_dims(alphaArray, -1)
                 self.alpha = int(255*alphaFloat)
@@ -476,7 +476,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -500,7 +500,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -526,7 +526,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -552,7 +552,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
                 pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
@@ -585,7 +585,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.originalImgMax = np.max(img)
                 originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
@@ -635,7 +635,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -645,7 +645,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -657,7 +657,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -669,7 +669,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
