@@ -391,141 +391,12 @@ def find_last_daughter(cell, Cells):
     # finally, return the deepest cell
     return cell
 
-def find_continuous_lineages(Cells, t1=0, t2=1000):
+def find_continuous_lineages(Cells, specs, t1=0, t2=1000):
     '''
     Uses a recursive function to only return cells that have continuous
     lineages between two time points. Takes a "lineage" form of Cells and
     returns a dictionary of the same format. Good for plotting
     with saw_tooth_plot()
-
-    t1 : int
-        First cell in lineage must be born before this time point
-    t2 : int
-        Last cell in lineage must be born after this time point
-    '''
-
-    Lineages = organize_cells_by_channel(Cells)
-
-    # This is a mirror of the lineages dictionary, just for the continuous cells
-    Continuous_Lineages = {}
-
-    for fov, peaks in six.iteritems(Lineages):
-       # print("fov = {:d}".format(fov))
-        # Create a dictionary to hold this FOV
-        Continuous_Lineages[fov] = {}
-
-        for peak, Cells in six.iteritems(peaks):
-           # print("{:<4s}peak = {:d}".format("",peak))
-            # sort the cells by time in a list for this peak
-            cells_sorted = [(cell_id, cell) for cell_id, cell in six.iteritems(Cells)]
-            cells_sorted = sorted(cells_sorted, key=lambda x: x[1].birth_time)
-
-            # Sometimes there are not any cells for the channel even if it was to be analyzed
-            if not cells_sorted:
-                continue
-
-            # look through list to find the cell born immediately before t1
-            # and divides after t1, but not after t2
-            for i, cell_data in enumerate(cells_sorted):
-                cell_id, cell = cell_data
-                if cell.birth_time < t1 and t1 <= cell.division_time < t2:
-                    first_cell_index = i
-                    break
-
-            # filter cell_sorted or skip if you got to the end of the list
-            if i == len(cells_sorted) - 1:
-                continue
-            else:
-                cells_sorted = cells_sorted[i:]
-
-            # get the first cell and it's last contiguous daughter
-            first_cell = cells_sorted[0][1]
-            last_daughter = find_last_daughter(first_cell, Cells)
-
-            # check to the daughter makes the second cut off
-            if last_daughter.birth_time > t2:
-                # print(fov, peak, 'Made it')
-
-                # now retrieve only those cells within the two times
-                # use the function to easily return in dictionary format
-                Cells_cont = find_cells_born_after(Cells, born_after=t1)
-                Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
-
-                # append the first cell which was filtered out in the above step
-                Cells_cont[first_cell.id] = first_cell
-
-                # and add it to the big dictionary
-                Continuous_Lineages[fov][peak] = Cells_cont
-
-        # remove keys that do not have any lineages
-        if not Continuous_Lineages[fov]:
-            Continuous_Lineages.pop(fov)
-
-    Cells = lineages_to_dict(Continuous_Lineages) # revert back to return
-
-    return Cells
-
-def find_generation_gap(cell, Cells, gen):
-    '''Finds how many continuous ancestors this cell has.'''
-
-    if cell.parent in Cells:
-        gen += 1
-        gen = find_generation_gap(Cells[cell.parent], Cells, gen)
-
-    return gen
-
-def return_ancestors(cell, Cells, ancestors):
-    '''Returns all ancestors of a cell. Returns them in reverse age.'''
-
-    if cell.parent in Cells:
-        ancestors.append(cell.parent)
-        ancestors = return_ancestors(Cells[cell.parent], Cells, ancestors)
-
-    return ancestors
-
-def find_lineages_of_length(Cells, n_gens=5, remove_ends=False):
-    '''Returns cell lineages of at least a certain length, indicated by n_gens.
-
-    Parameters
-    ----------
-    Cells - Dictionary of cell objects
-    n_gens - int. Minimum number generations in lineage to be included.
-    remove_ends : bool. Remove the first and last cell from the list. So number of minimum cells in a lineage is n_gens - 2.
-    '''
-
-    filtered_cells = []
-
-    for cell_id, cell_tmp in six.iteritems(Cells):
-        # find the last continuous daughter
-        last_daughter = find_last_daughter(cell_tmp, Cells)
-
-        # check if last daughter is n generations away from this cell
-        gen = 0
-        gen = find_generation_gap(last_daughter, Cells, gen)
-
-        if gen >= n_gens:
-            ancestors = return_ancestors(last_daughter, Cells, [last_daughter.id])
-
-            # remove first cell and last cell, they may be weird
-            if remove_ends:
-                ancestors = ancestors[1:-1]
-
-            filtered_cells += ancestors
-
-    # remove all the doubles
-    filtered_cells = sorted(list(set(filtered_cells)))
-
-    # add all the cells that made it back to a new dictionary.
-    Filtered_Cells = {}
-    for cell_id in filtered_cells:
-        Filtered_Cells[cell_id] = Cells[cell_id]
-
-    return Filtered_Cells
-
-def find_continuous_lineages(Cells, specs, t1=0, t2=1000):
-    '''
-    Uses a recursive function to only return cells that have continuous
-    lineages between two time points. Takes specs argument so it can organize cells into lineages (though this could be done by looking through the Cell objects).
 
     t1 : int
         First cell in lineage must be born before this time point
@@ -572,13 +443,13 @@ def find_continuous_lineages(Cells, specs, t1=0, t2=1000):
             last_daughter = find_last_daughter(first_cell, Cells)
 
             # check to the daughter makes the second cut off
-            if last_daughter.division_time > t2:
+            if last_daughter.birth_time > t2:
                 # print(fov, peak, 'Made it')
 
                 # now retrieve only those cells within the two times
                 # use the function to easily return in dictionary format
                 Cells_cont = find_cells_born_after(Cells, born_after=t1)
-                Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
+                # Cells_cont = find_cells_born_before(Cells_cont, born_before=t2)
 
                 # append the first cell which was filtered out in the above step
                 Cells_cont[first_cell.id] = first_cell
@@ -593,6 +464,63 @@ def find_continuous_lineages(Cells, specs, t1=0, t2=1000):
     Cells = lineages_to_dict(Continuous_Lineages) # revert back to return
 
     return Cells
+
+def find_generation_gap(cell, Cells, gen):
+    '''Finds how many continuous ancestors this cell has.'''
+
+    if cell.parent in Cells:
+        gen += 1
+        gen = find_generation_gap(Cells[cell.parent], Cells, gen)
+
+    return gen
+
+def return_ancestors(cell, Cells, ancestors=[]):
+    '''Returns all ancestors of a cell. Returns them in reverse age.'''
+
+    if cell.parent in Cells:
+        ancestors.append(cell.parent)
+        ancestors = return_ancestors(Cells[cell.parent], Cells, ancestors)
+
+    return ancestors
+
+def find_lineages_of_length(Cells, n_gens=5, remove_ends=False):
+    '''Returns cell lineages of at least a certain length, indicated by n_gens.
+
+    Parameters
+    ----------
+    Cells - Dictionary of cell objects
+    n_gens - int. Minimum number generations in lineage to be included.
+    remove_ends : bool. Remove the first and last cell from the list. So number of minimum cells in a lineage is n_gens - 2.
+    '''
+
+    filtered_cells = []
+
+    for cell_id, cell_tmp in six.iteritems(Cells):
+        # find the last continuous daughter
+        last_daughter = find_last_daughter(cell_tmp, Cells)
+
+        # check if last daughter is n generations away from this cell
+        gen = 0
+        gen = find_generation_gap(last_daughter, Cells, gen)
+
+        if gen >= n_gens:
+            ancestors = return_ancestors(last_daughter, Cells, [last_daughter.id])
+
+            # remove first cell and last cell, they may be weird
+            if remove_ends:
+                ancestors = ancestors[1:-1]
+
+            filtered_cells += ancestors
+
+    # remove all the doubles
+    filtered_cells = sorted(list(set(filtered_cells)))
+
+    # add all the cells that made it back to a new dictionary.
+    Filtered_Cells = {}
+    for cell_id in filtered_cells:
+        Filtered_Cells[cell_id] = Cells[cell_id]
+
+    return Filtered_Cells
 
 def organize_cells_by_channel(Cells, specs):
     '''
