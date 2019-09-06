@@ -1,9 +1,10 @@
 #! /usr/bin/env python3
+from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton, QInputDialog
 from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
 from PyQt5.QtCore import Qt, QPoint, QRectF
-from skimage import io, img_as_ubyte, color, draw
+from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
 import sys
 import re
@@ -44,8 +45,8 @@ class Window(QMainWindow):
 
         top = 400
         left = 400
-        width = 800
-        height = 600
+        width = 400
+        height = 1200
 
         # icon = "icons/pain.png"
 
@@ -176,6 +177,27 @@ class Window(QMainWindow):
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
+    #     setFrameInputWidget = FrameSetter()
+    #     setPeakInputWidget = PeakSetter()
+    #     setFOVInputWidget = FOVSetter()
+    #
+    #     setFOVPeakFrameInputLayout = QVBoxLayout()
+    #     setFOVPeakFrameInputLayout.addWidget(setFrameInputWidget)
+    #     setFOVPeakFrameInputLayout.addWidget(setPeakInputWidget)
+    #     setFOVPeakFrameInputLayout.addWidget(setFOVInputWidget)
+    #
+    #     setFOVPeakFrameWidget = QWidget()
+    #     setFOVPeakFrameWidget.setLayout(setFOVPeakFrameInputLayout)
+    #
+    #     setFOVPeakFrameDockWidget = QDockWidget()
+    #     setFOVPeakFrameDockWidget.setWidget(setFrameInputWidget)
+    #     self.addDockWidget(Qt.RightDockWidgetArea, setFOVPeakFrameDockWidget)
+    #
+    # def FrameSetter(self):
+    #     i, okPressed = QInputDialog.getInt(self, "Jump to frame", "Frame index (0-indexed):", 0, 0)
+    #     if okPressed:
+    #         self.
+
 class OverlayImgsWidget(QWidget):
 
         def __init__(self,parent,imgPaths,fov_id_list,training_dir):
@@ -211,7 +233,7 @@ class MaskTransparencyWidget(QWidget):
                 super(MaskTransparencyWidget, self).__init__(parent)
 
                 self.mask_dir = mask_dir
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 self.imgPaths = imgPaths
                 self.fov_id_list = fov_id_list
@@ -236,13 +258,17 @@ class MaskTransparencyWidget(QWidget):
                 if os.path.isfile(savePath):
                     print('Re-annotated mask exists in training directory. Loading it.')
                     # add widget to express whether this mask is one you already re-annotated
+                    # print(self.frameIndex)
                     self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
+                    overwriteSegFile = True
+                else:
+                    overwriteSegFile = False
 
                 img = self.maskStack[self.frameIndex,:,:]
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
                 self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
-                alphaFloat = 0.25
+                alphaFloat = 0.15
                 alphaArray = np.zeros(img.shape, dtype='uint8')
                 alphaArray = np.expand_dims(alphaArray, -1)
                 self.alpha = int(255*alphaFloat)
@@ -250,7 +276,7 @@ class MaskTransparencyWidget(QWidget):
                 self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
 
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
 
                 self.label = QLabel(self)
@@ -289,7 +315,7 @@ class MaskTransparencyWidget(QWidget):
                 filePath, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(*.png);;JPEG(*.jpg *.jpeg);;TIFF(*.tif *.tiff);;ALL FILES(*.*)")
                 if filePath == "":
                         return
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight)
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
 
@@ -312,34 +338,49 @@ class MaskTransparencyWidget(QWidget):
                 peakID = mat.groups()[1]
                 fileBaseName = '{}_{}_{}_t{:0=4}.tif'.format(experiment_name, fovID, peakID, self.frameIndex+1)
                 savePath = os.path.join(self.mask_dir,fileBaseName)
+                labelSavePath = os.path.join(params['seg_dir'],fileBaseName)
                 print("Saved binary mask image as: ", savePath)
 
                 if not os.path.isdir(self.mask_dir):
-                        os.makedirs(self.mask_dir)
+                    os.makedirs(self.mask_dir)
 
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+                # saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8)
+
+                # This was bugging out and making the image not the same size as it started
+                # saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+
+                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight)
+
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
 
+                print(self.originalHeight, self.originalWidth, qimgHeight, qimgWidth)
+
+                saveArr = np.zeros((qimgHeight,qimgWidth),dtype='uint8')
                 for rowIndex in range(qimgHeight):
 
                         for colIndex in range(qimgWidth):
                                 pixVal = qGray(saveImg.pixel(colIndex,rowIndex))
                                 if pixVal > 0:
-                                        saveImg.setPixelColor(colIndex,rowIndex,QColor(1,1,1))
-                                        pixVal = qGray(saveImg.pixel(colIndex, rowIndex))
+                                        saveArr[rowIndex,colIndex] = 1
 
-                saveImg.save(savePath)
+                io.imsave(savePath, saveArr)
+                # labelArr = measure.label(saveArr, connectivity=1)
+                # labelArr = labelArr.astype('uint8')
+
+                # print(labelSavePath)
+                # io.imsave(labelSavePath,labelArr)
+
 
         def reset(self):
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
                 self.update()
 
         def clear(self):
                 self.imgFill = QColor(0, 0, 0, self.alpha)
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQimage.fill(self.imgFill)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
@@ -366,11 +407,17 @@ class MaskTransparencyWidget(QWidget):
         def whiteColor(self):
                 self.brushColor = QColor(255, 255, 255, self.alpha)
 
+        # def setFOVPeakFrameIndex(self,frame_index,peak_index,fov_id):
+        #     self.frameIndex = frame_index
+        #     self.fov_id = fov_id
+        #     self.imgIndex = peak_id
+
+
         def setImg(self, img):
                 img[img>0] = 255
                 self.RGBImg = color.gray2rgb(img).astype('uint8')
                 self.RGBImg[:,:,1:] = 0 # set GB channels to 0 to make the transarency mask red
-                alphaFloat = 0.25
+                alphaFloat = 0.15
                 alphaArray = np.zeros(img.shape, dtype='uint8')
                 alphaArray = np.expand_dims(alphaArray, -1)
                 self.alpha = int(255*alphaFloat)
@@ -378,7 +425,7 @@ class MaskTransparencyWidget(QWidget):
                 self.RGBAImg = np.append(self.RGBImg, alphaArray, axis=-1)
 
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = self.RGBAImg.shape
-                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.maskQimage = QImage(self.RGBAImg, self.originalWidth, self.originalHeight, self.RGBAImg.strides[0], QImage.Format_RGBA8888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.maskQpixmap = QPixmap(self.maskQimage)
                 self.label.setPixmap(self.maskQpixmap)
 
@@ -430,7 +477,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -454,7 +501,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -480,7 +527,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -506,7 +553,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
                 pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
@@ -525,7 +572,7 @@ class MaskTransparencyWidget(QWidget):
 
 class PhaseWidget(QWidget):
 
-        def __init__(self, parent,imgPaths,fov_id_list,image_dir):
+        def __init__(self, parent,imgPaths,fov_id_list,image_dir):#,frame_index,peak_id,fov_id):
                 super(PhaseWidget, self).__init__(parent)
 
                 self.image_dir = image_dir
@@ -539,7 +586,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.originalImgMax = np.max(img)
                 originalRGBImg = color.gray2rgb(img/2**16*2**8).astype('uint8')
@@ -548,7 +595,7 @@ class PhaseWidget(QWidget):
                 rescaledImg = img/self.originalImgMax*255
                 RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = RGBImg.shape
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
 
                 self.label = QLabel(self)
@@ -561,7 +608,7 @@ class PhaseWidget(QWidget):
 
                 rescaledImg = img/np.max(img)*255
                 RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
                 self.label.setPixmap(self.phaseQpixmap)
 
@@ -589,7 +636,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -599,7 +646,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -611,7 +658,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -623,7 +670,7 @@ class PhaseWidget(QWidget):
                 self.phaseImgPath = self.imgPaths[self.fov_id][self.imgIndex][0]
                 self.phaseStack = io.imread(self.phaseImgPath)
 
-                self.frameIndex = 0
+                self.frameIndex = 500
                 img = self.phaseStack[self.frameIndex,:,:]
                 self.setImg(img)
 
@@ -659,7 +706,9 @@ if __name__ == "__main__":
 
         training_dir = '/home/wanglab/sandbox/pyqtpainter/commonDir'
 
+        init_params('/home/wanglab/Users_local/Jeremy/Imaging/20190214/20190214_params_Unet.yaml')
+
         app = QApplication(sys.argv)
         window = Window(imgPaths=imgPaths, fov_id_list=fov_id_list, training_dir=training_dir)
         window.show()
-        app.exec()
+        app.exec_()
