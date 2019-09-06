@@ -290,9 +290,9 @@ if __name__ == "__main__":
         for img in images:
             # skip images not specified by param file.
             t = mm3.get_time(img)
-            if image_start and t <= image_start:
+            if image_start and t < image_start:
                 continue
-            if image_end and t >= image_end:
+            if image_end and t > image_end:
                 continue
 
             image_data = tiff.imread(img) # get the image
