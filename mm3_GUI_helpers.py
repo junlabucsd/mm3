@@ -258,6 +258,7 @@ class MaskTransparencyWidget(QWidget):
                 if os.path.isfile(savePath):
                     print('Re-annotated mask exists in training directory. Loading it.')
                     # add widget to express whether this mask is one you already re-annotated
+                    # print(self.frameIndex)
                     self.maskStack[self.frameIndex,:,:] = io.imread(savePath)
                     overwriteSegFile = True
                 else:
@@ -314,7 +315,7 @@ class MaskTransparencyWidget(QWidget):
                 filePath, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG(*.png);;JPEG(*.jpg *.jpeg);;TIFF(*.tif *.tiff);;ALL FILES(*.*)")
                 if filePath == "":
                         return
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
+                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight)
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
 
@@ -348,7 +349,7 @@ class MaskTransparencyWidget(QWidget):
                 # This was bugging out and making the image not the same size as it started
                 # saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight,aspectRatioMode=Qt.KeepAspectRatio)
 
-                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaledToHeight(self.originalHeight)
+                saveImg = self.maskQimage.convertToFormat(QImage.Format_Grayscale8).scaled(self.originalWidth,self.originalHeight)
 
                 qimgHeight = saveImg.height()
                 qimgWidth = saveImg.width()
