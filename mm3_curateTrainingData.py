@@ -89,7 +89,7 @@ if __name__ == "__main__":
         sys.exit("Exiting: Channel directory, {}, not found.".format(p['chnl_dir']))
 
     # set segmentation image name for segmented images
-    p['seg_img'] = 'seg_unet'
+    p['seg_img'] = 'seg_otsu' ## be careful here, it is lookgin for segmented images
 
     specs = mm3.load_specs()
     # make list of FOVs to process (keys of channel_mask file)

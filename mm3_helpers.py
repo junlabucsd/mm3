@@ -269,8 +269,12 @@ def load_specs():
     try:
         with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
             specs = yaml.safe_load(specs_file)
-    except ValueError:
-        warning('Could not load specs file.')
+    except:
+        try:
+            with open(os.path.join(params['ana_dir'], 'specs.pkl'), 'rb') as specs_file:
+                specs = pickle.load(specs_file)
+        except ValueError:
+            warning('Could not load specs file.')
 
     return specs
 
@@ -2306,15 +2310,39 @@ def cce_tversky_loss(y_true, y_pred):
     return loss
 
 def get_pad_distances(unet_shape, img_height, img_width):
+    '''Finds padding and trimming sizes to make the input image the same as the size expected by the U-net model.
+
+    Padding is done evenly to the top and bottom of the image. Trimming is only done from the right or bottom.
+    '''
 
     half_width_pad = (unet_shape[1]-img_width)/2
-    left_pad = int(np.floor(half_width_pad))
-    right_pad = int(np.ceil(half_width_pad))
-    half_height_pad = (unet_shape[0]-img_height)/2
-    top_pad = int(np.floor(half_height_pad))
-    bottom_pad = int(np.ceil(half_height_pad))
+    if half_width_pad > 0:
+        left_pad = int(np.floor(half_width_pad))
+        right_pad = int(np.ceil(half_width_pad))
+        right_trim = 0
+    else:
+        left_pad = 0
+        right_pad = 0
+        right_trim = img_width - unet_shape[1]
 
-    return(half_width_pad,left_pad,right_pad,half_height_pad,top_pad,bottom_pad)
+    half_height_pad = (unet_shape[0]-img_height)/2
+    if half_height_pad > 0:
+        top_pad = int(np.floor(half_height_pad))
+        bottom_pad = int(np.ceil(half_height_pad))
+        bottom_trim = 0
+    else:
+        top_pad = 0
+        bottom_pad = 0
+        bottom_trim = img_height - unet_shape[0]
+
+    pad_dict = {'top_pad' : top_pad,
+                'bottom_pad' : bottom_pad,
+                'right_pad' : right_pad,
+                'left_pad' : left_pad,
+                'bottom_trim' : bottom_trim,
+                'right_trim' : right_trim}
+
+    return pad_dict
 
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
@@ -2336,7 +2364,6 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     for peak_id in ana_peak_ids:
         information('Segmenting peak {}.'.format(peak_id))
-        # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
@@ -2355,24 +2382,31 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # pad image to correct size
         img_stack = np.pad(img_stack,
                            ((0,0),
-                           (pad_dict['top'],pad_dict['bottom']),
-                           (pad_dict['left'],pad_dict['right'])),
+                           (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                           (pad_dict['left_pad'],pad_dict['right_pad'])),
                            mode='constant')
-        img_stack = np.expand_dims(img_stack, -1)
+        img_stack = np.expand_dims(img_stack, -1) # TF expects images to be 4D
         # set up image generator
-        image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
-        #image_datagen = ImageDataGenerator()
-        #image_generator = image_datagen.flow(x=img_stack,
-        #                                     batch_size=batch_size,
-        #                                     shuffle=False) # keep same order
+        # image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
+        image_datagen = ImageDataGenerator()
+        image_generator = image_datagen.flow(x=img_stack,
+                                             batch_size=batch_size,
+                                             shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
         # remove padding including the added last dimension
-        predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
-                                     pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
+        predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
+                                     pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
+
+        # pad back incase the image had been trimmed
+        predictions = np.pad(predictions,
+                             ((0,0),
+                             (0,pad_dict['bottom_trim']),
+                             (0,pad_dict['right_trim'])),
+                             mode='constant')
 
         if params['segment']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
@@ -2623,13 +2657,9 @@ def segment_fov_foci_unet(fov_id, specs, model, color=None):
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
 
-    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
-    pad_dict = {'top':top_pad,
-               'bottom':bottom_pad,
-               'right':right_pad,
-               'left':left_pad}
-
-    timepoints = img_stack.shape[0]
+    # find padding and trimming distances
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
+    # timepoints = img_stack.shape[0]
 
     # dermine how many channels we have to analyze for this FOV
     ana_peak_ids = []
@@ -3214,6 +3244,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # load segmented data
     image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
+    # image_data_seg = load_stack(fov_id, peak_id, color='seg')
 
     # Calculate all data for all time points.
     # this list will be length of the number of time points
@@ -5889,10 +5920,14 @@ def foci_analysis(fov_id, peak_id, Cells):
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
-    # Load time table to determine first image index.
-    times_all = np.array(np.sort(params['time_table'][fov_id].keys()), np.int_)
+    # determine absolute time index
+    times_all = []
+    for fov, times in params['time_table'].items():
+        times_all = np.append(times_all, list(times.keys()))
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all, np.int_)
     t0 = times_all[0] # first time index
-    tN = times_all[-1] # last time index
 
     for cell_id, cell in six.iteritems(Cells):
 
@@ -6097,8 +6132,8 @@ def foci_lap(img, img_foci, cell, t):
     # loop through each potential foci
     for blob in blobs:
         yloc, xloc, sig = blob # x location, y location, and sigma of gaus
-        xloc = int(xloc) # switch to int for slicing images
-        yloc = int(yloc)
+        xloc = int(np.around(xloc)) # switch to int for slicing images
+        yloc = int(np.around(yloc))
         radius = int(np.ceil(np.sqrt(2)*sig)) # will be used to slice out area around foci
 
         # ensure blob is inside the bounding box
@@ -6113,6 +6148,7 @@ def foci_lap(img, img_foci, cell, t):
             gfit_area = img_foci[yloc-radius:yloc+radius, xloc-radius:xloc+radius]
             # gfit_area_0 = img_foci[max(0, yloc-1*radius):min(img_foci.shape[0], yloc+1*radius),
             #                        max(0, xloc-1*radius):min(img_foci.shape[1], xloc+1*radius)]
+            gfit_area_fixed = img_foci[yloc-maxsig:yloc+maxsig, xloc-maxsig:xloc+maxsig]
 
             # fit gaussian to proposed foci in small box
             p = fitgaussian(gfit_area)
@@ -6133,6 +6169,8 @@ def foci_lap(img, img_foci, cell, t):
                 y_gaus = np.append(y_gaus, y_rel) # for plotting
                 w_gaus = np.append(w_gaus, w_fit) # for plotting
 
+                if debug_foci: print('x', xloc, x_rel, x_fit, 'y', yloc, y_rel, y_fit, 'w', sig, radius, w_fit, 'h', np.sum(gfit_area), np.sum(gfit_area_fixed), peak_fit)
+
                 # calculate distance of foci from middle of cell (scikit image)
                 if orientation < 0:
                     orientation = np.pi+orientation
@@ -6142,7 +6180,8 @@ def foci_lap(img, img_foci, cell, t):
                 # append foci information to the list
                 disp_l = np.append(disp_l, disp_y)
                 disp_w = np.append(disp_w, disp_x)
-                foci_h = np.append(foci_h, np.sum(gfit_area))
+                foci_h = np.append(foci_h, np.sum(gfit_area_fixed))
+                # foci_h = np.append(foci_h, peak_fit)
         else:
             if debug_foci:
                 print ('Blob not in bounding box.')
@@ -6654,7 +6693,7 @@ def profile_analysis(fov_id, peak_id, Cells, profile_plane='c2'):
     seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
 
     # Load time table to determine first image index.
-    load_time_table()
+    # load_time_table()
     times_all = []
     for fov in params['time_table']:
         times_all = np.append(times_all, list(params['time_table'][fov].keys()))
@@ -6950,8 +6989,6 @@ def set_poleages(cell_id, daughter_index, Cells):
         Cells[cell_id].poleage = (parent_poleage[0]+1, 0)
     elif daughter_index == 1:
         Cells[cell_id].poleage = (0, parent_poleage[1]+1)
-
-#     print(cell_id, Cells[cell_id].poleage)
 
     for i, daughter_id in enumerate(Cells[cell_id].daughters):
         if daughter_id in Cells:
