@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QGraphicsScene, QGraphic
                              QRadioButton, QButtonGroup, QVBoxLayout, QHBoxLayout,
                              QWidget, QLabel, QAction, QDockWidget, QPushButton, QGraphicsItem,
                              QGridLayout, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
-                             QGraphicsEllipseItem, QGraphicsTextItem)
+                             QGraphicsEllipseItem, QGraphicsTextItem, QInputDialog)
 from PyQt5.QtGui import (QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QPainterPath, QBrush,
                          QTransform, QPolygonF, QFont, QPaintDevice)
 from PyQt5.QtCore import Qt, QPoint, QRectF, QLineF
@@ -23,6 +23,7 @@ import os
 import random
 import yaml
 import multiprocessing
+import pandas as pd
 
 sys.path.insert(0, '/home/wanglab/src/mm3/') # Jeremy's path to mm3 folder
 sys.path.insert(0, '/home/wanglab/src/mm3/aux/')
@@ -55,7 +56,7 @@ class Window(QMainWindow):
         eventButtonGroup = QButtonGroup()
         migrateButton = QRadioButton("Migration")
         migrateButton.setShortcut("Ctrl+V")
-        migrateButton.setToolTip("(Ctrl+V) Draw white migration lines\nbetween cells in adjacent frames.")
+        migrateButton.setToolTip("(Ctrl+V) Draw white migration lines\nbetween cells in adjacent frames.\nHINT: You can draw a migraton line over multiple frames at once.")
         migrateButton.clicked.connect(self.frames.scene.set_migration)
         migrateButton.click()
         eventButtonGroup.addButton(migrateButton)
@@ -91,17 +92,41 @@ class Window(QMainWindow):
         disappearButton.clicked.connect(self.frames.scene.set_disappear)
         eventButtonGroup.addButton(disappearButton)
 
+        oneCellButton = QRadioButton("One cell")
+        oneCellButton.setShortcut("Ctrl+1")
+        oneCellButton.setToolTip("(Ctrl+1) Indicate an ellipse represents a single cell.")
+        oneCellButton.clicked.connect(self.frames.scene.set_one)
+        eventButtonGroup.addButton(oneCellButton)
+
+        twoCellButton = QRadioButton("Two cells")
+        twoCellButton.setShortcut("Ctrl+2")
+        twoCellButton.setToolTip("(Ctrl+2) Indicate an ellipse represents two cells.")
+        twoCellButton.clicked.connect(self.frames.scene.set_two)
+        eventButtonGroup.addButton(twoCellButton)
+
+        threeCellButton = QRadioButton("Three cells")
+        threeCellButton.setShortcut("Ctrl+3")
+        threeCellButton.setToolTip("(Ctrl+3) Indicate an ellipse represents three cells.")
+        threeCellButton.clicked.connect(self.frames.scene.set_three)
+        eventButtonGroup.addButton(threeCellButton)
+
+        zeroCellButton = QRadioButton("Zero cells")
+        zeroCellButton.setShortcut("Ctrl+0")
+        zeroCellButton.setToolTip("(Ctrl+0) Indicate an ellipse represents three cells.")
+        zeroCellButton.clicked.connect(self.frames.scene.set_zero)
+        eventButtonGroup.addButton(zeroCellButton)
+
         removeEventsButton = QRadioButton("Remove events")
         removeEventsButton.setShortcut("Ctrl+R")
         removeEventsButton.setToolTip("(Ctrl+R) Eliminate events belonging entirely to this\ncell, and emantating from this cell.")
         removeEventsButton.clicked.connect(self.frames.scene.remove_all_cell_events)
         eventButtonGroup.addButton(removeEventsButton)
 
-        falselyJoinedButton = QRadioButton("Falsely joined")
-        falselyJoinedButton.clicked.connect(self.frames.scene.set_falsely_joined)
-        falselyJoinedButton.setShortcut("Ctrl+F")
-        falselyJoinedButton.setToolTip("(Ctrl+F) If two cells in frame i join\nto one cell in frame i+1, draw red lines\njoining them.")
-        eventButtonGroup.addButton(falselyJoinedButton)
+        # falselyJoinedButton = QRadioButton("Falsely joined")
+        # falselyJoinedButton.clicked.connect(self.frames.scene.set_falsely_joined)
+        # falselyJoinedButton.setShortcut("Ctrl+F")
+        # falselyJoinedButton.setToolTip("(Ctrl+F) If two cells in frame i join\nto one cell in frame i+1, draw red lines\njoining them.")
+        # eventButtonGroup.addButton(falselyJoinedButton)
 
         # clearAllEventsButton = QPushButton("Remove all\ntracking events")
         # clearAllEventsButton.clicked.connect(self.frames.scene.clear_all_events)
@@ -125,7 +150,11 @@ class Window(QMainWindow):
         eventButtonLayout.addWidget(dieButton)
         eventButtonLayout.addWidget(appearButton)
         eventButtonLayout.addWidget(disappearButton)
-        eventButtonLayout.addWidget(falselyJoinedButton)
+        eventButtonLayout.addWidget(zeroCellButton)
+        eventButtonLayout.addWidget(oneCellButton)
+        eventButtonLayout.addWidget(twoCellButton)
+        eventButtonLayout.addWidget(threeCellButton)
+        # eventButtonLayout.addWidget(falselyJoinedButton)
         eventButtonLayout.addWidget(removeEventsButton)
         # eventButtonLayout.addWidget(clearAllEventsButton)
         # eventButtonLayout.addWidget(maskEditModeButton)
@@ -138,6 +167,9 @@ class Window(QMainWindow):
         eventButtonDockWidget = QDockWidget()
         eventButtonDockWidget.setWidget(eventButtonGroupWidget)
         self.addDockWidget(Qt.LeftDockWidgetArea, eventButtonDockWidget)
+
+        goToPeakButton = QPushButton('Go to fov/peak')
+        goToPeakButton.clicked.connect(self.frames.get_fov_peak_dialog)
 
         advancePeakButton = QPushButton("Next peak")
         advancePeakButton.clicked.connect(self.frames.scene.next_peak)
@@ -156,6 +188,7 @@ class Window(QMainWindow):
         saveUpdatedTracksButton.clicked.connect(self.frames.scene.save_updates)
 
         fileAdvanceLayout = QVBoxLayout()
+        fileAdvanceLayout.addWidget(goToPeakButton)
         fileAdvanceLayout.addWidget(advancePeakButton)
         fileAdvanceLayout.addWidget(priorPeakButton)
         fileAdvanceLayout.addWidget(advanceFOVButton)
@@ -169,6 +202,7 @@ class Window(QMainWindow):
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
+
 class FrameImgWidget(QWidget):
     # class for setting three frames side-by-side as a central widget in a QMainWindow object
     def __init__(self,specs):
@@ -179,6 +213,24 @@ class FrameImgWidget(QWidget):
         self.scene = TrackItem(self.specs)
         self.view = View(self)
         self.view.setScene(self.scene)
+
+    def get_fov_peak_dialog(self):
+
+        fov_id, pressed = QInputDialog.getInt(self, 
+                                              "Type your desired FOV", 
+                                              "fov_id (should be an integer):")
+
+        if pressed:
+            fov_id = fov_id
+
+        peak_id, pressed = QInputDialog.getInt(self, 
+                                               "Go to peak", 
+                                               "peak_id (should be an integer):")
+
+        if pressed:
+            peak_id = peak_id
+
+        self.scene.go_to_fov_and_peak_id(fov_id,peak_id)
 
     # def enter_mask_edit_mode(self):
     #     print("Entering mask edit mode.")
@@ -293,7 +345,7 @@ class TrackItem(QGraphicsScene):
         self.specs = specs
         # add QImages to scene (try three frames)
         self.fov_id_list = [fov_id for fov_id in specs.keys()]
-        self.center_frame_index = 1
+        # self.center_frame_index = 1
 
         self.fovIndex = 0
         self.fov_id = self.fov_id_list[self.fovIndex]
@@ -311,14 +363,14 @@ class TrackItem(QGraphicsScene):
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
 
-        time_int = params['moviemaker']['seconds_per_time_index']/60
+        # time_int = params['moviemaker']['seconds_per_time_index']/60
 
         cell_filename = os.path.join(params['cell_dir'], 'complete_cells.pkl')
         cell_filename_all = os.path.join(params['cell_dir'], 'all_cells.pkl')
 
         with open(cell_filename, 'rb') as cell_file:
             self.Cells = pickle.load(cell_file)
-        mm3.calculate_pole_age(self.Cells) # add poleage
+        # mm3.calculate_pole_age(self.Cells) # add poleage
 
         with open(cell_filename_all, 'rb') as cell_file:
             self.All_Cells = pickle.load(cell_file)
@@ -333,6 +385,7 @@ class TrackItem(QGraphicsScene):
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
+        # self.no_track_pickle_lookup()
 
         self.all_frames_by_time_dict = self.all_phase_img_and_regions()
 
@@ -344,25 +397,46 @@ class TrackItem(QGraphicsScene):
         self.pen = QPen()
 
         # class options
-        self.event_types_list = ["ChildLine","MigrationLine","DieSymbol","AppearSymbol","BornSymbol","DisappearSymbol","FalseJoinLine"]
+        self.event_types_list = ["ChildLine", 
+                                "MigrationLine", 
+                                "DieSymbol", 
+                                "AppearSymbol", 
+                                "BornSymbol", 
+                                "DisappearSymbol", 
+                                "FalseJoinLine", 
+                                "OneCellSymbol", 
+                                "TwoCellSymbol", 
+                                "ThreeCellSymbol",
+                                "ZeroCellSymbol"]
         self.line_events_list = ["ChildLine","MigrationLine","FalseJoinLine"]
+        self.end_check_events_list = ["AppearSymbol","ZeroCellSymbol"]
         # the below lookup table may need reworked to handle migration and child lines to/from a cell
         #   or the handling may be better done in the update_cell_info function
         self.event_type_index_lookup = {"MigrationLine":0, "ChildLine":1,
                                         "DieSymbol":2, "BornSymbol":3,
                                         "AppearSymbol":4, "DisappearSymbol":5,
-                                        "FalseJoinLine":6}
+                                        "FalseJoinLine":6,
+                                        "OneCellSymbol":7,
+                                        "TwoCellSymbol":8,
+                                        "ThreeCellSymbol":9,
+                                        "ZeroCellSymbol":10}
         # given an event type for a cell, what are the event types that are incompatible within that same cell?
-        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart","FalseJoinStart"],
-                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","FalseJoinEnd"],
-                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart","FalseJoinStart"],
-                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd","FalseJoinEnd"],
-                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol","FalseJoinEnd"],
-                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol","FalseJoinEnd"],
-                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol","FalseJoinStart"],
-                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart"],
-                                           "FalseJoinStart":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart"],
-                                           "FalseJoinEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd"]}
+        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart","FalseJoinStart","ZeroCellSymbol"],
+                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","FalseJoinEnd","ZeroCellSymbol"],
+                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart","FalseJoinStart","ZeroCellSymbol"],
+                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd","FalseJoinEnd","ZeroCellSymbol"],
+                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol","FalseJoinEnd","ZeroCellSymbol"],
+                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol","FalseJoinEnd","ZeroCellSymbol"],
+                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol","FalseJoinStart","ZeroCellSymbol"],
+                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart","ZeroCellSymbol"],
+                                           "FalseJoinStart":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart","ZeroCellSymbol"],
+                                           "FalseJoinEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","ZeroCellSymbol"],
+                                           "ZeroCellSymbol":["OneCellSymbol","TwoCellSymbol","ThreeCellSymbol","MigrationStart",
+                                                             "MigrationEnd","ChildStart","ChildEnd","BornSymbol",
+                                                             "AppearSymbol","DisappearSymbol","DieSymbol","FalseJoinStart","FalseJoinEnd"],
+                                           "OneCellSymbol":["ZeroCellSymbol","TwoCellSymbol","ThreeCellSymbol"],
+                                           "TwoCellSymbol":["ZeroCellSymbol","OneCellSymbol","ThreeCellSymbol"],
+                                           "ThreeCellSymbol":["ZeroCellSymbol","OneCellSymbol","TwoCellSymbol"]}
         self.migration = False
         self.die = False
         self.children = False
@@ -370,6 +444,9 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
 
         # apply cell events to the scene
         self.draw_cell_events()
@@ -396,6 +473,22 @@ class TrackItem(QGraphicsScene):
                 track_file.close()
                 print(str(e))
 
+        df_file_name = '/home/wanglab/src/mm3/track_training_file_paths.csv'
+        track_file_name_df = pd.read_csv(df_file_name)
+
+        # if the current training data isn't yet in the dataframe, add it and save the updated dataframe
+        if not self.pickle_file_name in track_file_name_df.file_path.values:
+
+            print("Appending file name {} as new row in {}.".format(self.pickle_file_name, df_file_name))
+            track_file_name_df = track_file_name_df.append({'file_path':self.pickle_file_name, 'include':1}, ignore_index=True)
+            track_file_name_df.to_csv(df_file_name,index=False)
+
+
+        
+
+    def no_track_pickle_lookup(self):
+        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+
     def get_track_pickle(self):
 
         self.pickle_file_name = os.path.join(params['cell_dir'], '{}_xy{:0=3}_p{:0=4}_updated_tracks.pkl'.format(params['experiment_name'], self.fov_id, self.peak_id))
@@ -412,11 +505,39 @@ class TrackItem(QGraphicsScene):
                     print("Could not load pickle file specified.")
                     print(e)
 
+    def go_to_fov_and_peak_id(self, fov_id, peak_id):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+
+        self.fov_id = fov_id
+        self.fovIndex = self.fov_id_list.index(self.fov_id)
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in self.specs[self.fov_id].keys() if self.specs[self.fov_id][peak_id] == 1]
+
+        self.peak_id = peak_id
+        print(self.peak_id)
+        # Now we'll look up the peakIndex
+        self.peakIndex = self.peak_id_list_in_fov.index(self.peak_id)
+        
+        # construct image stack file names from params
+        self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
+        self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+
+        self.labelStack = io.imread(self.labelImgPath)
+        self.phaseStack = io.imread(self.phaseImgPath)
+
+        # look for previously edited info and load it if it is found
+        self.get_track_pickle()
+
+        self.all_frames_by_time_dict = self.all_phase_img_and_regions()
+
+        self.draw_cell_events()
+
     def next_peak(self):
         # start by removing all current graphics items from the scene, the scene here being 'self'
         self.clear()
 
-        self.center_frame_index = 1
+        # self.center_frame_index = 1
         self.peakIndex += 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
         # print(self.peak_id)
@@ -439,7 +560,7 @@ class TrackItem(QGraphicsScene):
         # start by removing all current graphics items from the scene, the scene here being 'self'
         self.clear()
 
-        self.center_frame_index = 1
+        # self.center_frame_index = 1
         self.peakIndex -= 1
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
         # print(self.peak_id)
@@ -464,7 +585,7 @@ class TrackItem(QGraphicsScene):
         # start by removing all current graphics items from the scene, the scene here being 'self'
         self.clear()
 
-        self.center_frame_index = 1
+        # self.center_frame_index = 1
 
         self.fovIndex += 1
         self.fov_id = self.fov_id_list[self.fovIndex]
@@ -493,7 +614,7 @@ class TrackItem(QGraphicsScene):
         # start by removing all current graphics items from the scene, the scene here being 'self'
         self.clear()
 
-        self.center_frame_index = 1
+        # self.center_frame_index = 1
 
         self.fovIndex -= 1
         self.fov_id = self.fov_id_list[self.fovIndex]
@@ -594,8 +715,8 @@ class TrackItem(QGraphicsScene):
         for t, regions in regions_by_time.items():
             # this is a list, while we want it to be a dictionary with the region label as the key
             for region in regions:
-                default_events = np.zeros(8, dtype=np.int)
-                default_events[7] = 1 # set N to 1
+                default_events = np.zeros(12, dtype=np.int)
+                default_events[11] = 1 # set N to 1
                 regions_and_events_by_time[t]['regions'][region.label] = {'props' : region,
                                                                       'events' : default_events}
         # create default interaction matrix
@@ -647,26 +768,32 @@ class TrackItem(QGraphicsScene):
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
 
                     # daughter 1 and 2 label
-                    d1_label = self.All_Cells[cell_tmp.daughters[0]].labels[0]
-                    d2_label = self.All_Cells[cell_tmp.daughters[1]].labels[0]
+                    d1_label = self.All_Cells[cell_tmp.daughters[0].id].labels[0]
 
                     try:
+                        d2_label = self.All_Cells[cell_tmp.daughters[1].id].labels[0]
                         regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
                         regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
 
                     except IndexError as e:
-                        print("At timepoint {} there was an index error in assigning daughters".format(t))
+                        print("At timepoint {} there was an index error in assigning daughters: {}".format(t,e))
 
                 # A apoptosis, 2
-                # skip for now.
-
+                try:
+                    if cell_tmp.death and i == len(cell_tmp.times)-1:
+                        regions_and_events_by_time[t]['regions'][label_tmp]['events'][2] = 1
+                # skip here if no death attribute. Of course can update data with input from user.
+                except AttributeError as e:
+                    print(e)
+                
                 # B birth, 3
                 if cell_tmp.parent and i == 0:
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][3] = 1
 
                 # I appears, 4
-                if not cell_tmp.parent and i == 0:
-                    regions_and_events_by_time[t]['regions'][label_tmp]['events'][4] = 1
+                if not t == 1:
+                    if not cell_tmp.parent and i == 0:
+                        regions_and_events_by_time[t]['regions'][label_tmp]['events'][4] = 1
 
                 # O disappears, 5
                 if not cell_tmp.daughters and i == len(cell_tmp.times)-1:
@@ -678,15 +805,27 @@ class TrackItem(QGraphicsScene):
                 # probably need done by our eventual algorithm
                 regions_and_events_by_time[t]['regions'][label_tmp]['events'][6] = 0
 
-                # N no data, 7 - Set this to zero as this region as been checked.
-                regions_and_events_by_time[t]['regions'][label_tmp]['events'][7] = 0
+                # One cell in detection, 7
+                regions_and_events_by_time[t]['regions'][label_tmp]['events'][7] = 1
+
+                # Two cells in detection, 8, keep set to 0. User will update as necessary
+                # regions_and_events_by_time[t]['regions'][label_tmp]['events'][8] = 1
+
+                # Three or more cells in detection, 9, keep set to 0. User will update as necessary
+                # regions_and_events_by_time[t]['regions'][label_tmp]['events'][9] = 1
+
+                # Zero cells in detection, 10, keep set to 0. User will update as necessary
+                # regions_and_events_by_time[t]['regions'][label_tmp]['events'][10] = 1
+
+                # N no data, 10 - Set this to zero as this region as been checked.
+                regions_and_events_by_time[t]['regions'][label_tmp]['events'][11] = 0
 
         # Set remaining regions to event space [0 0 0 0 1 1]
         # Also make their appropriate matrix value 1, which should be in the first column.
         for t, t_data in regions_and_events_by_time.items():
             for region, region_data in t_data['regions'].items():
-                if region_data['events'][6] == 1:
-                    region_data['events'][4:] = 1, 1, 0
+                if region_data['events'][11] == 1:
+                    region_data['events'][7] = 1
 
                     t_data['matrix'][region, 0] = 1
 
@@ -828,6 +967,34 @@ class TrackItem(QGraphicsScene):
                                 eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
                                 self.addItem(eventItem)
 
+                            if 7 in event_indices:
+                                # if the seventh element in event_indices was 1,
+                                #   there is one cell in this detection
+                                self.set_one()
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
+
+                            if 8 in event_indices:
+                                # if the eighth element in event_indices was 1,
+                                #   there are two cells in this detection
+                                self.set_two()
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
+
+                            if 9 in event_indices:
+                                # if the ninth element in event_indices was 1,
+                                #   there are three or more cells in this detection
+                                self.set_three()
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
+
+                            if 10 in event_indices:
+                                # if the tenth element in event_indices was 1,
+                                #   there are zero cells in this detection
+                                self.set_zero()
+                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem)
+                                self.addItem(eventItem)
+
                             try:
                                 nextFrame = self.all_frames_by_time_dict[time+1]
                                 for endItem in nextFrame.childItems():
@@ -877,6 +1044,14 @@ class TrackItem(QGraphicsScene):
                 self.set_disappear()
             elif original_event_type == "FalseJoinLine":
                 self.set_falsely_joined()
+            elif original_event_type == "OneCellSymbol":
+                self.set_one()
+            elif original_event_type == "TwoCellSymbol":
+                self.set_two()
+            elif original_event_type == "ThreeCellSymbol":
+                self.set_three()
+            elif original_event_type == "ZeroCellSymbol":
+                self.set_zero()
             elif original_event_type == "Removal":
                 self.remove_all_cell_events()
 
@@ -970,7 +1145,8 @@ class TrackItem(QGraphicsScene):
         # Work with the newly added eventItem
         # If the event was either child or migration, do this stuff
         elif self.eventItem.type() in self.line_events_list:
-            # Identify immediatly affected cells
+
+            # Identify immediately affected cells
             cell = self.eventItem.startItem
             frame = self.all_frames_by_time_dict[cell.time]
             self.update_frame_info(frame)
@@ -991,7 +1167,7 @@ class TrackItem(QGraphicsScene):
         frame_time = frame.time
         # get all cells in the frame to update each one, in case they were indirectly affected by the event that was drawn
         for cell in frame.childItems():
-            # print(cell_time)
+            
             cell_label = cell.cellProps.label
             # print(cell_label)
             # grab all currently-drawn events for the cell of interest
@@ -1037,7 +1213,14 @@ class TrackItem(QGraphicsScene):
                         #   set the 'born' index of cell_events to 1
                         if event.endItem == cell:
                             cell_events[self.event_type_index_lookup["BornSymbol"]] = 1
-                # if the event is either appear, disappear, or die, do this stuff
+
+                # # If the event is zeroCellSymbol or Appear, do this
+                # elif event_type in self.end_check_events_list:
+
+                #     for i,old_event_type in enumerate(events):
+                #         print(i, old_event_type)
+
+                # if the event is either disappear or die, do this stuff
                 else:
                     cell_events[self.event_type_index_lookup[event_type]] = 1
                     if event_type == "DissapearSymbol":
@@ -1053,13 +1236,9 @@ class TrackItem(QGraphicsScene):
         #   next frame, or three children, etc.. It then attempts to resolve the conflict by removing
         #   the older annotation.
         event_type = event.type()
-        # I need to set this up in a way that will allow me to interrogate whether an event type triggers
-        #   the incompatible event type lookup in __init__. This will save a lot of headache in coding of logic.
-        #
-        # Therefore, prioritize establishing list of cell events for cells that interact with the newly drawn annotation
-
 
         if event_type in self.line_events_list:
+
             start_cell = event.startItem
             end_cell = event.endItem
             old_end_cell_events, old_end_cell_event_types = self.get_all_cell_event_items(end_cell, return_forbidden_items_list=True)
@@ -1085,7 +1264,9 @@ class TrackItem(QGraphicsScene):
             start_cell = event.item
 
         old_start_cell_events, old_start_cell_event_types = self.get_all_cell_event_items(start_cell, return_forbidden_items_list=True)
+        # print(old_start_cell_events, old_start_cell_event_types)
 
+        # NOTE: removal not working as desired for zero_cells and appear. Lines into zero and appear detections are removed, then redrawn due to lack of updating background data
         # Name the key for fobidden event lookup.
         if event_type == "MigrationLine":
             forbidden_event_lookup_key = "MigrationStart"
@@ -1098,10 +1279,13 @@ class TrackItem(QGraphicsScene):
 
         # retrieve list of forbidden event types, given our drawn event
         forbidden_events_list = self.forbidden_events_lookup[forbidden_event_lookup_key]
+        # print(forbidden_events_list)
 
         child_start_count = 0
         for i, old_start_cell_event_type in enumerate(old_start_cell_event_types):
+            # print(i, old_start_cell_event_type)
             if old_start_cell_event_type in forbidden_events_list:
+                # print(i, "removal triggered")
                 if old_start_cell_event_type == "ChildStart":
                     if forbidden_event_lookup_key == "ChildStart":
                         if child_start_count == 0:
@@ -1113,6 +1297,7 @@ class TrackItem(QGraphicsScene):
                     else:
                         self.removeItem(old_start_cell_events[i])
                 else:
+                    # print(i, "removal of {} triggered".format(old_start_cell_events[i]))
                     self.removeItem(old_start_cell_events[i])
 
     def mousePressEvent(self, event):
@@ -1176,13 +1361,77 @@ class TrackItem(QGraphicsScene):
                     if (self.startItem.parentItem() == self.endItem.parentItem()) and self.eventItem.type() in self.line_events_list:
                         self.removeItem(self.eventItem)
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
-                    elif abs(start_time - end_time) > 1:
-                        self.removeItem(self.eventItem)
-                        # NOTE: add support for dragging a migration line over many frames, then splitting into component migration events.
-                        #  This would save a lot of time compared to manually making each migration event individually.
-                        
 
-                        print("Cannot link cells separated by more than a single frame. Ignoring selection.")
+                    elif abs(start_time - end_time) > 1:
+                        
+                        self.removeItem(self.eventItem)
+                        # get the centroid position for the cell that was clicked
+                        endPointY = self.endItem.cellProps.centroid[0]
+                        # here we add the x-position of the detected ellipse' frame, because
+                        #   the centroid of each cell is just its centroid within its own frame
+                        #   Therefore, by adding the x-offset of the frame in which the cell
+                        #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                        endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                        self.lastPoint = QPoint(endPointX, endPointY)
+                        self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
+                        
+                        # get the centroid position for the cell that was clicked
+                        endPointY = self.endItem.cellProps.centroid[0]
+                        # here we add the x-position of the detected ellipse' frame, because
+                        #   the centroid of each cell is just its centroid within its own frame
+                        #   Therefore, by adding the x-offset of the frame in which the cell
+                        #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                        endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                        self.lastPoint = QPoint(endPointX, endPointY)
+                        self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
+
+                        # if it's a migration line we're drawing, it can span multiple frames. 
+                        #   We'll just split it up into its component migrations, frame-to-frame
+                        if self.eventItem.type() == "MigrationLine":
+                            # Need to get all cells with which this line collides.
+                            cells_under_line = self.get_cells_under_item(item=self.eventItem)
+                            # No garuantee these cells are sorted by time, sort them now
+                            cells_under_line.sort(key=self.get_time)
+                            # Make a list of the times to evaluate whether a timepoint is missing.
+                            cell_times = [cell.time for cell in cells_under_line]
+                            time_diffs = np.diff(cell_times)
+
+                            # loop over sorted cells to add migration events to scene and background data
+                            for cell_index,cell in enumerate(cells_under_line):
+
+                                if cell_index < len(cells_under_line)-1: # do nothing if we're at the final cell
+
+                                    time_diff = time_diffs[cell_index]
+                                    # if a timepoint was missed, break the loop
+                                    if time_diff > 1:
+                                        # self.removeItem(self.eventItem)
+                                        break
+
+                                    self.startItem = cell
+                                    self.endItem = cells_under_line[cell_index+1]
+
+                                    # get the centroid position for the cell that was clicked
+                                    endPointY = self.endItem.cellProps.centroid[0]
+                                    # here we add the x-position of the detected ellipse' frame, because
+                                    #   the centroid of each cell is just its centroid within its own frame
+                                    #   Therefore, by adding the x-offset of the frame in which the cell
+                                    #   exists, we shift our x-value of our line's start or end-point by the appropriate distance.
+                                    endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
+                                    self.lastPoint = QPoint(endPointX, endPointY)
+                                    self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
+
+                                    self.remove_old_conflicting_events(self.eventItem)
+                                    self.addItem(self.eventItem)
+                                    # query the currently-drawn annotations in the scene and update all cells' information
+                                    self.update_tracking_info()
+                                    # remove old events and draw the newly-updated ones. This is inefficient, but helps you
+                                    #   to ensure you haven't just messed up the underlying tracking data
+                                    self.draw_cell_events(start_time=start_time-2, end_time=end_time+2, update=True, original_event_type=self.eventItem.type())
+
+                        else:
+                            self.removeItem(self.eventItem)
+                            print("Cannot link cells separated by more than a single frame. Ignoring selection.")
+                        
                     else:
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
@@ -1205,6 +1454,26 @@ class TrackItem(QGraphicsScene):
 
             self.drawing = False
 
+    def get_cells_under_item(self, item):
+        '''
+        A function which returns all cell objects underneath a QGraphicsItem.
+        '''
+
+        # get all colliding items, this will include QPixmapItems and QEllipseItems
+        collisions = self.collidingItems(item)
+        cells = []
+        # evaluate whether each item is an ellipse (cell)
+        for item in collisions:
+            item_type = item.type()
+
+            if item_type == 4:
+                cells.append(item)
+            
+        return(cells)
+
+    def get_time(self, cell):
+        return(cell.time)
+
     def set_event_item(self, firstPoint, startItem, lastPoint=None, endItem=None):
         if self.migration:
             eventItem = MigrationLine(firstPoint, lastPoint, startItem, endItem)
@@ -1220,10 +1489,16 @@ class TrackItem(QGraphicsScene):
             eventItem = DisappearSymbol(firstPoint, startItem)
         if self.remove_events:
             eventItem = None
-        # if self.falsely_joined_cells:
-        #     eventItem = FalseJoinSymbol(firstPoint, startItem)
         if self.falsely_joined_cells:
             eventItem = FalseJoinLine(firstPoint, lastPoint, startItem, endItem)
+        if self.one_cell:
+            eventItem = OneCellSymbol(firstPoint, startItem)
+        if self.two_cells:
+            eventItem = TwoCellSymbol(firstPoint, startItem)
+        if self.three_cells:
+            eventItem = ThreeCellSymbol(firstPoint, startItem)
+        if self.zero_cells:
+            eventItem = ZeroCellSymbol(firstPoint, startItem)
 
         return(eventItem)
 
@@ -1247,6 +1522,9 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
 
     def set_migration(self):
         # print('clicked set_migration')
@@ -1258,6 +1536,10 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_children(self):
         # print('clicked set_children')
@@ -1269,6 +1551,10 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_die(self):
         # print('clicked set_die')
@@ -1280,6 +1566,10 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_appear(self):
         self.remove_events = False
@@ -1290,6 +1580,10 @@ class TrackItem(QGraphicsScene):
         self.appear = True
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_disappear(self):
         self.remove_events = False
@@ -1300,6 +1594,10 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = True
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_born(self):
         self.remove_events = False
@@ -1310,6 +1608,10 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
 
     def set_falsely_joined(self):
         self.remove_events = False
@@ -1320,6 +1622,154 @@ class TrackItem(QGraphicsScene):
         self.appear = False
         self.disappear = False
         self.falsely_joined_cells = True
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
+
+    def set_one(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.falsely_joined_cells = False
+        self.one_cell = True
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = False
+
+    def set_two(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = True
+        self.three_cells = False
+        self.zero_cells = False
+
+    def set_three(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = True
+        self.zero_cells = False
+
+    def set_zero(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.falsely_joined_cells = False
+        self.one_cell = False
+        self.two_cells = False
+        self.three_cells = False
+        self.zero_cells = True
+
+class OneCellSymbol(QGraphicsTextItem):
+
+    def __init__(self, point, item):
+        super(OneCellSymbol, self).__init__()
+
+        self.item = item
+
+        textColor = QColor(1*255,0*255,0*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(16)
+        string = "1"
+        textPosition = QPoint(point.x()-9, point.y()-9)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("OneCellSymbol")
+
+class TwoCellSymbol(QGraphicsTextItem):
+
+    def __init__(self, point, item):
+        super(TwoCellSymbol, self).__init__()
+
+        self.item = item
+
+        textColor = QColor(1*255,0*255,0*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(16)
+        string = "2"
+        textPosition = QPoint(point.x()-9, point.y()-9)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("TwoCellSymbol")
+
+class ThreeCellSymbol(QGraphicsTextItem):
+
+    def __init__(self, point, item):
+        super(ThreeCellSymbol, self).__init__()
+
+        self.item = item
+
+        textColor = QColor(1*255,0*255,0*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(16)
+        string = "3"
+        textPosition = QPoint(point.x()-9, point.y()-9)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("ThreeCellSymbol")
+
+class ZeroCellSymbol(QGraphicsTextItem):
+
+    def __init__(self, point, item):
+        super(ZeroCellSymbol, self).__init__()
+
+        self.item = item
+
+        textColor = QColor(1*255,0*255,0*255)
+        textFont = QFont()
+        textFont.setFamily("Times")
+        textFont.setPixelSize(16)
+        string = "0"
+        textPosition = QPoint(point.x()-9, point.y()-9)
+
+        self.setPlainText(string)
+        self.setFont(textFont)
+        self.setPos(textPosition)
+        self.setDefaultTextColor(textColor)
+
+    def type(self):
+        return("ZeroCellSymbol")
 
 class MigrationLine(QGraphicsLineItem):
     # A class for helping to draw and organize migration events
@@ -1471,29 +1921,6 @@ class DisappearSymbol(QGraphicsLineItem):
 
     def type(self):
         return("DisappearSymbol")
-
-# class FalseJoinSymbol(QGraphicsTextItem):
-#
-#     def __init__(self, point, item):
-#         super(FalseJoinSymbol, self).__init__()
-#
-#         self.item = item
-#
-#         textColor = QColor(0*255,0*255,0*255)
-#         textFont = QFont()
-#         textFont.setFamily("Times")
-#         textFont.setPixelSize(24)
-#         textFont.setWeight(75) # Bold
-#         string = "2"
-#         textPosition = QPoint(point.x()-10, point.y()-15)
-#
-#         self.setPlainText(string)
-#         self.setFont(textFont)
-#         self.setPos(textPosition)
-#         self.setDefaultTextColor(textColor)
-#
-#     def type(self):
-#         return("FalseJoin")
 
 class FalseJoinLine(QGraphicsLineItem):
     '''
