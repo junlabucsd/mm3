@@ -3762,6 +3762,9 @@ class CellFromGraph():
         self.total_fluorescence = {}
         self.foci = {}
 
+    def __len__(self):
+        return(len(self.times))
+
     def add_parent(self, parent):
         self.parent = parent
 
@@ -4000,7 +4003,11 @@ class Focus():
 
         # create all the attributes
         # id
-        self.id = '{}_focus{:0=2}'.format(cell.id, region.label)
+        focus_id = create_focus_id(region,
+                                   t,
+                                   cell.peak,
+                                   cell.fov)
+        self.id = focus_id
 
         # identification convenience
         self.appear_label = int(region.label)
@@ -4060,6 +4067,12 @@ class Focus():
         self.disp_w = []
 
         self.calculate_fluorescence(seg_img, intensity_image, region)
+
+    def __len__(self):
+        return(len(self.times))
+
+    def __str__(self):
+        return(self.print_info(self))
             
     def add_cell(self, cell):
         self.cells.append(cell)
@@ -5721,29 +5734,19 @@ def compile_foci_info_df(Foci):
             print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
         
         if focus_counter == 0:
-            # wide_df = focus.make_wide_df()
+            wide_df = focus.make_wide_df()
             long_df = focus.make_long_df()
             focus_counter += 1
         else:
-            # print(focus_id)
-            # print(wide_df)
-            # print(long_df)
-            # wide_df = wide_df.append(focus.make_wide_df())
-            print(focus_id)
-            tmp_df = focus.make_long_df()
-            # print(tmp_df)
-            # print(focus_id)
-            ###################################################
-            ##################### ERROR HERE!!!!!!!!!!!!!
-            ################# STILL NOT SURE WHY !!!!!
-            long_df = long_df.append(tmp_df)
+            wide_df = wide_df.append(focus.make_wide_df())
+            long_df = long_df.append(focus.make_long_df())
             focus_counter += 1
 
     long_df.reset_index(drop=True, inplace=True)
-    # wide_df.reset_index(drop=True, inplace=True)
+    wide_df.reset_index(drop=True, inplace=True)
     
-    # return(wide_df, long_df)
-    return(long_df)
+    return(wide_df, long_df)
+    # return(long_df)
 
 def find_all_cell_intensities(Cells, 
                               specs, time_table, channel_name='sub_c2',
@@ -6362,17 +6365,6 @@ def foci_info_unet(foci,
                                     debug=False
                                 )
 
-                                # The problem now is that I can have multiple labels from a single frame appended to a focus' times and labels
-                                #  This screws up indexing.
-                                # print("Frame: ", frame)
-                                # print("Time: ", t)
-                                # print("Max_inds: ", max_inds)
-                                # print("Compare array: ", compare_array)
-                                # print("Prior frame foci: ", prior_frame_foci)
-                                # print("Current tracked label: ", tracked_label)
-                                # print("Prior tracked label: ", prior_tracked_label)
-                                # print("Prior tracked focus: ", prior_tracked_focus)
-
                                 prior_tracked_focus = [val for val in prior_tracked_foci.values()][0]
                         
                                 # determine which cell this focus belongs to
@@ -6465,6 +6457,16 @@ def foci_info_unet(foci,
                             seg_foci_stack[frame, seg_foci_img == this_label] = 0
 
     return#(foci)
+
+def update_cell_foci(cells, foci):
+    '''Updates cells' .foci attribute in-place using information
+    in foci dictionary
+    '''
+    for focus_id, focus in foci.items():
+        for cell in focus.cells:
+
+            cell_id = cell.id
+            cells[cell_id].foci[focus_id] = focus
 
 # finds best fit for 2d gaussian using functin above
 def fitgaussian(data):
