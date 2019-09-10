@@ -135,7 +135,7 @@ Run:
 
 * `-it` is for interactive mode so you can use the terminal (very often used).
 * `--rm` is to remove the container automatically when it closes (very often used).
-* `-p` publishes container's port to the host computer.
+* `-p` publishes container's port to the host computer. This may only be required for the Jupyter notebook. Should test and edit the directions below as needed.
 * `local/mm3-py3:root` is the tag of our image we chose when building.
 * Exit the container with `CTRL + D`
 
@@ -228,6 +228,16 @@ The `bash_aliases` file  described in **3.5 Setting up shortcuts** has two usefu
 ### 3.4 Running a Jupyter notebook
 
 TBA
+
+`docker build -t local/mm3-py3-jupyter:root .`
+
+
+`docker build -t local/mm3-py3-jupyter:USERNAME`
+
+
+`docker run -it --rm -p 8888:8888 -e DISPLAY=$(get_IP):0 -w=$PWD -v /Users/jt:/home/jt -v /Users/jt:/Users/jt -v /Volumes/JunLabSSD_04:/media/JunLabSSD_04 -v /Volumes/JunLabSSD_04:/Volumes/JunLabSSD_04 local/mm3-py3-jupyter:jt /bin/bash`
+
+for some reason this does not require x11-tunnel
 
 ### 3.5 Setting up shortcuts
 
