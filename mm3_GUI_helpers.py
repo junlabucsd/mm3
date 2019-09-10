@@ -244,7 +244,7 @@ class MaskTransparencyWidget(QWidget):
                 super(MaskTransparencyWidget, self).__init__(parent)
 
                 self.mask_dir = mask_dir
-                self.frameIndex = 500
+                self.frameIndex = 0
 
                 self.imgPaths = imgPaths
                 self.fov_id_list = fov_id_list
@@ -491,7 +491,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 500
+                self.frameIndex = 0
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -515,7 +515,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 500
+                self.frameIndex = 0
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -541,7 +541,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 500
+                self.frameIndex = 0
 
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
@@ -567,7 +567,7 @@ class MaskTransparencyWidget(QWidget):
                 self.maskImgPath = self.imgPaths[self.fov_id][self.imgIndex][1]
                 self.maskStack = io.imread(self.maskImgPath)
 
-                self.frameIndex = 500
+                self.frameIndex = 0
                 experiment_name = params['experiment_name']
                 original_file_name = self.maskImgPath
                 pat = re.compile(r'.+(xy\d{3,4})_(p\d{3,4})_.+') # supports 3- or 4-digit naming
