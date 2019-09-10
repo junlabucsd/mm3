@@ -295,7 +295,13 @@ if __name__ == "__main__":
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 mm3.information("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img, model, stack_weights, trap_align_metadata['shift_distance'], subImageNumber=16, padSubImageNumber=25, debug=p['debug'])
+                first_frame_trap_prediction = mm3.get_frame_predictions(img, 
+                                                                        model, 
+                                                                        stack_weights, 
+                                                                        trap_align_metadata['shift_distance'], 
+                                                                        subImageNumber=16, 
+                                                                        padSubImageNumber=25, 
+                                                                        debug=p['debug'])
 
                 if p['debug']:
                     fig,ax = plt.subplots(nrows=1, ncols=4, figsize=(12,12))
@@ -391,15 +397,15 @@ if __name__ == "__main__":
                     align_region_stack[frame,:,:,0] = frame_img[centroid[0]-256:centroid[0]+256,
                                                              centroid[1]-256:centroid[1]+256]
 
-                if p['debug']:
-                    colNum = 10
-                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+                # if p['debug']:
+                #     colNum = 10
+                #     fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
 
-                    for pltIdx in range(colNum):
-                        ax[pltIdx].imshow(align_region_stack[pltIdx*10,:,:,0])
+                #     for pltIdx in range(colNum):
+                #         ax[pltIdx].imshow(align_region_stack[pltIdx*10,:,:,0])
 
-                    plt.title('Alignment stack images');
-                    plt.show();
+                #     plt.title('Alignment stack images');
+                #     plt.show();
 
                 # run model on all frames
                 batch_size=p['compile']['channel_prediction_batch_size']
@@ -421,28 +427,28 @@ if __name__ == "__main__":
                 # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.
                 align_region_class_predictions = np.argmax(align_region_predictions, axis=3)
 
-                if p['debug']:
-                    colNum = 10
-                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+                # if p['debug']:
+                #     colNum = 10
+                #     fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
 
-                    for pltIdx in range(colNum):
-                        ax[pltIdx].imshow(align_region_class_predictions[pltIdx*10,:,:])
+                #     for pltIdx in range(colNum):
+                #         ax[pltIdx].imshow(align_region_class_predictions[pltIdx*10,:,:])
 
-                    plt.title('Alignment stack predictions');
-                    plt.show();
+                #     plt.title('Alignment stack predictions');
+                #     plt.show();
 
                 # get boolean array where trap predictions are True
                 align_traps = align_region_class_predictions == 0
 
-                if p['debug']:
-                    colNum = 10
-                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+                # if p['debug']:
+                #     colNum = 10
+                #     fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
 
-                    for pltIdx in range(colNum):
-                        ax[pltIdx].imshow(align_traps[pltIdx*10,:,:])
+                #     for pltIdx in range(colNum):
+                #         ax[pltIdx].imshow(align_traps[pltIdx*10,:,:])
 
-                    plt.title('Alignment trap masks');
-                    plt.show();
+                #     plt.title('Alignment trap masks');
+                #     plt.show();
 
                 # allocate array to store filtered traps over time
                 align_trap_mask_stack = np.zeros(align_traps.shape)
@@ -460,15 +466,15 @@ if __name__ == "__main__":
                     for i,bbox in enumerate(trap_bboxes):
                         align_trap_mask_stack[frame,bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
 
-                if p['debug']:
-                    colNum = 10
-                    fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
+                # if p['debug']:
+                #     colNum = 10
+                #     fig,ax = plt.subplots(ncols=colNum, figsize=(20,20))
 
-                    for pltIdx in range(colNum):
-                        ax[pltIdx].imshow(align_trap_mask_stack[pltIdx*10,:,:])
+                #     for pltIdx in range(colNum):
+                #         ax[pltIdx].imshow(align_trap_mask_stack[pltIdx*10,:,:])
 
-                    plt.title('Filtered alignment trap masks');
-                    plt.show();
+                #     plt.title('Filtered alignment trap masks');
+                #     plt.show();
 
                 labelled_align_trap_mask_stack = measure.label(align_trap_mask_stack)
 
