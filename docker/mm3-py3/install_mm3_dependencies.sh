@@ -19,6 +19,7 @@ python -m pip install scikit-image
 python -m pip install pyYAML
 python -m pip install pandas
 python -m pip install pims_nd2
+python -m pip install sklearn
 
 # python binding
 python -m pip install freetype-py
