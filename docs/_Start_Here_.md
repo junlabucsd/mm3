@@ -1,3 +1,5 @@
+# mm3
+
 # mm3 Overview
 # Updated October 2017
 
@@ -211,4 +213,3 @@ Each option has the following function:
 * `-l lineages.pkl`: plots on a per lineage basis.
 
 All options for plots are passed through the `params_postprocessing.yaml` file.
-
