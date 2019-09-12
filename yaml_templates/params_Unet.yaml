@@ -42,6 +42,8 @@ metamorphToTIFF:
   strain_name: 'JDW3416'
 
 nd2ToTIFF:
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end: None
   number_of_rows : 1
   crop_ymin : # 0.05
   crop_ymax : # 0.95
@@ -73,10 +75,11 @@ compile:
 channel_picker:
   do_crosscorrs: False
   do_CNN: True
-  interactive : True
+  interactive: True
+  do_seg: False
 
-  first_image : 1 # image index to show on top row
-  last_image : -1 # image index to show on middle row
+  first_image: 1 # image index to show on top row
+  last_image: -1 # image index to show on middle row
   channel_picking_threshold: 0.9 # threshold for calling empty/full channels
   channel_picker_model_file: '/home/wanglab/src/mm3/weights/empties_weights.hdf5'
 
@@ -95,10 +98,10 @@ segment:
   distance_threshold: 2 # pixel distance to be zeroed
   second_opening_size: 1 # pixel size used in the second morphological opening
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
-  trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
-  trained_model_image_width: 32 # 
 
   model_file: '/home/wanglab/src/mm3/weights/cropped_trap_weights.hdf5'
+  trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
+  trained_model_image_width: 32 #
 
   batch_size: 210
   cell_class_threshold: 0.60
