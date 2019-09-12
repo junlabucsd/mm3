@@ -2609,11 +2609,7 @@ def segment_fov_unet(fov_id, specs, model, color=None):
     img_height = img_stack.shape[1]
     img_width = img_stack.shape[2]
 
-    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
-    pad_dict = {'top':top_pad,
-               'bottom':bottom_pad,
-               'right':right_pad,
-               'left':left_pad}
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
 
     timepoints = img_stack.shape[0]
 
@@ -2628,7 +2624,6 @@ def segment_fov_unet(fov_id, specs, model, color=None):
 
     information("Finished segmentation for FOV {}.".format(fov_id))
     return(k)
-
 
 def segment_fov_foci_unet(fov_id, specs, model, color=None):
     '''
@@ -5687,7 +5682,6 @@ def filter_foci(Foci, label, t, debug=False):
 
     return Filtered_Foci
 
-
 def filter_cells(Cells, attr, val, idx=None, debug=False):
     '''Return only cells whose designated attribute equals "val".'''
 
@@ -6263,12 +6257,7 @@ def foci_lap(img, img_foci, cell, t):
     return disp_l, disp_w, foci_h
 
 # actual worker function for foci detection
-def foci_info_unet(foci,
-                   Cells,
-                   specs,
-                   time_table,
-                   channel_name='sub_c2'):
-
+def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
     '''foci_info_unet operates on cells in which foci have been found using
     using Unet.
 
@@ -6341,9 +6330,7 @@ def foci_info_unet(foci,
                     peak_foci = filter_cells(fov_foci,
                                              attr='peak',
                                              val=peak_id)
-                    prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci,
-                                                                           attr='times',
-                                                                           val=t-1)
+                    prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci, attr='times', val=t-1)
 
                     # if there were foci in prior frame, do stuff
                     if len(prior_frame_foci) > 0:
@@ -6498,7 +6485,7 @@ def foci_info_unet(foci,
                             # set pixels in this frame that match this label to 0
                             seg_foci_stack[frame, seg_foci_img == this_label] = 0
 
-    return#(foci)
+    return
 
 def update_cell_foci(cells, foci):
     '''Updates cells' .foci attribute in-place using information
