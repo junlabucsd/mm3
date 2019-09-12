@@ -114,7 +114,7 @@ if __name__ == "__main__":
     mm3.information("Model loaded.")
 
     for fov_id in fov_id_list:
-        mm3.segment_fov_unet(fov_id, specs, seg_model)
+        mm3.segment_fov_unet(fov_id, specs, seg_model, color=p['phase_plane'])
 
     del seg_model
 

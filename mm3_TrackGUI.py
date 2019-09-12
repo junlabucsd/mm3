@@ -202,7 +202,6 @@ class Window(QMainWindow):
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
-
 class FrameImgWidget(QWidget):
     # class for setting three frames side-by-side as a central widget in a QMainWindow object
     def __init__(self,specs):
@@ -216,15 +215,15 @@ class FrameImgWidget(QWidget):
 
     def get_fov_peak_dialog(self):
 
-        fov_id, pressed = QInputDialog.getInt(self, 
-                                              "Type your desired FOV", 
+        fov_id, pressed = QInputDialog.getInt(self,
+                                              "Type your desired FOV",
                                               "fov_id (should be an integer):")
 
         if pressed:
             fov_id = fov_id
 
-        peak_id, pressed = QInputDialog.getInt(self, 
-                                               "Go to peak", 
+        peak_id, pressed = QInputDialog.getInt(self,
+                                               "Go to peak",
                                                "peak_id (should be an integer):")
 
         if pressed:
@@ -397,15 +396,15 @@ class TrackItem(QGraphicsScene):
         self.pen = QPen()
 
         # class options
-        self.event_types_list = ["ChildLine", 
-                                "MigrationLine", 
-                                "DieSymbol", 
-                                "AppearSymbol", 
-                                "BornSymbol", 
-                                "DisappearSymbol", 
-                                "FalseJoinLine", 
-                                "OneCellSymbol", 
-                                "TwoCellSymbol", 
+        self.event_types_list = ["ChildLine",
+                                "MigrationLine",
+                                "DieSymbol",
+                                "AppearSymbol",
+                                "BornSymbol",
+                                "DisappearSymbol",
+                                "FalseJoinLine",
+                                "OneCellSymbol",
+                                "TwoCellSymbol",
                                 "ThreeCellSymbol",
                                 "ZeroCellSymbol"]
         self.line_events_list = ["ChildLine","MigrationLine","FalseJoinLine"]
@@ -484,7 +483,7 @@ class TrackItem(QGraphicsScene):
             track_file_name_df.to_csv(df_file_name,index=False)
 
 
-        
+
 
     def no_track_pickle_lookup(self):
         self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
@@ -518,7 +517,7 @@ class TrackItem(QGraphicsScene):
         print(self.peak_id)
         # Now we'll look up the peakIndex
         self.peakIndex = self.peak_id_list_in_fov.index(self.peak_id)
-        
+
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, params['phase_plane']))
         self.labelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
@@ -785,7 +784,7 @@ class TrackItem(QGraphicsScene):
                 # skip here if no death attribute. Of course can update data with input from user.
                 except AttributeError as e:
                     print(e)
-                
+
                 # B birth, 3
                 if cell_tmp.parent and i == 0:
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][3] = 1
@@ -1167,7 +1166,7 @@ class TrackItem(QGraphicsScene):
         frame_time = frame.time
         # get all cells in the frame to update each one, in case they were indirectly affected by the event that was drawn
         for cell in frame.childItems():
-            
+
             cell_label = cell.cellProps.label
             # print(cell_label)
             # grab all currently-drawn events for the cell of interest
@@ -1363,7 +1362,7 @@ class TrackItem(QGraphicsScene):
                         print("Cannot link cells in a single frame as migrated or children. Ignoring selection.")
 
                     elif abs(start_time - end_time) > 1:
-                        
+
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
                         endPointY = self.endItem.cellProps.centroid[0]
@@ -1374,7 +1373,7 @@ class TrackItem(QGraphicsScene):
                         endPointX = self.endItem.cellProps.centroid[1] + self.endItem.parentItem().x()
                         self.lastPoint = QPoint(endPointX, endPointY)
                         self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
-                        
+
                         # get the centroid position for the cell that was clicked
                         endPointY = self.endItem.cellProps.centroid[0]
                         # here we add the x-position of the detected ellipse' frame, because
@@ -1385,7 +1384,7 @@ class TrackItem(QGraphicsScene):
                         self.lastPoint = QPoint(endPointX, endPointY)
                         self.eventItem = self.set_event_item(firstPoint=self.firstPoint, startItem=self.startItem, lastPoint=self.lastPoint, endItem=self.endItem)
 
-                        # if it's a migration line we're drawing, it can span multiple frames. 
+                        # if it's a migration line we're drawing, it can span multiple frames.
                         #   We'll just split it up into its component migrations, frame-to-frame
                         if self.eventItem.type() == "MigrationLine":
                             # Need to get all cells with which this line collides.
@@ -1431,7 +1430,7 @@ class TrackItem(QGraphicsScene):
                         else:
                             self.removeItem(self.eventItem)
                             print("Cannot link cells separated by more than a single frame. Ignoring selection.")
-                        
+
                     else:
                         self.removeItem(self.eventItem)
                         # get the centroid position for the cell that was clicked
@@ -1468,7 +1467,7 @@ class TrackItem(QGraphicsScene):
 
             if item_type == 4:
                 cells.append(item)
-            
+
         return(cells)
 
     def get_time(self, cell):

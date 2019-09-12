@@ -117,8 +117,8 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment']['unet']:
-        params['segment']['save_predictions'] = False
+    if not 'save_predictions' in params['segment']['unet'].keys():
+        params['segment']['unet']['save_predictions'] = False
 
     return params
 
@@ -2357,10 +2357,10 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     min_object_size = params['segment']['min_object_size']
 
     # arguments to data generator
-    data_gen_args = {'batch_size':batch_size,
-                     'n_channels':1,
-                     'normalize_to_one':False,
-                     'shuffle':False}
+    # data_gen_args = {'batch_size':batch_size,
+    #                  'n_channels':1,
+    #                  'normalize_to_one':False,
+    #                  'shuffle':False}
     # arguments to predict_generator
     predict_args = dict(use_multiprocessing=True,
                         workers=params['num_analyzers'],
@@ -2382,8 +2382,6 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # max_val = np.max(med_stack)
         # img_stack = img_stack/max_val
         # img_stack[img_stack > 1] = 1
-
-        information('Loaded stack')
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
@@ -2502,8 +2500,6 @@ def segment_fov_unet(fov_id, specs, model, color=None):
 
     pad_dict = get_pad_distances(unet_shape, img_height, img_width)
 
-    timepoints = img_stack.shape[0]
-
     # dermine how many channels we have to analyze for this FOV
     ana_peak_ids = []
     for peak_id, spec in six.iteritems(specs[fov_id]):
@@ -2511,10 +2507,11 @@ def segment_fov_unet(fov_id, specs, model, color=None):
             ana_peak_ids.append(peak_id)
     ana_peak_ids.sort() # sort for repeatability
 
-    k = segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
+    segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
 
     information("Finished segmentation for FOV {}.".format(fov_id))
-    return(k)
+
+    return
 
 def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
@@ -3245,7 +3242,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data
-    image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
+    image_data_seg = load_stack(fov_id, peak_id, color=params['track']['seg_img'])
     # image_data_seg = load_stack(fov_id, peak_id, color='seg')
 
     # Calculate all data for all time points.
