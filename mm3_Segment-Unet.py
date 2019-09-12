@@ -98,77 +98,24 @@ if __name__ == "__main__":
     mm3.information("Processing %d FOVs." % len(fov_id_list))
 
     ### Do Segmentation by FOV and then peak #######################################################
-    if p['segment']['do_segmentation']:
-        mm3.information("Segmenting channels using U-net.")
+    mm3.information("Segmenting channels using U-net.")
 
-        # load model to pass to algorithm
-        mm3.information("Loading model...")
+    # load model to pass to algorithm
+    mm3.information("Loading model...")
 
-        if namespace.modelfile:
-            model_file_path = namespace.modelfile
-        else:
-            model_file_path = p['segment']['model_file']
-        # *** Need parameter for weights
-        seg_model = models.load_model(model_file_path,
-                                  custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
-                                                  'dice_loss': mm3.dice_loss})
-        mm3.information("Model loaded.")
+    if namespace.modelfile:
+        model_file_path = namespace.modelfile
+    else:
+        model_file_path = p['segment']['unet']['model_file']
+    # *** Need parameter for weights
+    seg_model = models.load_model(model_file_path,
+                              custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
+                                              'dice_loss': mm3.dice_loss})
+    mm3.information("Model loaded.")
 
-        for fov_id in fov_id_list:
-            mm3.segment_fov_unet(fov_id, specs, seg_model) 
+    for fov_id in fov_id_list:
+        mm3.segment_fov_unet(fov_id, specs, seg_model)
 
-        del seg_model
+    del seg_model
 
-        mm3.information("Finished segmentation.")
-
-    # ### Create cell lineages from segmented images
-    # if p['segment']['do_lineages']:
-    #     mm3.information("Creating cell lineages.")
-    #     mm3.information("Reading track model in {}.".format(p['track_model']))
-
-    #     track_model = models.load_model(p['track_model'])
-
-    #     # Load time table, which goes into params
-    #     mm3.load_time_table()
-
-    #     # This dictionary holds information for all cells
-    #     # Cells = {}
-
-    #     # do lineage creation per fov, so pooling can be done by peak
-    #     for i,fov_id in enumerate(fov_id_list):
-    #         # update will add the output from make_lineages_function, which is a
-    #         # dict of Cell entries, into Cells
-    #         ana_peak_ids = [peak_id for peak_id in specs[fov_id].keys() if peak_id == 1]
-    #         for j,peak_id in enumerate(ana_peak_ids):
-    #             if i == 0 and j == 0:
-    #                 tracks = mm3.deep_lineage_chnl_stack(fov_id, peak_id, track_model)
-    #                 tracks = tracks['fov_id'] = fov_id
-    #                 tracks = tracks['peak_id'] = peak_id
-    #             else:
-    #                 tmp_df = mm3.deep_lineage_chnl_stack(fov_id, peak_id, track_model)
-    #                 tmp_df['fov_id'] = fov_id
-    #                 tmp_df['peak_id'] = peak_id
-    #                 tracks.append(tmp_df, ignore_index=True)
-
-    #     mm3.information("Finished lineage creation.")
-
-    #     ### Now prune and save the data.
-    #     mm3.information("Curating and saving cell data.")
-
-    #     with open(p['cell_dir'] + '/tracks.pkl', 'wb') as track_file:
-    #         track.to_pickle(track_file)
-
-    #     # # this returns only cells with a parent and daughters
-    #     # Complete_Cells = mm3.find_complete_cells(Cells)
-
-    #     ### save the cell data. Use the script mm3_OutputData for additional outputs.
-    #     # All cell data (includes incomplete cells)
-    #     # with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
-    #     #     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
-
-    #     # # Just the complete cells, those with mother and daugther
-    #     # # This is a dictionary of cell objects.
-    #     # with open(os.path.join(p['cell_dir'], 'complete_cells.pkl'), 'wb') as cell_file:
-    #     #     pickle.dump(Complete_Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
-
-    #     mm3.information("Finished curating and saving cell data.")
+    mm3.information("Finished segmentation.")

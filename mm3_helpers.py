@@ -117,7 +117,7 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment']:
+    if not 'save_predictions' in params['segment']['unet']:
         params['segment']['save_predictions'] = False
 
     return params
@@ -2195,10 +2195,10 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['segment']['OTSU_threshold']
-    first_opening_size = params['segment']['first_opening_size']
-    distance_threshold = params['segment']['distance_threshold']
-    second_opening_size = params['segment']['second_opening_size']
+    OTSU_threshold = params['segment']['otsu']['OTSU_threshold']
+    first_opening_size = params['segment']['otsu']['first_opening_size']
+    distance_threshold = params['segment']['otsu']['distance_threshold']
+    second_opening_size = params['segment']['otsu']['second_opening_size']
     min_object_size = params['segment']['min_object_size']
 
     # threshold image
@@ -2350,14 +2350,14 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['batch_size']
-    cellClassThreshold = params['segment']['cell_class_threshold']
+    batch_size = params['segment']['unet']['batch_size']
+    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
 
     # arguments to data generator
-    data_gen_args = {'batch_size':params['segment']['batch_size'],
+    data_gen_args = {'batch_size':batch_size,
                      'n_channels':1,
                      'normalize_to_one':False,
                      'shuffle':False}
@@ -2412,7 +2412,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              (0,pad_dict['right_trim'])),
                              mode='constant')
 
-        if params['segment']['save_predictions']:
+        if params['segment']['unet']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
@@ -2595,8 +2595,8 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2647,8 +2647,8 @@ def segment_fov_foci_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -3231,12 +3231,12 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # load in parameters
     # if leaf regions see no action for longer than this, drop them
-    lost_cell_time = params['segment']['lost_cell_time']
+    lost_cell_time = params['track']['lost_cell_time']
     # only cells with y positions below this value will recieve the honor of becoming new
     # cells, unless they are daughters of current cells
-    new_cell_y_cutoff = params['segment']['new_cell_y_cutoff']
+    new_cell_y_cutoff = params['track']['new_cell_y_cutoff']
     # only regions with labels less than or equal to this value will be considered to start cells
-    new_cell_region_cutoff = params['segment']['new_cell_region_cutoff']
+    new_cell_region_cutoff = params['track']['new_cell_region_cutoff']
 
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
@@ -5560,10 +5560,10 @@ def check_growth_by_region(cell, region):
     '''Checks to see if it makes sense
     to grow a cell by a particular region'''
     # load parameters for checking
-    max_growth_length = params['segment']['max_growth_length']
-    min_growth_length = params['segment']['min_growth_length']
-    max_growth_area = params['segment']['max_growth_area']
-    min_growth_area = params['segment']['min_growth_area']
+    max_growth_length = params['track']['max_growth_length']
+    min_growth_length = params['track']['min_growth_length']
+    max_growth_area = params['track']['max_growth_area']
+    min_growth_area = params['track']['min_growth_area']
 
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
@@ -5608,8 +5608,8 @@ def check_division(cell, region1, region2):
     Return 3 if cell should divide into the regions.'''
 
     # load in parameters
-    max_growth_length = params['segment']['max_growth_length']
-    min_growth_length = params['segment']['min_growth_length']
+    max_growth_length = params['track']['max_growth_length']
+    min_growth_length = params['track']['min_growth_length']
 
     # see if either region just could be continued growth,
     # if that is the case then just return

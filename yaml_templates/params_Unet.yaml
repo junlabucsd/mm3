@@ -105,6 +105,8 @@ segment:
 
   batch_size: 210
   cell_class_threshold: 0.60
+
+track:
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
   # regions only less than this value down the channel from the closed end will be considered
   # to start potential new cells. Does not apply to daughters. unit is pixels
