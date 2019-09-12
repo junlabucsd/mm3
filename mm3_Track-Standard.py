@@ -45,6 +45,8 @@ if __name__ == "__main__":
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
                         required=False, help='Number of processors to use.')
+    parser.add_argument('-s', '--segmentsource', type=str,
+                        required=False, help='Segmented images to use for tracking. "seg_otsu", "seg_unet", etc.')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -70,15 +72,19 @@ if __name__ == "__main__":
         p['num_analyzers'] = namespace.nproc
     mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
+    # segmentation plane to be used for tracking
+    if namespace.segmentsource:
+        p['track']['seg_img'] = namespace.segmentsource
+    else:
+        if 'seg_img' not in p['track'].keys():
+            p['track']['seg_img'] = 'seg_otsu' # default to otsu. Good chance of error.
+    mm3.information("Using {} images for tracking.".format(p['track']['seg_img']))
+
     # create segmenteation and cell data folder if they don't exist
     if not os.path.exists(p['seg_dir']) and p['output'] == 'TIFF':
         os.makedirs(p['seg_dir'])
     if not os.path.exists(p['cell_dir']):
         os.makedirs(p['cell_dir'])
-
-    # set segmentation image name default if it is not found
-    if 'seg_img' not in p['track'].keys():
-        p['track']['seg_img'] = 'seg_otsu' # default to otsu. Good chance of error.
 
     # load specs file
     specs = mm3.load_specs()
@@ -91,7 +97,7 @@ if __name__ == "__main__":
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
     ### Create cell lineages from segmented images
-    mm3.information("Creating cell lineages.")
+    mm3.information("Creating cell lineages using standard algorithm.")
 
     # Load time table, which goes into params
     mm3.load_time_table()
