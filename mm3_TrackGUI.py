@@ -473,6 +473,7 @@ class TrackItem(QGraphicsScene):
                 print(str(e))
 
         df_file_name = '/home/wanglab/src/mm3/track_training_file_paths.csv'
+        # df_file_name = '/Users/jt/code/mm3/track_training_file_paths.csv'
         track_file_name_df = pd.read_csv(df_file_name)
 
         # if the current training data isn't yet in the dataframe, add it and save the updated dataframe
@@ -767,10 +768,12 @@ class TrackItem(QGraphicsScene):
                     regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
 
                     # daughter 1 and 2 label
-                    d1_label = self.All_Cells[cell_tmp.daughters[0].id].labels[0]
+                    # d1_label = self.All_Cells[cell_tmp.daughters[0].id].labels[0]
+                    d1_label = self.All_Cells[cell_tmp.daughters[0]].labels[0]
 
                     try:
-                        d2_label = self.All_Cells[cell_tmp.daughters[1].id].labels[0]
+                        # d2_label = self.All_Cells[cell_tmp.daughters[1].id].labels[0]
+                        d2_label = self.All_Cells[cell_tmp.daughters[1]].labels[0]
                         regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
                         regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
 
