@@ -2371,19 +2371,22 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        med_stack = np.zeros(img_stack.shape)
-        selem = morphology.disk(1)
+        # med_stack = np.zeros(img_stack.shape)
+        # selem = morphology.disk(1)
+        #
+        # for frame_idx in range(img_stack.shape[0]):
+        #     tmpImg = img_stack[frame_idx,...]
+        #     med_stack[frame_idx,...] = median(tmpImg, selem)
+        #
+        # # robust normalization of peak's image stack to 1
+        # max_val = np.max(med_stack)
+        # img_stack = img_stack/max_val
+        # img_stack[img_stack > 1] = 1
 
-        for frame_idx in range(img_stack.shape[0]):
-            tmpImg = img_stack[frame_idx,...]
-            med_stack[frame_idx,...] = median(tmpImg, selem)
+        information('Loaded stack')
 
-        # robust normalization of peak's image stack to 1
-        max_val = np.max(med_stack)
-        img_stack = img_stack/max_val
-        img_stack[img_stack > 1] = 1
-
-        # pad image to correct size
+        # trim and pad image to correct size
+        img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
         img_stack = np.pad(img_stack,
                            ((0,0),
                            (pad_dict['top_pad'],pad_dict['bottom_pad']),
@@ -2465,6 +2468,53 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
+
+def segment_fov_unet(fov_id, specs, model, color=None):
+    '''
+    Segments the channels from one fov using the U-net CNN model.
+
+    Parameters
+    ----------
+    fov_id : int
+    specs : dict
+    model : TensorFlow model
+    '''
+
+    information('Segmenting FOV {} with U-net.'.format(fov_id))
+
+    if color is None:
+        color = params['phase_plane']
+
+    # load segmentation parameters
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
+
+    ### determine stitching of images.
+    # need channel shape, specifically the width. load first for example
+    # this assumes that all channels are the same size for this FOV, which they should
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            break # just break out with the current peak_id
+
+    img_stack = load_stack(fov_id, peak_id, color=color)
+    img_height = img_stack.shape[1]
+    img_width = img_stack.shape[2]
+
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
+
+    timepoints = img_stack.shape[0]
+
+    # dermine how many channels we have to analyze for this FOV
+    ana_peak_ids = []
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids.sort() # sort for repeatability
+
+    k = segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
+
+    information("Finished segmentation for FOV {}.".format(fov_id))
+    return(k)
 
 def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
@@ -2577,53 +2627,6 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
-
-def segment_fov_unet(fov_id, specs, model, color=None):
-    '''
-    Segments the channels from one fov using the U-net CNN model.
-
-    Parameters
-    ----------
-    fov_id : int
-    specs : dict
-    model : TensorFlow model
-    '''
-
-    information('Segmenting FOV {} with U-net.'.format(fov_id))
-
-    if color is None:
-        color = params['phase_plane']
-
-    # load segmentation parameters
-    unet_shape = (params['segment']['unet']['trained_model_image_height'],
-                  params['segment']['unet']['trained_model_image_width'])
-
-    ### determine stitching of images.
-    # need channel shape, specifically the width. load first for example
-    # this assumes that all channels are the same size for this FOV, which they should
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            break # just break out with the current peak_id
-
-    img_stack = load_stack(fov_id, peak_id, color=color)
-    img_height = img_stack.shape[1]
-    img_width = img_stack.shape[2]
-
-    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
-
-    timepoints = img_stack.shape[0]
-
-    # dermine how many channels we have to analyze for this FOV
-    ana_peak_ids = []
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            ana_peak_ids.append(peak_id)
-    ana_peak_ids.sort() # sort for repeatability
-
-    k = segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
-
-    information("Finished segmentation for FOV {}.".format(fov_id))
-    return(k)
 
 def segment_fov_foci_unet(fov_id, specs, model, color=None):
     '''
