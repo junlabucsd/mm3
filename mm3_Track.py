@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-    
+
     # remove fovs if the user specified so
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
@@ -152,9 +152,9 @@ if __name__ == "__main__":
                 mm3.information('Predicting probability of {} events in FOV {}, trap {}.'.format('_'.join(key.split('_')[:-1]), fov_id, peak_id))
                 predictions_dict['{}_predictions'.format(key)] =  mod.predict(cell_info)
 
-            G,graph_df = mm3.initialize_track_graph(peak_id=peak_id, 
-                                                    fov_id=fov_id, 
-                                                    experiment_name=p['experiment_name'], 
+            G,graph_df = mm3.initialize_track_graph(peak_id=peak_id,
+                                                    fov_id=fov_id,
+                                                    experiment_name=p['experiment_name'],
                                                     predictions_dict=predictions_dict,
                                                     regions_by_time = regions_by_time,
                                                     born_threshold=0.85,

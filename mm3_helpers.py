@@ -117,8 +117,8 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment']:
-        params['segment']['save_predictions'] = False
+    if not 'save_predictions' in params['segment']['unet'].keys():
+        params['segment']['unet']['save_predictions'] = False
 
     return params
 
@@ -1623,7 +1623,7 @@ def fix_orientation(image_data):
 
     # setting image_orientation to 'auto' will use autodetection
     if image_orientation == "auto":
-         # use 'phase_plane' to find the phase plane in image_data, assuming c1, c2, c3... naming scheme here. 
+         # use 'phase_plane' to find the phase plane in image_data, assuming c1, c2, c3... naming scheme here.
         try:
             ph_channel = int(re.search('[0-9]', params['phase_plane']).group(0)) - 1
         except:
@@ -2195,10 +2195,10 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['segment']['OTSU_threshold']
-    first_opening_size = params['segment']['first_opening_size']
-    distance_threshold = params['segment']['distance_threshold']
-    second_opening_size = params['segment']['second_opening_size']
+    OTSU_threshold = params['segment']['otsu']['OTSU_threshold']
+    first_opening_size = params['segment']['otsu']['first_opening_size']
+    distance_threshold = params['segment']['otsu']['distance_threshold']
+    second_opening_size = params['segment']['otsu']['second_opening_size']
     min_object_size = params['segment']['min_object_size']
 
     # threshold image
@@ -2350,17 +2350,17 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['batch_size']
-    cellClassThreshold = params['segment']['cell_class_threshold']
+    batch_size = params['segment']['unet']['batch_size']
+    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
 
     # arguments to data generator
-    data_gen_args = {'batch_size':params['segment']['batch_size'],
-                     'n_channels':1,
-                     'normalize_to_one':False,
-                     'shuffle':False}
+    # data_gen_args = {'batch_size':batch_size,
+    #                  'n_channels':1,
+    #                  'normalize_to_one':False,
+    #                  'shuffle':False}
     # arguments to predict_generator
     predict_args = dict(use_multiprocessing=True,
                         workers=params['num_analyzers'],
@@ -2371,19 +2371,20 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        med_stack = np.zeros(img_stack.shape)
-        selem = morphology.disk(1)
+        # med_stack = np.zeros(img_stack.shape)
+        # selem = morphology.disk(1)
+        #
+        # for frame_idx in range(img_stack.shape[0]):
+        #     tmpImg = img_stack[frame_idx,...]
+        #     med_stack[frame_idx,...] = median(tmpImg, selem)
+        #
+        # # robust normalization of peak's image stack to 1
+        # max_val = np.max(med_stack)
+        # img_stack = img_stack/max_val
+        # img_stack[img_stack > 1] = 1
 
-        for frame_idx in range(img_stack.shape[0]):
-            tmpImg = img_stack[frame_idx,...]
-            med_stack[frame_idx,...] = median(tmpImg, selem)
-        
-        # robust normalization of peak's image stack to 1
-        max_val = np.max(med_stack)
-        img_stack = img_stack/max_val
-        img_stack[img_stack > 1] = 1
-
-        # pad image to correct size
+        # trim and pad image to correct size
+        img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
         img_stack = np.pad(img_stack,
                            ((0,0),
                            (pad_dict['top_pad'],pad_dict['bottom_pad']),
@@ -2412,7 +2413,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              (0,pad_dict['right_trim'])),
                              mode='constant')
 
-        if params['segment']['save_predictions']:
+        if params['segment']['unet']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
@@ -2466,6 +2467,52 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
 
+def segment_fov_unet(fov_id, specs, model, color=None):
+    '''
+    Segments the channels from one fov using the U-net CNN model.
+
+    Parameters
+    ----------
+    fov_id : int
+    specs : dict
+    model : TensorFlow model
+    '''
+
+    information('Segmenting FOV {} with U-net.'.format(fov_id))
+
+    if color is None:
+        color = params['phase_plane']
+
+    # load segmentation parameters
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
+
+    ### determine stitching of images.
+    # need channel shape, specifically the width. load first for example
+    # this assumes that all channels are the same size for this FOV, which they should
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            break # just break out with the current peak_id
+
+    img_stack = load_stack(fov_id, peak_id, color=color)
+    img_height = img_stack.shape[1]
+    img_width = img_stack.shape[2]
+
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
+
+    # dermine how many channels we have to analyze for this FOV
+    ana_peak_ids = []
+    for peak_id, spec in six.iteritems(specs[fov_id]):
+        if spec == 1:
+            ana_peak_ids.append(peak_id)
+    ana_peak_ids.sort() # sort for repeatability
+
+    segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
+
+    information("Finished segmentation for FOV {}.".format(fov_id))
+
+    return
+
 def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     # batch_size = params['foci']['batch_size']
@@ -2496,7 +2543,7 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         #     for frame_idx in range(img_stack.shape[0]):
         #         tmpImg = img_stack[frame_idx,...]
         #         med_stack[frame_idx,...] = median(tmpImg, selem)
-        
+
         # robust normalization of peak's image stack to 1
         # max_val = np.max(med_stack)
         # img_stack = img_stack/max_val
@@ -2578,58 +2625,6 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
 
-def segment_fov_unet(fov_id, specs, model, color=None):
-    '''
-    Segments the channels from one fov using the U-net CNN model.
-
-    Parameters
-    ----------
-    fov_id : int
-    specs : dict
-    model : TensorFlow model
-    '''
-
-    information('Segmenting FOV {} with U-net.'.format(fov_id))
-
-    if color is None:
-        color = params['phase_plane']
-
-    # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
-
-    ### determine stitching of images.
-    # need channel shape, specifically the width. load first for example
-    # this assumes that all channels are the same size for this FOV, which they should
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            break # just break out with the current peak_id
-
-    img_stack = load_stack(fov_id, peak_id, color=color)
-    img_height = img_stack.shape[1]
-    img_width = img_stack.shape[2]
-
-    half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(unet_shape, img_height, img_width)
-    pad_dict = {'top':top_pad,
-               'bottom':bottom_pad,
-               'right':right_pad,
-               'left':left_pad}
-
-    timepoints = img_stack.shape[0]
-
-    # dermine how many channels we have to analyze for this FOV
-    ana_peak_ids = []
-    for peak_id, spec in six.iteritems(specs[fov_id]):
-        if spec == 1:
-            ana_peak_ids.append(peak_id)
-    ana_peak_ids.sort() # sort for repeatability
-
-    k = segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
-
-    information("Finished segmentation for FOV {}.".format(fov_id))
-    return(k)
-
-
 def segment_fov_foci_unet(fov_id, specs, model, color=None):
     '''
     Segments the channels from one fov using the U-net CNN model.
@@ -2647,8 +2642,8 @@ def segment_fov_foci_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2921,7 +2916,7 @@ class FocusSegmentationDataGenerator(utils.Sequence):
 
             X[i,:,:,0] = tmpImg
 
-        
+
         if self.normalize_to_one:
             channel_max = np.max(max_pixels) / (2**8 - 1)
             # print("Channel max: {}".format(channel_max))
@@ -3153,24 +3148,24 @@ def get_cell_counts(regionprops_list):
         if i+1 == len(cell_count_list):
             break
         interaction_count_list.append(cell_count*cell_count_list[i+1])
-        
+
     total_cells = np.sum(cell_count_list)
     total_interactions = np.sum(interaction_count_list)
-        
+
     return(total_cells, total_interactions, cell_count_list, interaction_count_list)
 
 # get cells' information for track prediction
 def gather_interactions_and_events(regionprops_list):
-    
+
     total_cells, total_interactions, cell_count_list, interaction_count_list = get_cell_counts(regionprops_list)
 
-    # instantiate an array with a 2x4 array for each pair of cells' 
+    # instantiate an array with a 2x4 array for each pair of cells'
     #   min_y, max_y, centroid_y, and area
-    # in reality it would be much, much more efficient to 
+    # in reality it would be much, much more efficient to
     #   look this information up in the data generator at run time
     #   for now, this will work
     pairwise_cell_data = np.zeros((total_interactions,2,5,1))
-    
+
     # make a dictionary, the keys of which will be row indices so that we
     #   can quickly look up which timepoints/cells correspond to which
     #   rows of our model's ouput
@@ -3213,17 +3208,17 @@ def gather_interactions_and_events(regionprops_list):
 
                 pairwise_cell_data[interaction_count,0,:,0] = cell_info
                 pairwise_cell_data[interaction_count,1,:,0] = (min_y, max_y, y, area, orientation)
-                    
+
                 pairwise_cell_lookup[interaction_count] = {'frame':frame, 'cell_label':cell_label, 'paired_cell_label':paired_cell_label}
 
                 interaction_count += 1
-                
+
     return(pairwise_cell_data, pairwise_cell_lookup)
 
 # look up which cells are interacting according to the track model
 def cell_interaction_lookup(predictions, lookup_table):
     '''
-    Accepts prediction matrix and 
+    Accepts prediction matrix and
     '''
     frame = []
     cell_label = []
@@ -3232,7 +3227,7 @@ def cell_interaction_lookup(predictions, lookup_table):
 
     # loop over rows of predictions
     for row_index in range(predictions.shape[0]):
-        
+
         row_predictions = predictions[row_index]
         row_relationship = np.where(row_predictions > 0.95)[0]
         if row_relationship.size == 0:
@@ -3245,7 +3240,7 @@ def cell_interaction_lookup(predictions, lookup_table):
             interaction_type.append('child')
         elif row_relationship[0] == 2:
             interaction_type.append('false_join')
-        
+
         frame.append(lookup_table[row_index]['frame'])
         cell_label.append(lookup_table[row_index]['cell_label'])
         paired_cell_label.append(lookup_table[row_index]['paired_cell_label'])
@@ -3261,27 +3256,27 @@ def get_tracking_model_dict():
     model_dict = {}
 
     if not 'migrate_model' in model_dict:
-        model_dict['migrate_model'] = models.load_model(params['tracking']['migrate_model'], 
+        model_dict['migrate_model'] = models.load_model(params['tracking']['migrate_model'],
                                                                     custom_objects={'all_loss':all_loss,
                                                                         'f2_m':f2_m})
     if not 'child_model' in model_dict:
-        model_dict['child_model'] = models.load_model(params['tracking']['child_model'], 
+        model_dict['child_model'] = models.load_model(params['tracking']['child_model'],
                                         custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                     'f2_m':f2_m})
     if not 'appear_model' in model_dict:
-        model_dict['appear_model'] = models.load_model(params['tracking']['appear_model'], 
+        model_dict['appear_model'] = models.load_model(params['tracking']['appear_model'],
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
     if not 'die_model' in model_dict:
-        model_dict['die_model'] = models.load_model(params['tracking']['die_model'], 
+        model_dict['die_model'] = models.load_model(params['tracking']['die_model'],
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
     if not 'disappear_model' in model_dict:
-        model_dict['disappear_model'] = models.load_model(params['tracking']['disappear_model'], 
+        model_dict['disappear_model'] = models.load_model(params['tracking']['disappear_model'],
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
     if not 'born_model' in model_dict:
-        model_dict['born_model'] = models.load_model(params['tracking']['born_model'], 
+        model_dict['born_model'] = models.load_model(params['tracking']['born_model'],
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
     # if not 'zero_cell_model' in model_dict:
@@ -3301,7 +3296,7 @@ def get_tracking_model_dict():
     #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
     #                                                                 'f2_m':f2_m})
 
-    return(model_dict)    
+    return(model_dict)
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id):
@@ -3322,12 +3317,12 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # load in parameters
     # if leaf regions see no action for longer than this, drop them
-    lost_cell_time = params['segment']['lost_cell_time']
+    lost_cell_time = params['track']['lost_cell_time']
     # only cells with y positions below this value will recieve the honor of becoming new
     # cells, unless they are daughters of current cells
-    new_cell_y_cutoff = params['segment']['new_cell_y_cutoff']
+    new_cell_y_cutoff = params['track']['new_cell_y_cutoff']
     # only regions with labels less than or equal to this value will be considered to start cells
-    new_cell_region_cutoff = params['segment']['new_cell_region_cutoff']
+    new_cell_region_cutoff = params['track']['new_cell_region_cutoff']
 
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
@@ -3338,7 +3333,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     information('Creating lineage for FOV %d, channel %d.' % (fov_id, peak_id))
 
     # load segmented data
-    image_data_seg = load_stack(fov_id, peak_id, color=params['seg_img'])
+    image_data_seg = load_stack(fov_id, peak_id, color=params['track']['seg_img'])
     # image_data_seg = load_stack(fov_id, peak_id, color='seg')
 
     # Calculate all data for all time points.
@@ -3794,7 +3789,7 @@ class CellTree():
 # this is the object that holds all information for a cell
 class CellFromGraph():
     '''
-    The CellFromGraph class is one cell that has been born. 
+    The CellFromGraph class is one cell that has been born.
     It is not neccesarily a cell that has divided.
     '''
 
@@ -4042,18 +4037,17 @@ class CellFromGraph():
         data['parent'] = self.parent
         data['child1'] = None
         data['child2'] = None
-        data['division_time']: self.division_time
-        data['birth_label']: self.birth_label
-        data['birth_time']: self.birth_time
-        data['sb']: self.sb
-        data['sd']: self.sd
-        data['delta']: self.delta
-        data['tau']: self.tau
-        data['elong_rate']: self.elong_rate
-        data['septum_position']: self.septum_position
-        data['death']: self.death
-        data['disappear']: self.disappear
-        
+        data['division_time'] = self.division_time
+        data['birth_label'] = self.birth_label
+        data['birth_time'] = self.birth_time
+        data['sb'] = self.sb
+        data['sd'] = self.sd
+        data['delta'] = self.delta
+        data['tau'] = self.tau
+        data['elong_rate'] = self.elong_rate
+        data['septum_position'] = self.septum_position
+        data['death'] = self.death
+        data['disappear'] = self.disappear
 
         if self.daughters is not None:
             data['child1'] = self.daughters[0]
@@ -4065,7 +4059,7 @@ class CellFromGraph():
         return(df)
 
     def make_long_df(self):
-        
+
         data = {}
         data['id'] = [self.id]*len(self.times)
         data['times'] = self.times
@@ -4075,7 +4069,7 @@ class CellFromGraph():
 
         # if a cell divides then there is one extra value in abs_times
         if self.division_time is None:
-            data['seconds'] = self.abs_times    
+            data['seconds'] = self.abs_times
         else:
             data['seconds'] = self.abs_times[:-1]
 
@@ -4115,7 +4109,7 @@ class Focus():
         __________
 
         cell : a Cell object
-            
+
         region : region properties object
             Information about the labeled region from
             skimage.measure.regionprops()
@@ -4162,7 +4156,7 @@ class Focus():
         self.bboxes = [region.bbox]
         self.areas = [region.area]
 
-        # calculating focus length and width by using Feret Diamter. 
+        # calculating focus length and width by using Feret Diamter.
         #   These values are in pixels
         # NOTE: in the future, update to straighten a focus an get straightened length/width
         # print(region)
@@ -4246,7 +4240,7 @@ class Focus():
                                seg_img,
                                intensity_image,
                                region):
-        
+
         total_fluor = np.sum(intensity_image[seg_img == region.label])
         self.total_fluorescence.append(total_fluor)
         self.area_mean_fluorescence.append(total_fluor/self.areas[-1])
@@ -4256,7 +4250,7 @@ class Focus():
 
         # get the focus' displacement from center of cell
         # find x and y position relative to the whole image (convert from small box)
-        
+
         # calculate distance of foci from middle of cell (scikit image)
         orientation = region.orientation
         if orientation < 0:
@@ -4271,7 +4265,7 @@ class Focus():
         # append foci information to the list
         self.disp_l = np.append(self.disp_l, disp_y)
         self.disp_w = np.append(self.disp_w, disp_x)
-        
+
     def disappears(self, region, t):
         '''
         Annotate focus as disappearing from current t to next t.
@@ -4328,10 +4322,10 @@ class Focus():
         data['parent'] = self.parent
         data['child1'] = None
         data['child2'] = None
-        # data['division_time']: self.division_time
-        data['appear_label']: self.appear_label
-        data['appear_time']: self.appear_time
-        data['disappear']: self.disappear
+        # data['division_time'] = self.division_time
+        data['appear_label'] = self.appear_label
+        data['appear_time'] = self.appear_time
+        data['disappear'] = self.disappear
 
         if self.daughters is not None:
             data['child1'] = self.daughters[0]
@@ -4343,7 +4337,7 @@ class Focus():
         return(df)
 
     def make_long_df(self):
-        
+
         data = {}
         data['id'] = [self.id]*len(self.times)
         data['time'] = self.times
@@ -4351,7 +4345,7 @@ class Focus():
         data['length'] = self.lengths
         data['volume'] = self.volumes
         data['area'] = self.areas
-        data['seconds'] = self.abs_times    
+        data['seconds'] = self.abs_times
         data['area_mean_fluorescence'] = self.area_mean_fluorescence
         data['volume_mean_fluorescence'] = self.volume_mean_fluorescence
         data['total_fluorescence'] = self.total_fluorescence
@@ -4369,17 +4363,17 @@ class Focus():
 class PredictTrackDataGenerator(utils.Sequence):
     '''Generates data for running tracking class preditions
     Input is a stack of labeled images'''
-    def __init__(self, 
-                 data, 
-                 batch_size=32, 
+    def __init__(self,
+                 data,
+                 batch_size=32,
                  dim=(4,5,9)):
-        
+
         'Initialization'
         self.batch_size = batch_size
         self.data = data
         self.dim = dim
         self.on_epoch_end()
-        
+
     def __len__(self):
         'Denotes the number of batches per epoch'
         return int(np.ceil(len(self.data) / self.batch_size))
@@ -4408,30 +4402,30 @@ class PredictTrackDataGenerator(utils.Sequence):
         for idx in batch_indices:
             start_idx = idx-2
             end_idx = idx+3
-            
+
 #             print(start_idx, end_idx)
             if start_idx < 0:
                 batch_frame_list = []
                 for empty_idx in range(abs(start_idx)):
                     batch_frame_list.append([])
                 batch_frame_list.extend(self.data[0:end_idx])
-                
+
             elif end_idx > len(self.data):
                 batch_frame_list = self.data[start_idx:len(self.data)+1]
                 for empty_idx in range(abs(end_idx - len(self.data))):
                     batch_frame_list.extend([])
-            
+
             else:
                 batch_frame_list = self.data[start_idx:end_idx]
-            
+
             for i,frame_region_list in enumerate(batch_frame_list):
-                
+
                 # shape is (max_cell_num, frame_num, cell_feature_num)
 #                 tmp_x = np.zeros((self.dim[0], self.dim[1], self.dim[2]))
-                
+
                 if not frame_region_list:
                     continue
-                    
+
                 for region_idx, region, in enumerate(frame_region_list):
                     y,x = region.centroid
                     bbox = region.bbox
@@ -4445,13 +4439,13 @@ class PredictTrackDataGenerator(utils.Sequence):
                     cell_label = region.label
                     cell_index = cell_label - 1
                     cell_info = (min_x, max_x, x, min_y, max_y, y, orientation, area, length)
-                    
+
                     if region_idx + 1 > self.dim[0]:
                         continue
 
                     # supplement tmp_x at (region_idx, )
 #                     tmp_x[region_idx, i, :] = cell_info
-            
+
                     X[idx, cell_index, i, :,0] = cell_info # tmp_x
 
         return X
@@ -4480,14 +4474,14 @@ def count_unvisited(G, experiment_name):
                 count += 1
     return(count)
 
-def create_lineages_from_graph(graph, 
+def create_lineages_from_graph(graph,
                                graph_df,
                                fov_id,
                                peak_id,
                                ):
     '''
     This function iterates through nodes in a graph of detections
-    to link the nodes as "CellFromGraph" objects, eventually 
+    to link the nodes as "CellFromGraph" objects, eventually
     leading to the ultimate goal of returning
     a CellTree object with each cell's information for the experiment.
 
@@ -4507,45 +4501,45 @@ def create_lineages_from_graph(graph,
     num_unvisited = count_unvisited(graph, params['experiment_name'])
 
     while num_unvisited > 0:
-        
+
         # which detection nodes are not yet visited
         unvisited_detection_nodes = graph_df[(~(graph_df.visited) & graph_df.node_id.str.startswith(params['experiment_name']))]
         # grab the first unvisited node_id from the dataframe
         prior_node_id = unvisited_detection_nodes.iloc[0,1]
         prior_node_time = graph.nodes[prior_node_id]['time']
         prior_node_region = graph.nodes[prior_node_id]['region']
-        
-        cell_id = create_cell_id(prior_node_region, 
-                                    prior_node_time, 
-                                    peak_id, 
-                                    fov_id, 
+
+        cell_id = create_cell_id(prior_node_region,
+                                    prior_node_time,
+                                    peak_id,
+                                    fov_id,
                                     experiment_name=params['experiment_name'])
-        
-        current_cell = CellFromGraph(cell_id, 
-                                        prior_node_region, 
-                                        prior_node_time, 
+
+        current_cell = CellFromGraph(cell_id,
+                                        prior_node_region,
+                                        prior_node_time,
                                         parent=None)
-        
+
         if not cell_id in tracks.keys():
             tracks[cell_id] = current_cell
         else:
             current_cell = tracks[cell_id]
-        
+
         # for use later in establishing predecessors
         current_node_id = prior_node_id
-        
+
         # set this detection's "visited" status to True in the graph and in the dataframe
         graph.nodes[prior_node_id]['visited'] = True
         graph_df.iloc[np.where(graph_df.node_id==prior_node_id)[0][0],3] = True
-        
+
         # build current_track list to this detection's node
         current_track = collections.deque()
         current_track.append(current_node_id)
         predecessors_list = [k for k in graph.predecessors(prior_node_id)]
         unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
-        
+
         while len(unvisited_predecessors_list) != 0:
-            
+
             # initialize a scores array to select highest score from the available options
             predecessor_scores = np.zeros(len(unvisited_predecessors_list))
 
@@ -4554,18 +4548,18 @@ def create_lineages_from_graph(graph,
                 predecessor_node_id = unvisited_predecessors_list[i]
                 edge_type, edge_score = get_greatest_score_info(predecessor_node_id, current_node_id, graph)
                 predecessor_scores[i] = edge_score
-                
+
             # find highest score
             max_index = np.argmax(predecessor_scores)
             # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
             current_node_id = unvisited_predecessors_list[max_index]
             current_track.appendleft(current_node_id)
-            
+
             predecessors_list = [k for k in graph.predecessors(current_node_id)]
             unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
 
         while prior_node_id is not 'B':
-        
+
             # which nodes succeed our current node?
             successor_node_ids = [node_id for node_id in graph.successors(prior_node_id)]
 
@@ -4609,34 +4603,34 @@ def create_lineages_from_graph(graph,
             if max_score < np.log(0.1):
                 max_edge_type = 'disappear'
                 next_node_id = [n_id for n_id in unvisited_node_ids if n_id.startswith('disappear')][0]
-            
+
             # if this is a division event, add child node as a new cell,
             #   add the new cell as a daughter to current_cell,
             #   add current_cell as a parent to new cell.
             # Then, search for the second child cell, add it to current_cell, etc.
             if max_edge_type == 'child':
-                
+
                 new_cell_time = graph.nodes[next_node_id]['time']
                 new_cell_region = graph.nodes[next_node_id]['region']
-                new_cell_id = create_cell_id(new_cell_region, 
-                                             new_cell_time, 
-                                             peak_id, 
-                                             fov_id, 
+                new_cell_id = create_cell_id(new_cell_region,
+                                             new_cell_time,
+                                             peak_id,
+                                             fov_id,
                                              experiment_name=params['experiment_name'])
-        
-                new_cell = CellFromGraph(new_cell_id, 
-                                         new_cell_region, 
-                                         new_cell_time, 
+
+                new_cell = CellFromGraph(new_cell_id,
+                                         new_cell_region,
+                                         new_cell_time,
                                          parent=current_cell)
 
                 tracks[new_cell_id] = new_cell
-                
+
                 current_cell.add_daughter(new_cell, new_cell_time)
-                
+
                 # initialize a scores array to select highest score from the available options
                 unvisited_detection_nodes = [unvisited_node_id for unvisited_node_id in unvisited_node_ids if unvisited_node_id.startswith(params['experiment_name'])]
                 child_scores = np.zeros(len(unvisited_detection_nodes))
-                
+
                 # populate array with scores
                 for i in range(len(unvisited_detection_nodes)):
                     successor_node_id = unvisited_detection_nodes[i]
@@ -4645,30 +4639,30 @@ def create_lineages_from_graph(graph,
                         continue
                     child_score = get_score_by_type(prior_node_id, successor_node_id, graph, score_type='child')
                     child_scores[i] = child_score
-                
+
                 try:
                     second_daughter_score = np.max(child_scores)
-                    # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one 
+                    # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one
                     #  daughter is lost to the central channel at division time. In this case, do the following:
                     if second_daughter_score < np.log(0.5):
                         current_cell = new_cell
 
-                    else:    
+                    else:
                         second_daughter_index = np.argmax(child_scores)
                         # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
                         other_daughter_node_id = unvisited_detection_nodes[second_daughter_index]
 
                         other_daughter_cell_time = graph.nodes[other_daughter_node_id]['time']
                         other_daughter_cell_region = graph.nodes[other_daughter_node_id]['region']
-                        other_daughter_cell_id = create_cell_id(other_daughter_cell_region, 
-                                                                    other_daughter_cell_time, 
-                                                                    peak_id, 
-                                                                    fov_id, 
+                        other_daughter_cell_id = create_cell_id(other_daughter_cell_region,
+                                                                    other_daughter_cell_time,
+                                                                    peak_id,
+                                                                    fov_id,
                                                                     experiment_name=params['experiment_name'])
 
-                        other_daughter_cell = CellFromGraph(other_daughter_cell_id, 
-                                                                other_daughter_cell_region, 
-                                                                other_daughter_cell_time, 
+                        other_daughter_cell = CellFromGraph(other_daughter_cell_id,
+                                                                other_daughter_cell_region,
+                                                                other_daughter_cell_time,
                                                                 parent=current_cell)
 
                         tracks[other_daughter_cell_id] = other_daughter_cell
@@ -4676,30 +4670,30 @@ def create_lineages_from_graph(graph,
 
                         # now we remove current_cell, since it's done, and move on to one of the daughters
                         current_cell = new_cell
-                    
-                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one 
+
+                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one
                 #  daughter is lost to the central channel at division time. In this case, do the following:
                 except IndexError:
                     current_cell = new_cell
 
             # if this is a migration, grow the current_cell.
             elif max_edge_type == 'migrate':
-                
+
                 cell_time = graph.nodes[next_node_id]['time']
                 cell_region = graph.nodes[next_node_id]['region']
                 current_cell.grow(cell_region, cell_time)
-                
+
             # if the event represents death, kill the cell
             elif max_edge_type == 'die':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     death_time = graph.nodes[prior_node_id]['time']
                     death_region = graph.nodes[prior_node_id]['region']
                     current_cell.die(death_region, death_time)
-                
+
             # if the event represents disappearance, end the cell
             elif max_edge_type == 'disappear':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     disappear_time = graph.nodes[prior_node_id]['time']
                     disappear_region = graph.nodes[prior_node_id]['region']
@@ -4709,18 +4703,18 @@ def create_lineages_from_graph(graph,
             graph.nodes[next_node_id]['visited'] = True
             if next_node_id != 'B':
                 graph_df.iloc[np.where(graph_df.node_id==next_node_id)[0][0],3] = True
-            
+
             # reset prior_node_id to iterate to next frame and append node_id to current track
             prior_node_id = next_node_id
-        
+
         if num_unvisited != count_unvisited(graph, params['experiment_name']):
             same_iter_num = 0
         else:
             same_iter_num += 1
-            
+
         num_unvisited = count_unvisited(graph, params['experiment_name'])
         print("{} detections remain unvisited.".format(num_unvisited))
-        
+
         if same_iter_num > 10:
             print("WARNING: Ten iterations surpassed without decreasing the number of visited nodes.\n \
                    Breaking tracking loop now. You should probably not trust these results.")
@@ -4728,7 +4722,7 @@ def create_lineages_from_graph(graph,
 
     return tracks
 
-def viterbi_create_lineages_from_graph(graph, 
+def viterbi_create_lineages_from_graph(graph,
                                         graph_df,
                                         fov_id,
                                         peak_id,
@@ -4736,7 +4730,7 @@ def viterbi_create_lineages_from_graph(graph,
 
     '''
     This function iterates through nodes in a graph of detections
-    to link the nodes as "CellFromGraph" objects, eventually 
+    to link the nodes as "CellFromGraph" objects, eventually
     leading to the ultimate goal of returning
     a maximally-scoring CellTree object with each cell's information for the experiment.
 
@@ -4776,46 +4770,46 @@ def viterbi_create_lineages_from_graph(graph,
 
 
     while num_unvisited > 0:
-        
+
         # which detection nodes are not yet visited
         unvisited_detection_nodes = graph_df[(~(graph_df.visited) & graph_df.node_id.str.startswith(params['experiment_name']))]
         # grab the first unvisited node_id from the dataframe
         prior_node_id = unvisited_detection_nodes.iloc[0,1]
         prior_node_time = graph.nodes[prior_node_id]['time']
         prior_node_region = graph.nodes[prior_node_id]['region']
-        
-        cell_id = create_cell_id(prior_node_region, 
-                                    prior_node_time, 
-                                    peak_id, 
-                                    fov_id, 
+
+        cell_id = create_cell_id(prior_node_region,
+                                    prior_node_time,
+                                    peak_id,
+                                    fov_id,
                                     experiment_name=params['experiment_name'])
-        
-        current_cell = CellFromGraph(cell_id, 
-                                        prior_node_region, 
-                                        prior_node_time, 
+
+        current_cell = CellFromGraph(cell_id,
+                                        prior_node_region,
+                                        prior_node_time,
                                         parent=None)
-        
+
         if not cell_id in tracks.cell_id_list:
             tracks.add_cell(current_cell)
         else:
             current_cell = tracks.get_cell(cell_id)
-        
+
     #     track_dict_key = prior_node_id
         # for use later in establishing predecessors
         current_node_id = prior_node_id
-        
+
         # set this detection's "visited" status to True in the graph and in the dataframe
         graph.nodes[prior_node_id]['visited'] = True
         graph_df.iloc[np.where(graph_df.node_id==prior_node_id)[0][0],3] = True
-        
+
         # build current_track list to this detection's node
         current_track = collections.deque()
         current_track.append(current_node_id)
         predecessors_list = [k for k in graph.predecessors(prior_node_id)]
         unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
-        
+
         while len(unvisited_predecessors_list) != 0:
-            
+
             # initialize a scores array to select highest score from the available options
             predecessor_scores = np.zeros(len(unvisited_predecessors_list))
 
@@ -4824,18 +4818,18 @@ def viterbi_create_lineages_from_graph(graph,
                 predecessor_node_id = unvisited_predecessors_list[i]
                 edge_type, edge_score = get_greatest_score_info(predecessor_node_id, current_node_id, graph)
                 predecessor_scores[i] = edge_score
-                
+
             # find highest score
             max_index = np.argmax(predecessor_scores)
             # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
             current_node_id = unvisited_predecessors_list[max_index]
             current_track.appendleft(current_node_id)
-            
+
             predecessors_list = [k for k in graph.predecessors(current_node_id)]
             unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
 
         while prior_node_id is not 'B':
-        
+
             # which nodes succeed our current node?
             successor_node_ids = [node_id for node_id in graph.successors(prior_node_id)]
 
@@ -4873,35 +4867,35 @@ def viterbi_create_lineages_from_graph(graph,
             # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
             next_node_id = unvisited_node_ids[max_index]
             max_edge_type = successor_edge_types[max_index]
-            
+
             # if this is a division event, add child node as a new cell,
             #   add the new cell as a daughter to current_cell,
             #   add current_cell as a parent to new cell.
             # Then, search for the second child cell, add it to current_cell, etc.
             if max_edge_type == 'child':
-                
+
                 new_cell_time = graph.nodes[next_node_id]['time']
                 new_cell_region = graph.nodes[next_node_id]['region']
-                new_cell_id = create_cell_id(new_cell_region, 
-                                                new_cell_time, 
-                                                peak_id, 
-                                                fov_id, 
+                new_cell_id = create_cell_id(new_cell_region,
+                                                new_cell_time,
+                                                peak_id,
+                                                fov_id,
                                                 experiment_name=params['experiment_name'])
-        
-                new_cell = CellFromGraph(new_cell_id, 
-                                            new_cell_region, 
-                                            new_cell_time, 
+
+                new_cell = CellFromGraph(new_cell_id,
+                                            new_cell_region,
+                                            new_cell_time,
                                             parent=current_cell)
 
                 tracks.add_cell(new_cell)
-                
+
                 current_cell.add_daughter(new_cell, new_cell_time)
     #             print("First daughter", current_cell.id, new_cell.id)
-                
+
                 # initialize a scores array to select highest score from the available options
                 unvisited_detection_nodes = [unvisited_node_id for unvisited_node_id in unvisited_node_ids if unvisited_node_id.startswith(params['experiment_name'])]
                 child_scores = np.zeros(len(unvisited_detection_nodes))
-                
+
                 # populate array with scores
                 for i in range(len(unvisited_detection_nodes)):
                     successor_node_id = unvisited_detection_nodes[i]
@@ -4911,7 +4905,7 @@ def viterbi_create_lineages_from_graph(graph,
                     child_score = get_score_by_type(prior_node_id, successor_node_id, graph, score_type='child')
                     child_scores[i] = child_score
     #             print(child_scores)
-                
+
                 try:
                     second_daughter_index = np.argmax(child_scores)
                     # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
@@ -4919,15 +4913,15 @@ def viterbi_create_lineages_from_graph(graph,
 
                     other_daughter_cell_time = graph.nodes[other_daughter_node_id]['time']
                     other_daughter_cell_region = graph.nodes[other_daughter_node_id]['region']
-                    other_daughter_cell_id = create_cell_id(other_daughter_cell_region, 
-                                                                other_daughter_cell_time, 
-                                                                peak_id, 
-                                                                fov_id, 
+                    other_daughter_cell_id = create_cell_id(other_daughter_cell_region,
+                                                                other_daughter_cell_time,
+                                                                peak_id,
+                                                                fov_id,
                                                                 experiment_name=params['experiment_name'])
 
-                    other_daughter_cell = CellFromGraph(other_daughter_cell_id, 
-                                                            other_daughter_cell_region, 
-                                                            other_daughter_cell_time, 
+                    other_daughter_cell = CellFromGraph(other_daughter_cell_id,
+                                                            other_daughter_cell_region,
+                                                            other_daughter_cell_time,
                                                             parent=current_cell)
 
                     tracks.add_cell(other_daughter_cell)
@@ -4937,30 +4931,30 @@ def viterbi_create_lineages_from_graph(graph,
                     # now we remove current_cell, since it's done, and move on to one of the daughters
                     current_cell = new_cell
     #                 print("Second daughter", current_cell.parent.id, other_daughter_cell.id)
-                    
-                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one 
+
+                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one
                 #  daughter is lost to the central channel at division time. In this case, do the following:
                 except IndexError:
                     current_cell = new_cell
 
             # if this is a migration, grow the current_cell.
             elif max_edge_type == 'migrate':
-                
+
                 cell_time = graph.nodes[next_node_id]['time']
                 cell_region = graph.nodes[next_node_id]['region']
                 current_cell.grow(cell_region, cell_time)
-                
+
             # if the event represents death, kill the cell
             elif max_edge_type == 'die':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     death_time = graph.nodes[prior_node_id]['time']
                     death_region = graph.nodes[prior_node_id]['region']
                     current_cell.die(death_region, death_time)
-                
+
             # if the event represents disappearance, end the cell
             elif max_edge_type == 'disappear':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     disappear_time = graph.nodes[prior_node_id]['time']
                     disappear_region = graph.nodes[prior_node_id]['region']
@@ -4970,28 +4964,28 @@ def viterbi_create_lineages_from_graph(graph,
             graph.nodes[next_node_id]['visited'] = True
             if next_node_id != 'B':
                 graph_df.iloc[np.where(graph_df.node_id==next_node_id)[0][0],3] = True
-            
+
             # reset prior_node_id to iterate to next frame and append node_id to current track
     #         current_track.append(next_node_id)
             prior_node_id = next_node_id
     #         print(current_cell.id, current_cell.parent.id)
 
     #     track_dict[track_dict_key][:] = current_track
-        
+
         if num_unvisited != count_unvisited(graph, params['experiment_name']):
             same_iter_num = 0
         else:
             same_iter_num += 1
-            
+
         num_unvisited = count_unvisited(graph, params['experiment_name'])
         print("{} detections remain unvisited.".format(num_unvisited))
-        
+
         if same_iter_num > 10:
             break
 
     return(tracks)
 
-def create_lineages_from_graph_2(graph, 
+def create_lineages_from_graph_2(graph,
                                graph_df,
                                fov_id,
                                peak_id,
@@ -4999,7 +4993,7 @@ def create_lineages_from_graph_2(graph,
 
     '''
     This function iterates through nodes in a graph of detections
-    to link the nodes as "CellFromGraph" objects, eventually 
+    to link the nodes as "CellFromGraph" objects, eventually
     leading to the ultimate goal of returning
     a CellTree object with each cell's information for the experiment.
 
@@ -5018,46 +5012,46 @@ def create_lineages_from_graph_2(graph,
     num_unvisited = count_unvisited(graph, params['experiment_name'])
 
     while num_unvisited > 0:
-        
+
         # which detection nodes are not yet visited
         unvisited_detection_nodes = graph_df[(~(graph_df.visited) & graph_df.node_id.str.startswith(params['experiment_name']))]
         # grab the first unvisited node_id from the dataframe
         prior_node_id = unvisited_detection_nodes.iloc[0,1]
         prior_node_time = graph.nodes[prior_node_id]['time']
         prior_node_region = graph.nodes[prior_node_id]['region']
-        
-        cell_id = create_cell_id(prior_node_region, 
-                                    prior_node_time, 
-                                    peak_id, 
-                                    fov_id, 
+
+        cell_id = create_cell_id(prior_node_region,
+                                    prior_node_time,
+                                    peak_id,
+                                    fov_id,
                                     experiment_name=params['experiment_name'])
-        
-        current_cell = CellFromGraph(cell_id, 
-                                        prior_node_region, 
-                                        prior_node_time, 
+
+        current_cell = CellFromGraph(cell_id,
+                                        prior_node_region,
+                                        prior_node_time,
                                         parent=None)
-        
+
         if not cell_id in tracks.cell_id_list:
             tracks.add_cell(current_cell)
         else:
             current_cell = tracks.get_cell(cell_id)
-        
+
     #     track_dict_key = prior_node_id
         # for use later in establishing predecessors
         current_node_id = prior_node_id
-        
+
         # set this detection's "visited" status to True in the graph and in the dataframe
         graph.nodes[prior_node_id]['visited'] = True
         graph_df.iloc[np.where(graph_df.node_id==prior_node_id)[0][0],3] = True
-        
+
         # build current_track list to this detection's node
         current_track = collections.deque()
         current_track.append(current_node_id)
         predecessors_list = [k for k in graph.predecessors(prior_node_id)]
         unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
-        
+
         while len(unvisited_predecessors_list) != 0:
-            
+
             # initialize a scores array to select highest score from the available options
             predecessor_scores = np.zeros(len(unvisited_predecessors_list))
 
@@ -5066,18 +5060,18 @@ def create_lineages_from_graph_2(graph,
                 predecessor_node_id = unvisited_predecessors_list[i]
                 edge_type, edge_score = get_greatest_score_info(predecessor_node_id, current_node_id, graph)
                 predecessor_scores[i] = edge_score
-                
+
             # find highest score
             max_index = np.argmax(predecessor_scores)
             # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
             current_node_id = unvisited_predecessors_list[max_index]
             current_track.appendleft(current_node_id)
-            
+
             predecessors_list = [k for k in graph.predecessors(current_node_id)]
             unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
 
         while prior_node_id is not 'B':
-        
+
             # which nodes succeed our current node?
             successor_node_ids = [node_id for node_id in graph.successors(prior_node_id)]
 
@@ -5115,35 +5109,35 @@ def create_lineages_from_graph_2(graph,
             # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
             next_node_id = unvisited_node_ids[max_index]
             max_edge_type = successor_edge_types[max_index]
-            
+
             # if this is a division event, add child node as a new cell,
             #   add the new cell as a daughter to current_cell,
             #   add current_cell as a parent to new cell.
             # Then, search for the second child cell, add it to current_cell, etc.
             if max_edge_type == 'child':
-                
+
                 new_cell_time = graph.nodes[next_node_id]['time']
                 new_cell_region = graph.nodes[next_node_id]['region']
-                new_cell_id = create_cell_id(new_cell_region, 
-                                                new_cell_time, 
-                                                peak_id, 
-                                                fov_id, 
+                new_cell_id = create_cell_id(new_cell_region,
+                                                new_cell_time,
+                                                peak_id,
+                                                fov_id,
                                                 experiment_name=params['experiment_name'])
-        
-                new_cell = CellFromGraph(new_cell_id, 
-                                            new_cell_region, 
-                                            new_cell_time, 
+
+                new_cell = CellFromGraph(new_cell_id,
+                                            new_cell_region,
+                                            new_cell_time,
                                             parent=current_cell)
 
                 tracks.add_cell(new_cell)
-                
+
                 current_cell.add_daughter(new_cell, new_cell_time)
     #             print("First daughter", current_cell.id, new_cell.id)
-                
+
                 # initialize a scores array to select highest score from the available options
                 unvisited_detection_nodes = [unvisited_node_id for unvisited_node_id in unvisited_node_ids if unvisited_node_id.startswith(params['experiment_name'])]
                 child_scores = np.zeros(len(unvisited_detection_nodes))
-                
+
                 # populate array with scores
                 for i in range(len(unvisited_detection_nodes)):
                     successor_node_id = unvisited_detection_nodes[i]
@@ -5153,7 +5147,7 @@ def create_lineages_from_graph_2(graph,
                     child_score = get_score_by_type(prior_node_id, successor_node_id, graph, score_type='child')
                     child_scores[i] = child_score
     #             print(child_scores)
-                
+
                 try:
                     second_daughter_index = np.argmax(child_scores)
                     # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
@@ -5161,15 +5155,15 @@ def create_lineages_from_graph_2(graph,
 
                     other_daughter_cell_time = graph.nodes[other_daughter_node_id]['time']
                     other_daughter_cell_region = graph.nodes[other_daughter_node_id]['region']
-                    other_daughter_cell_id = create_cell_id(other_daughter_cell_region, 
-                                                                other_daughter_cell_time, 
-                                                                peak_id, 
-                                                                fov_id, 
+                    other_daughter_cell_id = create_cell_id(other_daughter_cell_region,
+                                                                other_daughter_cell_time,
+                                                                peak_id,
+                                                                fov_id,
                                                                 experiment_name=params['experiment_name'])
 
-                    other_daughter_cell = CellFromGraph(other_daughter_cell_id, 
-                                                            other_daughter_cell_region, 
-                                                            other_daughter_cell_time, 
+                    other_daughter_cell = CellFromGraph(other_daughter_cell_id,
+                                                            other_daughter_cell_region,
+                                                            other_daughter_cell_time,
                                                             parent=current_cell)
 
                     tracks.add_cell(other_daughter_cell)
@@ -5179,30 +5173,30 @@ def create_lineages_from_graph_2(graph,
                     # now we remove current_cell, since it's done, and move on to one of the daughters
                     current_cell = new_cell
     #                 print("Second daughter", current_cell.parent.id, other_daughter_cell.id)
-                    
-                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one 
+
+                # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one
                 #  daughter is lost to the central channel at division time. In this case, do the following:
                 except IndexError:
                     current_cell = new_cell
 
             # if this is a migration, grow the current_cell.
             elif max_edge_type == 'migrate':
-                
+
                 cell_time = graph.nodes[next_node_id]['time']
                 cell_region = graph.nodes[next_node_id]['region']
                 current_cell.grow(cell_region, cell_time)
-                
+
             # if the event represents death, kill the cell
             elif max_edge_type == 'die':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     death_time = graph.nodes[prior_node_id]['time']
                     death_region = graph.nodes[prior_node_id]['region']
                     current_cell.die(death_region, death_time)
-                
+
             # if the event represents disappearance, end the cell
             elif max_edge_type == 'disappear':
-                
+
                 if prior_node_id.startswith(params['experiment_name']):
                     disappear_time = graph.nodes[prior_node_id]['time']
                     disappear_region = graph.nodes[prior_node_id]['region']
@@ -5212,22 +5206,22 @@ def create_lineages_from_graph_2(graph,
             graph.nodes[next_node_id]['visited'] = True
             if next_node_id != 'B':
                 graph_df.iloc[np.where(graph_df.node_id==next_node_id)[0][0],3] = True
-            
+
             # reset prior_node_id to iterate to next frame and append node_id to current track
     #         current_track.append(next_node_id)
             prior_node_id = next_node_id
     #         print(current_cell.id, current_cell.parent.id)
 
     #     track_dict[track_dict_key][:] = current_track
-        
+
         if num_unvisited != count_unvisited(graph, params['experiment_name']):
             same_iter_num = 0
         else:
             same_iter_num += 1
-            
+
         num_unvisited = count_unvisited(graph, params['experiment_name'])
         print("{} detections remain unvisited.".format(num_unvisited))
-        
+
         if same_iter_num > 10:
             break
 
@@ -5384,12 +5378,12 @@ def create_detection_id(t, peak, fov, region_label, experiment_name=None, max_ce
         det_id = '{}f{:0=2}p{:0=4}t{:0=4}r{:0=2}'.format(experiment_name, fov, peak, t, region_label)
     return det_id
 
-def initialize_track_graph(peak_id, 
-                        fov_id, 
-                        experiment_name, 
-                        predictions_dict, 
-                        regions_by_time, 
-                        max_cell_number=6, 
+def initialize_track_graph(peak_id,
+                        fov_id,
+                        experiment_name,
+                        predictions_dict,
+                        regions_by_time,
+                        max_cell_number=6,
                         born_threshold=0.75,
                         appear_threshold=0.75):
 
@@ -5411,37 +5405,37 @@ def initialize_track_graph(peak_id,
     region_label_list = []
 
     for frame_idx in range(frame_num):
-        
+
         timepoint = frame_idx + 1
         paired_detection_time = timepoint+1
-                            
+
         # get detections for this frame
         frame_regions_list = regions_by_time[frame_idx]
-        
+
         # if we're at the end of the imaging, make all cells migrate to node 'B'
         if timepoint == frame_num:
             last_frame = True
         else:
             paired_frame_regions_list = regions_by_time[frame_idx+1]
-            
+
         # get state change probabilities (class predictions) for this frame
         frame_prediction_dict = {key:val[frame_idx,...] for key,val in predictions_dict.items() if key != 'general_model_predictions'}
         # for i in range(len(predictions_dict['general_model_predictions'])):
             # frame_general_prediction = predictions_dict['general_model_predictions'][]
-        
+
         # create the "will be born" and "will appear" nodes for this frame
         prior_born_state = 'born_{:0=4}'.format(timepoint-1)
         born_state = 'born_{:0=4}'.format(timepoint)
         G.add_node(born_state, visited=False, time=timepoint)
-        
+
         prior_appear_state = 'appear_{:0=4}'.format(timepoint-1)
         appear_state = 'appear_{:0=4}'.format(timepoint)
         G.add_node(appear_state, visited=False, time=timepoint)
-        
+
         if frame_idx == 0:
             ebunch.append(('A', appear_state, 'start', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
             ebunch.append(('A', born_state, 'start', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
-        
+
         # create the "Dies" and "Disappeared" nodes to link from prior frame
         prior_dies_state = 'dies_{:0=4}'.format(timepoint-1)
         dies_state = 'dies_{:0=4}'.format(timepoint)
@@ -5452,7 +5446,7 @@ def initialize_track_graph(peak_id,
         disappear_state = 'disappear_{:0=4}'.format(timepoint)
         next_disappear_state = 'disappear_{:0=4}'.format(timepoint+1)
         G.add_node(disappear_state, visited=False, time=timepoint)
-            
+
         node_id_list.extend([born_state, dies_state, appear_state, disappear_state])
         timepoint_list.extend([timepoint, timepoint, timepoint, timepoint])
         region_label_list.extend([0,0,0,0])
@@ -5463,7 +5457,7 @@ def initialize_track_graph(peak_id,
             ebunch.append((prior_disappear_state, disappear_state, 'disappear', {'weight':1.1, 'score':1*np.log(1.1)})) # impossible to move out of disappear track
             ebunch.append((prior_born_state, born_state, 'born', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
             ebunch.append((prior_appear_state, appear_state, 'appear', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
-            
+
         if last_frame:
             ebunch.append((appear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
             ebunch.append((disappear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
@@ -5471,7 +5465,7 @@ def initialize_track_graph(peak_id,
             ebunch.append((dies_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
 
         for region_idx in range(max_cell_number):
-            
+
             # the tracking models assume there are 6 detections in each frame, regardless of how many
             #   are actually there. Therefore, this try/except logic will catch cases where there
             #   were fewer than 6 detections in a frame.
@@ -5481,17 +5475,17 @@ def initialize_track_graph(peak_id,
             except IndexError:
                 region = None
                 region_label = region_idx + 1
-                
+
             # create the name for this detection
-            detection_id = create_detection_id(timepoint, 
-                                                peak_id, 
-                                                fov_id, 
-                                                region_label, 
+            detection_id = create_detection_id(timepoint,
+                                                peak_id,
+                                                fov_id,
+                                                region_label,
                                                 experiment_name=experiment_name)
-                    
+
             det = Detection(detection_id, region, timepoint)
             detection_dict[det.id] = det
-            
+
             if det.area is not None:
                 # if the detection represents a segmentation from our imaging, add its ID,
                 #   which is also its key in detection_dict, as a node in G
@@ -5501,20 +5495,20 @@ def initialize_track_graph(peak_id,
                 region_label_list.append(region.label)
                 # also set up all edges for this detection's node in our ebunch
                 #   loop through prediction types and add each to the ebunch
-                
+
                 for key,val in frame_prediction_dict.items():
-                    
+
                     if frame_idx == 0:
-                        
+
                         ebunch.append(('A', detection_id, 'start', {'weight':1, 'score':1*np.log(1)}))
-                    
+
                     if last_frame:
 
                         ebunch.append((detection_id, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
-                                            
+
                         if val.shape[0] == max_cell_number ** 2:
                             continue
-                            
+
                         else:
                             frame_predictions = val
                             detection_prediction = frame_predictions[region_idx]
@@ -5528,26 +5522,26 @@ def initialize_track_graph(peak_id,
                                 if frame_idx == 0:
                                     continue
                                 elem = (prior_born_state, detection_id, 'born', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-                                
+
                             elif 'zero_cell' in key:
                                 G.nodes[det.id]['zero_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-                                
+
                             elif 'one_cell' in key:
                                 G.nodes[det.id]['one_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-                                
+
                             elif 'two_cell' in key:
                                 G.nodes[det.id]['two_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-                                
+
                             ebunch.append(elem)
-                            
+
                     else:
                         # if the array is cell_number^2, reshape it to cell_number x cell_number
                         #  Then slice our detection's row and iterate over paired_cells
                         if val.shape[0] == max_cell_number**2:
-                            
+
                             frame_predictions = val.reshape((max_cell_number,max_cell_number))
                             detection_predictions = frame_predictions[region_idx,:]
 
@@ -5573,12 +5567,12 @@ def initialize_track_graph(peak_id,
                                     child_weight = paired_prediction
                                     elem = (detection_id, paired_detection_id, 'child', {'child_weight':child_weight, 'score':1*np.log(child_weight)})
                                     ebunch.append(elem)
-                                    
+
                                 if 'migrate_' in key:
                                     migrate_weight = paired_prediction
                                     elem = (detection_id, paired_detection_id, 'migrate', {'migrate_weight':migrate_weight, 'score':1*np.log(migrate_weight)})
                                     ebunch.append(elem)
-                                    
+
                                 # if 'interaction_' in key:
                                 #     interaction_weight = paired_prediction
                                 #     elem = (detection_id, paired_detection_id, 'interaction', {'weight':interaction_weight, 'score':1*np.log(interaction_weight)})
@@ -5589,7 +5583,7 @@ def initialize_track_graph(peak_id,
 
                             frame_predictions = val
                             detection_prediction = frame_predictions[region_idx]
-                            
+
                             if key == 'appear_model_predictions':
                                 if frame_idx == 0:
                                     continue
@@ -5618,11 +5612,11 @@ def initialize_track_graph(peak_id,
                             elif 'zero_cell' in key:
                                 G.nodes[det.id]['zero_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-                                
+
                             elif 'one_cell' in key:
                                 G.nodes[det.id]['one_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['one_cell_score'] = 1*np.log(detection_prediction)
-                                
+
                             elif 'two_cell' in key:
                                 G.nodes[det.id]['two_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['two_cell_score'] = 1*np.log(detection_prediction)
@@ -5654,10 +5648,10 @@ def check_growth_by_region(cell, region):
     '''Checks to see if it makes sense
     to grow a cell by a particular region'''
     # load parameters for checking
-    max_growth_length = params['segment']['max_growth_length']
-    min_growth_length = params['segment']['min_growth_length']
-    max_growth_area = params['segment']['max_growth_area']
-    min_growth_area = params['segment']['min_growth_area']
+    max_growth_length = params['track']['max_growth_length']
+    min_growth_length = params['track']['min_growth_length']
+    max_growth_area = params['track']['max_growth_area']
+    min_growth_area = params['track']['min_growth_area']
 
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
@@ -5702,8 +5696,8 @@ def check_division(cell, region1, region2):
     Return 3 if cell should divide into the regions.'''
 
     # load in parameters
-    max_growth_length = params['segment']['max_growth_length']
-    min_growth_length = params['segment']['min_growth_length']
+    max_growth_length = params['track']['max_growth_length']
+    min_growth_length = params['track']['min_growth_length']
 
     # see if either region just could be continued growth,
     # if that is the case then just return
@@ -5780,7 +5774,6 @@ def filter_foci(Foci, label, t, debug=False):
             Filtered_Foci[focus_id] = focus
 
     return Filtered_Foci
-
 
 def filter_cells(Cells, attr, val, idx=None, debug=False):
     '''Return only cells whose designated attribute equals "val".'''
@@ -5978,20 +5971,20 @@ def compile_foci_info_long_df(Foci):
 
     return(long_df)
 
-def find_all_cell_intensities(Cells, 
+def find_all_cell_intensities(Cells,
                               specs, time_table, channel_name='sub_c2',
                               apply_background_correction=True):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
-    should be from one fov/peak. 
+    should be from one fov/peak.
     '''
 
     # iterate over each fov in specs
     for fov_id,fov_peaks in specs.items():
-        
+
         # iterate over each peak in fov
         for peak_id,peak_value in fov_peaks.items():
-        
+
             # if peak_id's value is not 1, go to next peak
             if peak_value != 1:
                 continue
@@ -6007,7 +6000,7 @@ def find_all_cell_intensities(Cells,
                     warnings.simplefilter("ignore")
                     median_filtered = median(fl_stack[frame,...], selem=morphology.disk(1))
 
-                # subtract the gaussian-filtered image from true image to correct 
+                # subtract the gaussian-filtered image from true image to correct
                 #   uneven background fluorescence
                 if apply_background_correction:
                     blurred = filters.gaussian(median_filtered, sigma=10, preserve_range=True)
@@ -6019,7 +6012,7 @@ def find_all_cell_intensities(Cells,
 
             # evaluate whether each cell is in this fov/peak combination
             for cell_id,cell in Cells.items():
-                
+
                 cell_fov = cell.fov
                 if cell_fov != fov_id:
                     continue
@@ -6459,12 +6452,7 @@ def foci_lap(img, img_foci, cell, t):
     return disp_l, disp_w, foci_h
 
 # actual worker function for foci detection
-def foci_info_unet(foci,
-                   Cells,
-                   specs,
-                   time_table,
-                   channel_name='sub_c2'):
-    
+def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
     '''foci_info_unet operates on cells in which foci have been found using
     using Unet.
 
@@ -6476,7 +6464,7 @@ def foci_info_unet(foci,
         are to be used, and which are to be excluded from analysis
     time_table : dictionary containing information on which time
         points correspond to which absolute times in seconds
-    channel_name : name of fluorescent channel for reading in 
+    channel_name : name of fluorescent channel for reading in
         fluorescence images for focus quantification
 
     Returns
@@ -6487,13 +6475,13 @@ def foci_info_unet(foci,
 
     # iterate over each fov in specs
     for fov_id,fov_peaks in specs.items():
-        
+
         # keep cells with this fov_id
         fov_cells = filter_cells(Cells, attr='fov', val=fov_id)
-        
+
         # iterate over each peak in fov
         for peak_id,peak_value in fov_peaks.items():
-        
+
             # print(fov_id, peak_id)
             # keep cells with this peak_id
             peak_cells = filter_cells(fov_cells, attr='peak', val=peak_id)
@@ -6521,7 +6509,7 @@ def foci_info_unet(foci,
                 # if there are no cells in this fov/peak/frame, move to next frame
                 if np.max(seg_cell_img) == 0:
                     continue
-                
+
                 t = frame+1
                 frame_cells = filter_cells_containing_val_in_attr(peak_cells, attr='times', val=t)
                 # loop over focus regions in this frame
@@ -6537,9 +6525,7 @@ def foci_info_unet(foci,
                     peak_foci = filter_cells(fov_foci,
                                              attr='peak',
                                              val=peak_id)
-                    prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci,
-                                                                           attr='times',
-                                                                           val=t-1)
+                    prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci, attr='times', val=t-1)
 
                     # if there were foci in prior frame, do stuff
                     if len(prior_frame_foci) > 0:
@@ -6552,19 +6538,19 @@ def foci_info_unet(foci,
                                                 np.max(seg_foci_img)))
                         # populate the array with dice indices
                         for prior_focus_idx in range(np.max(prior_seg_foci_img)):
-                            
+
                             prior_focus_mask = np.zeros(seg_foci_img.shape)
                             prior_focus_mask[prior_seg_foci_img == (prior_focus_idx + 1)] = 1
 
                             # apply gaussian blur with sigma=1 to prior focus mask
                             sig = 1
                             gaus_1 = filters.gaussian(prior_focus_mask, sigma=sig)
-                            
+
                             for this_focus_idx in range(np.max(seg_foci_img)):
 
                                 this_focus_mask = np.zeros(seg_foci_img.shape)
                                 this_focus_mask[seg_foci_img == (this_focus_idx + 1)] = 1
-                                
+
                                 # apply gaussian blur with sigma=1 to this focus mask
                                 gaus_2 = filters.gaussian(this_focus_mask, sigma=sig)
                                 # multiply the two images and place max into campare_array
@@ -6576,20 +6562,20 @@ def foci_info_unet(foci,
                         # because np.argmax returns zero if all rows are equal, we
                         #   need to evaluate if all rows are equal.
                         #   If std_dev is zero, then all were equal,
-                        #   and we omit that index from consideration for 
+                        #   and we omit that index from consideration for
                         #   focus tracking.
                         sd_vals = np.std(compare_array, axis=0)
                         tracked_inds = np.where(sd_vals > 0)[0]
                         # if there is an index from a tracked focus, do this
                         if tracked_inds.size > 0:
-                            
+
                             for tracked_idx in tracked_inds:
                                 # grab this frame's region belonging to tracked focus
                                 tracked_label = tracked_idx + 1
                                 (tracked_region_idx, tracked_region) = [(_,reg) for _,reg in enumerate(focus_regions) if reg.label == tracked_label][0]
                                 # pop the region from focus_regions
                                 del focus_regions[tracked_region_idx]
-                                
+
                                 # grab prior frame's region belonging to tracked focus
                                 prior_tracked_label = max_inds[tracked_idx] + 1
                                 # prior_tracked_region = [reg for reg in prior_regions if reg.label == prior_tracked_label][0]
@@ -6604,10 +6590,10 @@ def foci_info_unet(foci,
                                 )
 
                                 prior_tracked_focus = [val for val in prior_tracked_foci.values()][0]
-                        
+
                                 # determine which cell this focus belongs to
                                 for cell_id,cell in frame_cells.items():
-                                    
+
                                     cell_idx = cell.times.index(t)
                                     cell_label = cell.labels[cell_idx]
 
@@ -6654,7 +6640,7 @@ def foci_info_unet(foci,
 
                         # determine which cell this focus belongs to
                         for cell_id,cell in frame_cells.items():
-                            
+
                             cell_idx = cell.times.index(t)
                             cell_label = cell.labels[cell_idx]
 
@@ -6673,7 +6659,7 @@ def foci_info_unet(foci,
                             if pixels_two/pixels_one >= 0.5:
                                 # set up the focus
                                 # if no foci in cell, just add this one.
-                                                                
+
                                 foci[new_id] = Focus(cell = cell,
                                                      region = focus_region,
                                                      seg_img = seg_foci_img,
@@ -6681,10 +6667,10 @@ def foci_info_unet(foci,
                                                      t = t)
 
                     for new_id in new_ids:
-                        # if new_id is not a key in the foci dictionary, 
+                        # if new_id is not a key in the foci dictionary,
                         #   that suggests the focus doesn't overlap well
                         #   with any cells in this frame, so we'll relabel
-                        #   this frame of seg_foci_stack to zero for that 
+                        #   this frame of seg_foci_stack to zero for that
                         #   focus to avoid trying to track a focus
                         #   that doesn't exist.
                         if new_id not in foci:
@@ -6694,7 +6680,7 @@ def foci_info_unet(foci,
                             # set pixels in this frame that match this label to 0
                             seg_foci_stack[frame, seg_foci_img == this_label] = 0
 
-    return#(foci)
+    return
 
 def update_cell_foci(cells, foci):
     '''Updates cells' .foci attribute in-place using information
