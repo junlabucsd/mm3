@@ -2751,6 +2751,97 @@ class CellSegmentationDataGenerator(utils.Sequence):
 
         return (X)
 
+class TemporalCellDataGenerator(utils.Sequence):
+    'Generates data for Keras'
+    def __init__(self, 
+                 fileName, 
+                 batch_size=32, 
+                 dim=(32,32,32), 
+                 n_channels=1,
+                 n_classes=10, 
+                 shuffle=False, 
+                 normalize_to_one=False):
+        'Initialization'
+        self.dim = dim
+        self.batch_size = batch_size
+        self.fileName = fileName
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.shuffle = shuffle
+        self.on_epoch_end()
+        self.normalize_to_one = normalize_to_one
+        if normalize_to_one:
+            self.selem = morphology.disk(1)
+
+    def __len__(self):
+        'Denotes the number of batches per epoch'
+        return int(np.ceil(self.batch_size / self.batch_size))
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+
+        # Generate data
+        X = self.__data_generation()
+
+        return X
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch'
+        pass
+
+    def __data_generation(self):
+        'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
+        # Initialization
+        X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.dim[2], self.n_channels))
+        
+        full_stack = io.imread(self.fileName)
+        
+        if full_stack.dtype=="uint16":
+            full_stack = full_stack / 2**16 * 2**8
+            full_stack = full_stack.astype('uint8')
+        
+        img_height = full_stack.shape[1]
+        img_width = full_stack.shape[2]
+
+        half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(self.dim, img_height, img_width)
+
+        pad_dict = {'top':top_pad,
+                   'bottom':bottom_pad,
+                   'right':right_pad,
+                   'left':left_pad}            
+
+        full_stack = np.pad(full_stack,
+                           ((0,0),
+                            (pad_dict['top'],pad_dict['bottom']),
+                            (pad_dict['left'],pad_dict['right'])
+                           ),
+                           mode='constant')
+        
+        full_stack = full_stack.transpose(1,2,0)
+        
+        # Generate data
+        for i in range(self.batch_size):
+            
+            if i == 0:
+                tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
+                tmpImg[:,:,0,0] = full_stack[:,:,0]
+                for j in range(1,self.dim[2]):
+                    tmpImg[:,:,j,0] = full_stack[:,:,j]
+                    
+            elif i == (self.batch_size - 1):
+                tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
+                tmpImg[:,:,-1,0] = full_stack[:,:,-1]
+                for j in range(self.dim[2]-1):
+                    tmpImg[:,:,j,0] = full_stack[:,:,j]
+                    
+            else:
+                tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
+                tmpImg[:,:,:,0] = full_stack[:,:,(i-1):(i+2)]
+                    
+            X[i,:,:,:,:] = tmpImg
+
+        return X
+
 # class for image generation for predicting cell locations in phase-contrast images
 class FocusSegmentationDataGenerator(utils.Sequence):
     'Generates data for Keras'
@@ -3193,22 +3284,22 @@ def get_tracking_model_dict():
         model_dict['born_model'] = models.load_model(params['tracking']['born_model'], 
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
-    if not 'zero_cell_model' in model_dict:
-        model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'], 
-                                        custom_objects={'absolute_dice_loss':absolute_dice_loss,
-                                                                    'f2_m':f2_m})
-    if not 'one_cell_model' in model_dict:
-        model_dict['one_cell_model'] = models.load_model(params['tracking']['one_cell_model'], 
-                                        custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                    'f2_m':f2_m})
-    if not 'two_cell_model' in model_dict:
-        model_dict['two_cell_model'] = models.load_model(params['tracking']['two_cell_model'], 
-                                        custom_objects={'all_loss':all_loss,
-                                                                    'f2_m':f2_m})
-    if not 'geq_three_cell_model' in model_dict:
-        model_dict['geq_three_cell_model'] = models.load_model(params['tracking']['geq_three_cell_model'], 
-                                        custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                    'f2_m':f2_m})
+    # if not 'zero_cell_model' in model_dict:
+    #     model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'], 
+    #                                     custom_objects={'absolute_dice_loss':absolute_dice_loss,
+    #                                                                 'f2_m':f2_m})
+    # if not 'one_cell_model' in model_dict:
+    #     model_dict['one_cell_model'] = models.load_model(params['tracking']['one_cell_model'], 
+    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
+    #                                                                 'f2_m':f2_m})
+    # if not 'two_cell_model' in model_dict:
+    #     model_dict['two_cell_model'] = models.load_model(params['tracking']['two_cell_model'], 
+    #                                     custom_objects={'all_loss':all_loss,
+    #                                                                 'f2_m':f2_m})
+    # if not 'geq_three_cell_model' in model_dict:
+    #     model_dict['geq_three_cell_model'] = models.load_model(params['tracking']['geq_three_cell_model'], 
+    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
+    #                                                                 'f2_m':f2_m})
 
     return(model_dict)    
 
@@ -4041,7 +4132,8 @@ class Focus():
         focus_id = create_focus_id(region,
                                    t,
                                    cell.peak,
-                                   cell.fov)
+                                   cell.fov,
+                                   experiment_name=params['experiment_name'])
         self.id = focus_id
 
         # identification convenience
@@ -4107,7 +4199,7 @@ class Focus():
         return(len(self.times))
 
     def __str__(self):
-        return(self.print_info(self))
+        return(self.print_info())
             
     def add_cell(self, cell):
         self.cells.append(cell)
@@ -5522,6 +5614,7 @@ def initialize_track_graph(peak_id,
     #                             print("Linking {} to {}.".format(detection_id, next_dies_state))
                                 elem = (detection_id, next_dies_state, 'die', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
                                 
+                            # the following classes aren't yet implemented
                             elif 'zero_cell' in key:
                                 G.nodes[det.id]['zero_cell_weight'] = detection_prediction
                                 G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
@@ -5719,32 +5812,129 @@ def filter_cells_containing_val_in_attr(Cells, attr, val):
             Filtered_Cells[cell_id] = cell
 
     return Filtered_Cells
-### functions for additional cell centric analysis
 
+### functions for additional cell centric analysis
 def compile_cell_info_df(Cells):
 
-    counter = 0
-    cell_count = len(Cells.keys())
-    for cell_id,cell in Cells.items():
+    # count the number of rows that will be in the long dataframe
+    quant_fluor = False
+    long_df_row_number = 0
+    for cell in Cells.values():
 
-        if counter % 100 == 0:
-            print("Generating information for cell {} out of {}.".format(counter, cell_count))
+        # first time through, evaluate whether we quantified cells' fluorescence
+        if long_df_row_number == 0:
+            if len(cell.area_mean_fluorescence.keys()) != 0:
+                quant_fluor = True
+                fluorescence_channels = [k for k in cell.area_mean_fluorescence.keys()]
 
-        if counter == 0:
-            wide_df = cell.make_wide_df()
-            long_df = cell.make_long_df()
-            counter += 1
-        else:
-            wide_df = wide_df.append(cell.make_wide_df())
-            long_df = long_df.append(cell.make_long_df())
-            counter += 1
+        long_df_row_number += len(cell.times)
 
-    long_df.reset_index(drop=True, inplace=True)
-    wide_df.reset_index(drop=True, inplace=True)
-    
-    return(wide_df, long_df)
+    # initialize some arrays for filling with data
+    data = {
+        # ids can be up to 100 characters long
+        'id': np.chararray(long_df_row_number, itemsize=100),
+        'times': np.zeros(long_df_row_number, dtype='uint16'),
+        'lengths': np.zeros(long_df_row_number),
+        'volumes': np.zeros(long_df_row_number),
+        'areas': np.zeros(long_df_row_number),
+        'abs_times': np.zeros(long_df_row_number, dtype='uint32')
+    }
 
-def compile_foci_info_df(Foci):
+    if quant_fluor:
+        for fluorescence_channel in fluorescence_channels:
+            data['{}_area_mean_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
+            data['{}_volume_mean_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
+            data['{}_total_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
+
+    data = populate_focus_arrays(Cells, data, cell_quants=True)
+    long_df = pd.DataFrame(data=data)
+
+    wide_df_row_number = len(Cells)
+    data = {
+        # ids can be up to 100 characters long
+        'id': np.chararray(wide_df_row_number, itemsize=100),
+        'fov': np.zeros(wide_df_row_number, dtype='uint8'),
+        'peak': np.zeros(wide_df_row_number, dtype='uint16'),
+        'parent_id': np.chararray(wide_df_row_number, itemsize=100),
+        'child1_id': np.chararray(wide_df_row_number, itemsize=100),
+        'child2_id': np.chararray(wide_df_row_number, itemsize=100),
+        'division_time': np.zeros(wide_df_row_number),
+        'birth_label': np.zeros(wide_df_row_number, dtype='uint8'),
+        'birth_time': np.zeros(wide_df_row_number, dtype='uint16'),
+        'sb': np.zeros(wide_df_row_number),
+        'sd': np.zeros(wide_df_row_number),
+        'delta': np.zeros(wide_df_row_number),
+        'tau': np.zeros(wide_df_row_number),
+        'elong_rate': np.zeros(wide_df_row_number),
+        'septum_position': np.zeros(wide_df_row_number),
+        'death': np.zeros(wide_df_row_number),
+        'disappear': np.zeros(wide_df_row_number)
+    }
+    data = populate_focus_arrays(Cells, data, cell_quants=True)
+    # data['parent_id'] = data['parent_id'].decode()
+    # data['child1_id'] = data['child1_id'].decode()
+    # data['child2_id'] = data['child2_id'].decode()
+    wide_df = pd.DataFrame(data=data)
+
+    return(wide_df,long_df)
+
+def populate_focus_arrays(Foci, data_dict, cell_quants=False):
+
+    focus_counter = 0
+    focus_count = len(Foci)
+    end_idx = 0
+
+    for focus in Foci.values():
+
+        start_idx = end_idx
+        end_idx = len(focus) + start_idx
+
+        if focus_counter % 100 == 0:
+            print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
+        
+        # loop over keys in data dictionary, and set
+        # values in appropriate array, at appropriate indices
+        # to those we find in the focus.
+        for key in data_dict.keys():
+
+            if '_id' in key:
+
+                if key == 'parent_id':
+                    if focus.parent is None:
+                        data_dict[key][start_idx:end_idx] = ''
+                    else:
+                        data_dict[key][start_idx:end_idx] = focus.parent.id
+                    
+                if focus.daughters is None:
+                    if key == 'child1_id' or key == 'child2_id':
+                        data_dict[key][start_idx:end_idx] = ''
+                elif len(focus.daughters) == 1:
+                    if key == 'child2_id':
+                        data_dict[key][start_idx:end_idx] = ''
+                elif key == 'child1_id':
+                    data_dict[key][start_idx:end_idx] = focus.daughters[0].id
+                elif key == 'child2_id':
+                    data_dict[key][start_idx:end_idx] = focus.daughters[1].id
+
+            else:
+                attr_vals = getattr(focus, key)
+                if (cell_quants and key=='abs_times'):
+                    if len(attr_vals) == end_idx-start_idx:
+                        data_dict[key][start_idx:end_idx] = attr_vals
+                    else:
+                        data_dict[key][start_idx:end_idx] = attr_vals[:-1]
+                else:
+                    # print(key)
+                    # print(attr_vals)
+                    data_dict[key][start_idx:end_idx] = attr_vals
+
+        focus_counter += 1
+
+    data_dict['id'] = data_dict['id'].decode()
+
+    return(data_dict)
+
+def compile_foci_info_long_df(Foci):
     '''
     Parameters
     ----------------
@@ -5755,33 +5945,38 @@ def compile_foci_info_df(Foci):
     Returns
     ----------------------
 
-    A tuple, the first element of which is a wide 
-    pandas DataFrame with brief information on each focus,
-    the second element of which is a long DataFrame with 
+    A long DataFrame with 
     detailed information about each timepoint for each focus.
     '''
 
-    focus_counter = 0
-    focus_count = len(Foci)
-    for focus_id,focus in Foci.items():
+    # count the number of rows that will be in the long dataframe
+    long_df_row_number = 0
+    for focus in Foci.values():
+        long_df_row_number += len(focus)
 
-        if focus_counter % 100 == 0:
-            print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
-        
-        if focus_counter == 0:
-            wide_df = focus.make_wide_df()
-            long_df = focus.make_long_df()
-            focus_counter += 1
-        else:
-            wide_df = wide_df.append(focus.make_wide_df())
-            long_df = long_df.append(focus.make_long_df())
-            focus_counter += 1
+    # initialize some arrays for filling with data
+    data = {
+        # ids can be up to 100 characters long
+        'id': np.chararray(long_df_row_number, itemsize=100),
+        'times': np.zeros(long_df_row_number, dtype='uint16'),
+        'lengths': np.zeros(long_df_row_number),
+        'volumes': np.zeros(long_df_row_number),
+        'areas': np.zeros(long_df_row_number),
+        'abs_times': np.zeros(long_df_row_number, dtype='uint32'),
+        'area_mean_fluorescence': np.zeros(long_df_row_number),
+        'volume_mean_fluorescence': np.zeros(long_df_row_number),
+        'total_fluorescence': np.zeros(long_df_row_number),
+        'median_fluorescence': np.zeros(long_df_row_number),
+        'sd_fluorescence': np.zeros(long_df_row_number),
+        'disp_l': np.zeros(long_df_row_number),
+        'disp_w': np.zeros(long_df_row_number)
+    }
 
-    long_df.reset_index(drop=True, inplace=True)
-    wide_df.reset_index(drop=True, inplace=True)
-    
-    return(wide_df, long_df)
-    # return(long_df)
+    data = populate_focus_arrays(Foci, data)
+
+    long_df = pd.DataFrame(data=data)
+
+    return(long_df)
 
 def find_all_cell_intensities(Cells, 
                               specs, time_table, channel_name='sub_c2',
