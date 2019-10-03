@@ -110,6 +110,7 @@ def init_mm3_helpers(param_file_path):
     params['foci_pred_dir'] = os.path.join(params['ana_dir'], 'predictions_foci')
     params['cell_dir'] = os.path.join(params['ana_dir'], 'cell_data')
     params['track_dir'] = os.path.join(params['ana_dir'], 'tracking')
+    params['foci_track_dir'] = os.path.join(params['ana_dir'], 'tracking_foci')
 
     # use jd time in image metadata to make time table. Set to false if no jd time
     if params['TIFF_source'] == 'elements' or params['TIFF_source'] == 'nd2ToTIFF':
@@ -117,8 +118,8 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment']['unet'].keys():
-        params['segment']['unet']['save_predictions'] = False
+    if not 'save_predictions' in params['segment'].keys():
+        params['segment']['save_predictions'] = False
 
     return params
 
@@ -2535,19 +2536,6 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # print(peak_id) # debugging a shape error at some traps
 
         img_stack = load_stack(fov_id, peak_id, color=params['foci']['foci_plane'])
-        # med_stack = np.zeros(img_stack.shape)
-        # selem = morphology.disk(1)
-
-        # with warnings.catch_warnings():
-        #     warnings.simplefilter('ignore')
-        #     for frame_idx in range(img_stack.shape[0]):
-        #         tmpImg = img_stack[frame_idx,...]
-        #         med_stack[frame_idx,...] = median(tmpImg, selem)
-
-        # robust normalization of peak's image stack to 1
-        # max_val = np.max(med_stack)
-        # img_stack = img_stack/max_val
-        # img_stack[img_stack > 1] = 1
 
         # pad image to correct size
         img_stack = np.pad(img_stack,
@@ -2558,12 +2546,8 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
         image_generator = FocusSegmentationDataGenerator(img_stack, **data_gen_args)
-        #image_datagen = ImageDataGenerator()
-        #image_generator = image_datagen.flow(x=img_stack,
-        #                                     batch_size=batch_size,
-        #                                     shuffle=False) # keep same order
 
-        # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
+        # predict foci locations.
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
@@ -5863,7 +5847,7 @@ def compile_cell_info_df(Cells):
         'death': np.zeros(wide_df_row_number),
         'disappear': np.zeros(wide_df_row_number)
     }
-    data = populate_focus_arrays(Cells, data, cell_quants=True)
+    data = populate_focus_arrays(Cells, data, cell_quants=True, wide=True)
     # data['parent_id'] = data['parent_id'].decode()
     # data['child1_id'] = data['child1_id'].decode()
     # data['child2_id'] = data['child2_id'].decode()
@@ -5871,16 +5855,22 @@ def compile_cell_info_df(Cells):
 
     return(wide_df,long_df)
 
-def populate_focus_arrays(Foci, data_dict, cell_quants=False):
+def populate_focus_arrays(Foci, data_dict, cell_quants=False, wide=False):
 
     focus_counter = 0
     focus_count = len(Foci)
     end_idx = 0
 
-    for focus in Foci.values():
+    for i,focus in enumerate(Foci.values()):
 
-        start_idx = end_idx
-        end_idx = len(focus) + start_idx
+        if wide:
+            start_idx = i
+            end_idx = i + 1
+
+        else:
+
+            start_idx = end_idx
+            end_idx = len(focus) + start_idx
 
         if focus_counter % 100 == 0:
             print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
@@ -6557,7 +6547,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 product = gaus_1 * gaus_2
                                 compare_array[prior_focus_idx, this_focus_idx] = np.max(product)
 
-                        # which rows of each column are maximum jaccard index?
+                        # which rows of each column are maximum product of gaussian blurs?
                         max_inds = np.argmax(compare_array, axis=0)
                         # because np.argmax returns zero if all rows are equal, we
                         #   need to evaluate if all rows are equal.
