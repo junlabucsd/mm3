@@ -4128,6 +4128,7 @@ class Focus():
         # if this is none then the focus did not split
         self.parent = None
         self.daughters = None
+        self.merger_partner = None
 
         # appearance and split time
         self.appear_time = t
@@ -4184,6 +4185,9 @@ class Focus():
 
     def add_parent_focus(self, parent):
         self.parent = parent
+
+    def merge(self, partner):
+        self.merger_partner = partner
 
     def grow(self,
              region,
@@ -6671,6 +6675,245 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                             seg_foci_stack[frame, seg_foci_img == this_label] = 0
 
     return
+
+# def dev_foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
+#     '''foci_info_unet operates on cells in which foci have been found using
+#     using Unet.
+
+#     Parameters
+#     ----------
+#     Foci : empty dictionary for Focus objects to be placed into
+#     Cells : dictionary of Cell objects to which foci will be added
+#     specs : dictionary containing information on which fov/peak ids
+#         are to be used, and which are to be excluded from analysis
+#     time_table : dictionary containing information on which time
+#         points correspond to which absolute times in seconds
+#     channel_name : name of fluorescent channel for reading in
+#         fluorescence images for focus quantification
+
+#     Returns
+#     -------
+#     Updates cell information in Cells in-place.
+#     Cells must have .foci attribute
+#     '''
+
+#     # iterate over each fov in specs
+#     for fov_id,fov_peaks in specs.items():
+
+#         # keep cells with this fov_id
+#         fov_cells = filter_cells(Cells, attr='fov', val=fov_id)
+
+#         # iterate over each peak in fov
+#         for peak_id,peak_value in fov_peaks.items():
+
+#             # print(fov_id, peak_id)
+#             # keep cells with this peak_id
+#             peak_cells = filter_cells(fov_cells, attr='peak', val=peak_id)
+
+#             # if peak_id's value is not 1, go to next peak
+#             if peak_value != 1:
+#                 continue
+
+#             print("Analyzing foci in experiment {}, channel {}, fov {}, peak {}.".format(params['experiment_name'], channel_name, fov_id, peak_id))
+#             # Load fluorescent images and segmented images for this channel
+#             fl_stack = load_stack(fov_id, peak_id, color=channel_name)
+#             seg_foci_stack = load_stack(fov_id, peak_id, color='foci_seg_unet')
+#             seg_cell_stack = load_stack(fov_id, peak_id, color='seg_unet')
+
+#             # loop over each frame
+#             for frame in range(fl_stack.shape[0]):
+
+#                 fl_img = fl_stack[frame, ...]
+#                 seg_foci_img = seg_foci_stack[frame, ...]
+#                 seg_cell_img = seg_cell_stack[frame, ...]
+
+#                 # if there are no foci in this frame, move to next frame
+#                 if np.max(seg_foci_img) == 0:
+#                     continue
+#                 # if there are no cells in this fov/peak/frame, move to next frame
+#                 if np.max(seg_cell_img) == 0:
+#                     continue
+
+#                 t = frame+1
+#                 frame_cells = filter_cells_containing_val_in_attr(peak_cells, attr='times', val=t)
+#                 next_frame_cells = filter_cells_containing_val_in_attr(peak_cells, attr='times', val=t+1)
+                
+#                 # prepare focus regions in this frame
+#                 focus_regions = measure.regionprops(seg_foci_img)
+
+#                 # loop over cells in this frame, linking to same cell or inherited cells in next frame
+#                 for cell in frame_cells:
+
+#                     pass
+
+                
+
+#                 # compare this frame's foci to prior frame's foci for tracking
+#                 if frame > 0:
+#                     prior_seg_foci_img = seg_foci_stack[frame-1, ...]
+
+#                     fov_foci = filter_cells(foci,
+#                                             attr='fov',
+#                                             val=fov_id)
+#                     peak_foci = filter_cells(fov_foci,
+#                                              attr='peak',
+#                                              val=peak_id)
+#                     prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci, attr='times', val=t-1)
+
+#                     # if there were foci in prior frame, do stuff
+#                     if len(prior_frame_foci) > 0:
+#                         prior_regions = measure.regionprops(prior_seg_foci_img)
+
+#                         # compare_array is prior_focus_number x this_focus_number
+#                         #   contains dice indices for each pairwise comparison
+#                         #   between focus positions
+#                         compare_array = np.zeros((np.max(prior_seg_foci_img),
+#                                                 np.max(seg_foci_img)))
+#                         # populate the array with dice indices
+#                         for prior_focus_idx in range(np.max(prior_seg_foci_img)):
+
+#                             prior_focus_mask = np.zeros(seg_foci_img.shape)
+#                             prior_focus_mask[prior_seg_foci_img == (prior_focus_idx + 1)] = 1
+
+#                             # apply gaussian blur with sigma=1 to prior focus mask
+#                             sig = 1
+#                             gaus_1 = filters.gaussian(prior_focus_mask, sigma=sig)
+
+#                             for this_focus_idx in range(np.max(seg_foci_img)):
+
+#                                 this_focus_mask = np.zeros(seg_foci_img.shape)
+#                                 this_focus_mask[seg_foci_img == (this_focus_idx + 1)] = 1
+
+#                                 # apply gaussian blur with sigma=1 to this focus mask
+#                                 gaus_2 = filters.gaussian(this_focus_mask, sigma=sig)
+#                                 # multiply the two images and place max into campare_array
+#                                 product = gaus_1 * gaus_2
+#                                 compare_array[prior_focus_idx, this_focus_idx] = np.max(product)
+
+#                         # which rows of each column are maximum product of gaussian blurs?
+#                         max_inds = np.argmax(compare_array, axis=0)
+#                         # because np.argmax returns zero if all rows are equal, we
+#                         #   need to evaluate if all rows are equal.
+#                         #   If std_dev is zero, then all were equal,
+#                         #   and we omit that index from consideration for
+#                         #   focus tracking.
+#                         sd_vals = np.std(compare_array, axis=0)
+#                         tracked_inds = np.where(sd_vals > 0)[0]
+#                         # if there is an index from a tracked focus, do this
+#                         if tracked_inds.size > 0:
+
+#                             for tracked_idx in tracked_inds:
+#                                 # grab this frame's region belonging to tracked focus
+#                                 tracked_label = tracked_idx + 1
+#                                 (tracked_region_idx, tracked_region) = [(_,reg) for _,reg in enumerate(focus_regions) if reg.label == tracked_label][0]
+#                                 # pop the region from focus_regions
+#                                 del focus_regions[tracked_region_idx]
+
+#                                 # grab prior frame's region belonging to tracked focus
+#                                 prior_tracked_label = max_inds[tracked_idx] + 1
+#                                 # prior_tracked_region = [reg for reg in prior_regions if reg.label == prior_tracked_label][0]
+
+#                                 # grab the focus for which the prior_tracked_label is in
+#                                 #   any of the labels in the prior focus from the prior time
+#                                 prior_tracked_foci = filter_foci(
+#                                     prior_frame_foci,
+#                                     label=prior_tracked_label,
+#                                     t = t-1,
+#                                     debug=False
+#                                 )
+
+#                                 prior_tracked_focus = [val for val in prior_tracked_foci.values()][0]
+
+#                                 # determine which cell this focus belongs to
+#                                 for cell_id,cell in frame_cells.items():
+
+#                                     cell_idx = cell.times.index(t)
+#                                     cell_label = cell.labels[cell_idx]
+
+#                                     masked_cell_img = np.zeros(seg_cell_img.shape)
+#                                     masked_cell_img[seg_cell_img == cell_label] = 1
+
+#                                     masked_focus_img = np.zeros(seg_foci_img.shape)
+#                                     masked_focus_img[seg_foci_img == tracked_region.label] = 1
+
+#                                     intersect_img = masked_cell_img + masked_focus_img
+
+#                                     pixels_two = len(np.where(intersect_img == 2))
+#                                     pixels_one = len(np.where(masked_focus_img == 1))
+
+#                                     # if over half the focus is within this cell, do the following
+#                                     if pixels_two/pixels_one >= 0.5:
+
+#                                         prior_tracked_focus.grow(
+#                                             region=tracked_region,
+#                                             t=t,
+#                                             seg_img=seg_foci_img,
+#                                             intensity_image=fl_img,
+#                                             current_cell=cell
+#                                         )
+
+#                 # after tracking foci, those that were tracked have been removed from focus_regions list
+#                 # now we check if any regions remain in the list
+#                 # if there are any remaining, instantiate new foci
+#                 if len(focus_regions) > 0:
+#                     new_ids = []
+
+#                     for focus_region in focus_regions:
+
+#                         # make the focus_id
+#                         new_id = create_focus_id(
+#                             region = focus_region,
+#                             t = t,
+#                             peak = peak_id,
+#                             fov = fov_id,
+#                             experiment_name = params['experiment_name'])
+#                         # populate list for later checking if any are missing
+#                         # from foci dictionary's keys
+#                         new_ids.append(new_id)
+
+#                         # determine which cell this focus belongs to
+#                         for cell_id,cell in frame_cells.items():
+
+#                             cell_idx = cell.times.index(t)
+#                             cell_label = cell.labels[cell_idx]
+
+#                             masked_cell_img = np.zeros(seg_cell_img.shape)
+#                             masked_cell_img[seg_cell_img == cell_label] = 1
+
+#                             masked_focus_img = np.zeros(seg_foci_img.shape)
+#                             masked_focus_img[seg_foci_img == focus_region.label] = 1
+
+#                             intersect_img = masked_cell_img + masked_focus_img
+
+#                             pixels_two = len(np.where(intersect_img == 2))
+#                             pixels_one = len(np.where(masked_focus_img == 1))
+
+#                             # if over half the focus is within this cell, do the following
+#                             if pixels_two/pixels_one >= 0.5:
+#                                 # set up the focus
+#                                 # if no foci in cell, just add this one.
+
+#                                 foci[new_id] = Focus(cell = cell,
+#                                                      region = focus_region,
+#                                                      seg_img = seg_foci_img,
+#                                                      intensity_image = fl_img,
+#                                                      t = t)
+
+#                     for new_id in new_ids:
+#                         # if new_id is not a key in the foci dictionary,
+#                         #   that suggests the focus doesn't overlap well
+#                         #   with any cells in this frame, so we'll relabel
+#                         #   this frame of seg_foci_stack to zero for that
+#                         #   focus to avoid trying to track a focus
+#                         #   that doesn't exist.
+#                         if new_id not in foci:
+
+#                             # get label of new_id's region
+#                             this_label = int(new_id[-2:])
+#                             # set pixels in this frame that match this label to 0
+#                             seg_foci_stack[frame, seg_foci_img == this_label] = 0
+
+#     return
 
 def update_cell_foci(cells, foci):
     '''Updates cells' .foci attribute in-place using information
