@@ -965,14 +965,14 @@ if __name__ == "__main__":
         mm3.information('Loading model ....')
 
         # read in model for inference of empty vs good traps
-        model_file_path = p['segment']['unet']['model_file']
+        model_file_path = p['segment']['model_file']
         model = models.load_model(model_file_path,
                                   custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
                                                   'dice_loss': mm3.dice_loss})
-        unet_shape = (p['segment']['unet']['trained_model_image_height'],
-                      p['segment']['unet']['trained_model_image_width'])
+        unet_shape = (p['segment']['trained_model_image_height'],
+                      p['segment']['trained_model_image_width'])
 
-        cellClassThreshold = p['segment']['unet']['cell_class_threshold']
+        cellClassThreshold = p['segment']['cell_class_threshold']
         if cellClassThreshold == 'None': # yaml imports None as a string
             cellClassThreshold = False
         min_object_size = p['segment']['min_object_size']
@@ -980,7 +980,7 @@ if __name__ == "__main__":
         mm3.information("Model loaded.")
 
         # arguments to data generator
-        data_gen_args = {'batch_size':p['segment']['unet']['batch_size'],
+        data_gen_args = {'batch_size':p['segment']['batch_size'],
                          'n_channels':1,
                          'normalize_to_one':True,
                          'shuffle':False}
