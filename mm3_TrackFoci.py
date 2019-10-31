@@ -119,7 +119,7 @@ if __name__ == "__main__":
 
     foci = {}
     # foci_info_unet modifies foci dictionary in place, so nothing returned here
-    mm3.foci_info_unet(foci,
+    mm3.dev_foci_info_unet(foci,
                     Cells,
                     specs,
                     p['time_table'],
