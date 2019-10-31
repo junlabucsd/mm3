@@ -68,6 +68,12 @@ class Window(QMainWindow):
         childrenButton.clicked.connect(self.frames.scene.set_children)
         eventButtonGroup.addButton(childrenButton)
 
+        joinButton = QRadioButton("Join")
+        joinButton.setShortcut("Ctrl+J")
+        joinButton.setToolTip("(Ctrl+J) Draw red join lines.")
+        joinButton.clicked.connect(self.frames.scene.set_join)
+        eventButtonGroup.addButton(joinButton)
+
         appearButton = QRadioButton("Appear")
         appearButton.setShortcut("Ctrl+A")
         appearButton.setToolTip("(Ctrl+A) Denotes a focus appeared,\nor entered the field of view at this frame.")
@@ -89,6 +95,7 @@ class Window(QMainWindow):
         eventButtonLayout = QVBoxLayout()
         eventButtonLayout.addWidget(migrateButton)
         eventButtonLayout.addWidget(childrenButton)
+        eventButtonLayout.addWidget(joinButton)
         eventButtonLayout.addWidget(appearButton)
         eventButtonLayout.addWidget(disappearButton)
         eventButtonLayout.addWidget(removeEventsButton)
@@ -286,29 +293,33 @@ class TrackItem(QGraphicsScene):
         self.event_types_list = ["ChildLine",
                                 "MigrationLine",
                                 "AppearSymbol",
-                                "DisappearSymbol"]
-        self.line_events_list = ["ChildLine","MigrationLine"]
+                                "DisappearSymbol",
+                                "JoinLine"]
+        self.line_events_list = ["ChildLine","MigrationLine","JoinLine"]
         self.end_check_events_list = ["AppearSymbol","ZeroFocusSymbol"]
         # the below lookup table may need reworked to handle migration and child lines to/from a focus
         #   or the handling may be better done in the update_focus_info function
-        self.event_type_index_lookup = {"MigrationLine":0, "ChildLine":1,        
-                                        "AppearSymbol":2, "DisappearSymbol":3,
-                                        "NoData":4
+        self.event_type_index_lookup = {"MigrationLine":0,
+                                        "ChildLine":1,        
+                                        "AppearSymbol":2,
+                                        "DisappearSymbol":3,
+                                        "JoinLine":4,
+                                        "NoData":5
                                         }
         # given an event type for a focus, what are the event types that are incompatible within that same focus?
-        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart","FalseJoinStart","ZeroFocusSymbol"],
-                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","FalseJoinEnd","ZeroFocusSymbol"],
-                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","ChildStart","FalseJoinStart","ZeroFocusSymbol"],
-                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd","FalseJoinEnd","ZeroFocusSymbol"],
-                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol","FalseJoinEnd","ZeroFocusSymbol"],
-                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol","FalseJoinEnd","ZeroFocusSymbol"],
-                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol","FalseJoinStart","ZeroFocusSymbol"],
-                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart","ZeroFocusSymbol"],
-                                           "FalseJoinStart":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","FalseJoinStart","ZeroFocusSymbol"],
-                                           "FalseJoinEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","ZeroFocusSymbol"],
+        self.forbidden_events_lookup = {"MigrationStart":["ChildStart","DisappearSymbol","DieSymbol","MigrationStart","JoinStart","ZeroFocusSymbol"],
+                                           "MigrationEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","JoinEnd","ZeroFocusSymbol"],
+                                           "ChildStart":["MigrationStart","DisappearSymbol","DieSymbol","JoinStart","ZeroFocusSymbol"],
+                                           "ChildEnd":["MigrationEnd","AppearSymbol","ChildEnd","JoinEnd","ZeroFocusSymbol"],
+                                           "BornSymbol":["MigrationEnd","AppearSymbol","BornSymbol","JoinEnd","ZeroFocusSymbol"],
+                                           "AppearSymbol":["MigrationEnd","ChildEnd","BornSymbol","AppearSymbol","JoinEnd","ZeroFocusSymbol"],
+                                           "DisappearSymbol":["MigrationStart","ChildStart","DieSymbol","DisappearSymbol","JoinStart","ZeroFocusSymbol"],
+                                           "DieSymbol":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","JoinStart","ZeroFocusSymbol"],
+                                           "JoinStart":["MigrationStart","ChildStart","DisappearSymbol","DieSymbol","JoinStart","ZeroFocusSymbol"],
+                                           "JoinEnd":["ChildEnd","AppearSymbol","BornSymbol","MigrationEnd","ZeroFocusSymbol"],
                                            "ZeroFocusSymbol":["OneFocusSymbol","TwoFocusSymbol","ThreeFocusSymbol","MigrationStart",
                                                              "MigrationEnd","ChildStart","ChildEnd","BornSymbol",
-                                                             "AppearSymbol","DisappearSymbol","DieSymbol","FalseJoinStart","FalseJoinEnd"],
+                                                             "AppearSymbol","DisappearSymbol","DieSymbol","JoinStart","JoinEnd"],
                                            "OneFocusSymbol":["ZeroFocusSymbol","TwoFocusSymbol","ThreeFocusSymbol"],
                                            "TwoFocusSymbol":["ZeroFocusSymbol","OneFocusSymbol","ThreeFocusSymbol"],
                                            "ThreeFocusSymbol":["ZeroFocusSymbol","OneFocusSymbol","TwoFocusSymbol"]}
@@ -316,6 +327,7 @@ class TrackItem(QGraphicsScene):
         self.children = False
         self.appear = False
         self.disappear = False
+        self.join = False
 
         # apply focus events to the scene
         self.draw_focus_events()
@@ -364,7 +376,7 @@ class TrackItem(QGraphicsScene):
             track_file_name_df.to_csv(df_file_name,index=False)
 
     def no_track_pickle_lookup(self):
-        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
 
     def get_track_pickle(self):
 
@@ -372,7 +384,7 @@ class TrackItem(QGraphicsScene):
         # look for previously updated tracking information and load that if it is found.
         if not os.path.isfile(self.pickle_file_name):
             # get tracking information in a format usable and updatable by qgraphicsscene
-            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
         else:
             with open(self.pickle_file_name, 'rb') as pickle_file:
                 try:
@@ -578,19 +590,19 @@ class TrackItem(QGraphicsScene):
 
         return(phaseQpixmap, time_regions_and_events)
 
-    def create_tracking_information(self, fov_id, peak_id, label_stack):
+    def create_tracking_information(self, fov_id, peak_id, label_stack, img_stack):
 
         t_adj = 1
 
-        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
+        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:], img_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
         regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
 
         # loop through regions and add them to the main dictionary.
         for t, regions in regions_by_time.items():
             # this is a list, while we want it to be a dictionary with the region label as the key
             for region in regions:
-                default_events = np.zeros(5, dtype=np.int)
-                default_events[4] = 1 # set N to 1
+                default_events = np.zeros(6, dtype=np.int)
+                default_events[5] = 1 # set N to 1
                 regions_and_events_by_time[t]['regions'][region.label] = {'props' : region,
                                                                       'events' : default_events}
         # create default interaction matrix
@@ -668,13 +680,13 @@ class TrackItem(QGraphicsScene):
                     regions_and_events_by_time[t]['matrix'][label_tmp, 0] = 1
 
                 # N no data, 4 - Set this to zero as this region as been checked.
-                regions_and_events_by_time[t]['regions'][label_tmp]['events'][4] = 0
+                regions_and_events_by_time[t]['regions'][label_tmp]['events'][5] = 0
 
         # Set remaining regions to event space [0 0 0 0 1 1]
         # Also make their appropriate matrix value 1, which should be in the first column.
         for t, t_data in regions_and_events_by_time.items():
             for region, region_data in t_data['regions'].items():
-                if region_data['events'][4] == 1:
+                if region_data['events'][5] == 1:
 
                     t_data['matrix'][region, 0] = 1
 
@@ -769,7 +781,7 @@ class TrackItem(QGraphicsScene):
                             if update:
                                 items, items_list = self.get_all_focus_event_items(startItem, return_forbidden_items_list=True)
                                 for i, item_type in enumerate(items_list):
-                                    if item_type not in ["ChildEnd","MigrationEnd","FalseJoinEnd"]:
+                                    if item_type not in ["ChildEnd","MigrationEnd","JoinEnd"]:
                                         self.removeItem(items[i])
 
                             focus_properties = startItem.focusProps
@@ -824,6 +836,9 @@ class TrackItem(QGraphicsScene):
                                             if 1 in event_indices:
                                                 self.set_children()
 
+                                            if 4 in event_indices:
+                                                self.set_join()
+
                                             eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem, lastPoint=lastPoint, endItem=endItem)
                                             self.addItem(eventItem)
                             except KeyError:
@@ -838,6 +853,8 @@ class TrackItem(QGraphicsScene):
                 self.set_appear()
             elif original_event_type == "DisappearSymbol":
                 self.set_disappear()
+            elif original_event_type == "JoinLine":
+                self.set_join()
             elif original_event_type == "Removal":
                 self.remove_all_focus_events()
 
@@ -895,6 +912,12 @@ class TrackItem(QGraphicsScene):
                                     item_name = "ChildStart"
                                 elif item.endItem == focus:
                                     item_name = "ChildEnd"
+
+                            elif itemType == "JoinLine":
+                                if item.startItem == focus:
+                                    item_name = "JoinStart"
+                                elif item.endItem == focus:
+                                    item_name = "JoinEnd"
 
                             event_types.append(item_name)
 
@@ -1028,8 +1051,8 @@ class TrackItem(QGraphicsScene):
                 forbidden_event_lookup_key = "MigrationEnd"
             elif event_type == "ChildLine":
                 forbidden_event_lookup_key = "ChildEnd"
-            elif event_type == "FalseJoinLine":
-                forbidden_event_lookup_key = "FalseJoinEnd"
+            elif event_type == "JoinLine":
+                forbidden_event_lookup_key = "JoinEnd"
             else:
                 forbidden_event_lookup_key = event_type
 
@@ -1052,8 +1075,8 @@ class TrackItem(QGraphicsScene):
             forbidden_event_lookup_key = "MigrationStart"
         elif event_type == "ChildLine":
             forbidden_event_lookup_key = "ChildStart"
-        elif event_type == "FalseJoinLine":
-            forbidden_event_lookup_key = "FalseJoinStart"
+        elif event_type == "JoinLine":
+            forbidden_event_lookup_key = "JoinStart"
         else:
             forbidden_event_lookup_key = event_type
 
@@ -1067,15 +1090,15 @@ class TrackItem(QGraphicsScene):
             if old_start_focus_event_type in forbidden_events_list:
                 # print(i, "removal triggered")
                 if old_start_focus_event_type == "ChildStart":
-                    if forbidden_event_lookup_key == "ChildStart":
-                        if child_start_count == 0:
-                            first_child_start_index = i
-                        child_start_count += 1
-                        if child_start_count == 2:
-                            self.removeItem(old_start_focus_events[i])
-                            self.removeItem(old_start_focus_events[first_child_start_index])
-                    else:
-                        self.removeItem(old_start_focus_events[i])
+                    # if forbidden_event_lookup_key == "ChildStart":
+                    #     if child_start_count == 0:
+                    #         first_child_start_index = i
+                    #     child_start_count += 1
+                    #     if child_start_count == 2:
+                    #         self.removeItem(old_start_focus_events[i])
+                    #         self.removeItem(old_start_focus_events[first_child_start_index])
+                    # else:
+                    self.removeItem(old_start_focus_events[i])
                 else:
                     # print(i, "removal of {} triggered".format(old_start_focus_events[i]))
                     self.removeItem(old_start_focus_events[i])
@@ -1259,6 +1282,8 @@ class TrackItem(QGraphicsScene):
             eventItem = MigrationLine(firstPoint, lastPoint, startItem, endItem)
         if self.children:
             eventItem = ChildLine(firstPoint, lastPoint, startItem, endItem)
+        if self.join:
+            eventItem = JoinLine(firstPoint, lastPoint, startItem, endItem)
         # if self.birth:
         #     eventItem = BornSymbol(self.firstPoint, self.startItem)
         if self.appear:
@@ -1289,6 +1314,7 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.join = False
 
     def set_migration(self):
         # print('clicked set_migration')
@@ -1299,6 +1325,17 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.join = False
+
+    def set_join(self):
+        self.remove_events = False
+        self.migration = False
+        self.die = False
+        self.children = False
+        self.birth = False
+        self.appear = False
+        self.disappear = False
+        self.join = True
 
     def set_children(self):
         # print('clicked set_children')
@@ -1309,6 +1346,7 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.join = False
 
     def set_die(self):
         # print('clicked set_die')
@@ -1319,6 +1357,7 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = False
+        self.join = False
 
     def set_appear(self):
         self.remove_events = False
@@ -1328,6 +1367,7 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = True
         self.disappear = False
+        self.join = False
 
     def set_disappear(self):
         self.remove_events = False
@@ -1337,6 +1377,7 @@ class TrackItem(QGraphicsScene):
         self.birth = False
         self.appear = False
         self.disappear = True
+        self.join = False
 
     def set_born(self):
         self.remove_events = False
@@ -1345,7 +1386,8 @@ class TrackItem(QGraphicsScene):
         self.children = False
         self.birth = True
         self.appear = False
-        self.disappear = FalseJoinLine
+        self.disappear = False
+        self.join = False
 
 class OneFocusSymbol(QGraphicsTextItem):
 
@@ -1586,12 +1628,12 @@ class DisappearSymbol(QGraphicsLineItem):
     def type(self):
         return("DisappearSymbol")
 
-class FalseJoinLine(QGraphicsLineItem):
+class JoinLine(QGraphicsLineItem):
     '''
     A class for handling segmentation errors in tracking algorithm.
     '''
     def __init__(self, firstPoint, lastPoint, startItem, endItem):
-        super(FalseJoinLine, self).__init__()
+        super(JoinLine, self).__init__()
 
         brushColor = QColor(1*255,0*255,0*255)
         brushSize = 2
@@ -1616,7 +1658,7 @@ class FalseJoinLine(QGraphicsLineItem):
         self.setLine(line)
 
     def type(self):
-        return("FalseJoinLine")
+        return("JoinLine")
 
 if __name__ == "__main__":
 
