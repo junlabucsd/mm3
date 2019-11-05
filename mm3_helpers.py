@@ -309,6 +309,9 @@ def get_initial_tif_params(image_filename):
         with tiff.TiffFile(os.path.join(params['TIFF_dir'],image_filename)) as tif:
             image_data = tif.asarray()
             #print(image_data.shape) # uncomment for debug
+            #if len(image_data.shape) == 2:
+            #    img_shape = [image_data.shape[0],image_data.shape[1]]
+            #else:
             img_shape = [image_data.shape[1],image_data.shape[2]]
             plane_list = [str(i+1) for i in range(image_data.shape[0])]
             #print(plane_list) # uncomment for debug
@@ -2351,8 +2354,8 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['unet']['batch_size']
-    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
+    batch_size = params['segment']['batch_size']
+    cellClassThreshold = params['segment']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
@@ -2414,7 +2417,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              (0,pad_dict['right_trim'])),
                              mode='constant')
 
-        if params['segment']['unet']['save_predictions']:
+        if params['segment']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
@@ -2485,8 +2488,8 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['unet']['trained_model_image_height'],
-                  params['segment']['unet']['trained_model_image_width'])
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2540,8 +2543,8 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # pad image to correct size
         img_stack = np.pad(img_stack,
                            ((0,0),
-                           (pad_dict['top'],pad_dict['bottom']),
-                           (pad_dict['left'],pad_dict['right'])),
+                           (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                           (pad_dict['left_pad'],pad_dict['right_pad'])),
                            mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
         # set up image generator
@@ -2552,8 +2555,8 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         # post processing
         # remove padding including the added last dimension
-        predictions = predictions[:, pad_dict['top']:unet_shape[0]-pad_dict['bottom'],
-                                     pad_dict['left']:unet_shape[1]-pad_dict['right'], 0]
+        predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
+                                     pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
 
         if params['foci']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
@@ -2626,8 +2629,8 @@ def segment_fov_foci_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['unet']['trained_model_image_height'],
-                  params['segment']['unet']['trained_model_image_width'])
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2732,13 +2735,13 @@ class CellSegmentationDataGenerator(utils.Sequence):
 
 class TemporalCellDataGenerator(utils.Sequence):
     'Generates data for Keras'
-    def __init__(self, 
-                 fileName, 
-                 batch_size=32, 
-                 dim=(32,32,32), 
+    def __init__(self,
+                 fileName,
+                 batch_size=32,
+                 dim=(32,32,32),
                  n_channels=1,
-                 n_classes=10, 
-                 shuffle=False, 
+                 n_classes=10,
+                 shuffle=False,
                  normalize_to_one=False):
         'Initialization'
         self.dim = dim
@@ -2772,51 +2775,46 @@ class TemporalCellDataGenerator(utils.Sequence):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
         X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.dim[2], self.n_channels))
-        
+
         full_stack = io.imread(self.fileName)
-        
+
         if full_stack.dtype=="uint16":
             full_stack = full_stack / 2**16 * 2**8
             full_stack = full_stack.astype('uint8')
-        
+
         img_height = full_stack.shape[1]
         img_width = full_stack.shape[2]
 
-        half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = get_pad_distances(self.dim, img_height, img_width)
-
-        pad_dict = {'top':top_pad,
-                   'bottom':bottom_pad,
-                   'right':right_pad,
-                   'left':left_pad}            
+        pad_dict = get_pad_distances(self.dim, img_height, img_width)
 
         full_stack = np.pad(full_stack,
                            ((0,0),
-                            (pad_dict['top'],pad_dict['bottom']),
-                            (pad_dict['left'],pad_dict['right'])
+                            (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                            (pad_dict['left_pad'],pad_dict['right_pad'])
                            ),
                            mode='constant')
-        
+
         full_stack = full_stack.transpose(1,2,0)
-        
+
         # Generate data
         for i in range(self.batch_size):
-            
+
             if i == 0:
                 tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
                 tmpImg[:,:,0,0] = full_stack[:,:,0]
                 for j in range(1,self.dim[2]):
                     tmpImg[:,:,j,0] = full_stack[:,:,j]
-                    
+
             elif i == (self.batch_size - 1):
                 tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
                 tmpImg[:,:,-1,0] = full_stack[:,:,-1]
                 for j in range(self.dim[2]-1):
                     tmpImg[:,:,j,0] = full_stack[:,:,j]
-                    
+
             else:
                 tmpImg = np.zeros((self.dim[0], self.dim[1], self.dim[2], 1))
                 tmpImg[:,:,:,0] = full_stack[:,:,(i-1):(i+2)]
-                    
+
             X[i,:,:,:,:] = tmpImg
 
         return X
@@ -3264,19 +3262,19 @@ def get_tracking_model_dict():
                                         custom_objects={'all_loss':all_loss,
                                                                     'f2_m':f2_m})
     # if not 'zero_cell_model' in model_dict:
-    #     model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'], 
+    #     model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'],
     #                                     custom_objects={'absolute_dice_loss':absolute_dice_loss,
     #                                                                 'f2_m':f2_m})
     # if not 'one_cell_model' in model_dict:
-    #     model_dict['one_cell_model'] = models.load_model(params['tracking']['one_cell_model'], 
+    #     model_dict['one_cell_model'] = models.load_model(params['tracking']['one_cell_model'],
     #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
     #                                                                 'f2_m':f2_m})
     # if not 'two_cell_model' in model_dict:
-    #     model_dict['two_cell_model'] = models.load_model(params['tracking']['two_cell_model'], 
+    #     model_dict['two_cell_model'] = models.load_model(params['tracking']['two_cell_model'],
     #                                     custom_objects={'all_loss':all_loss,
     #                                                                 'f2_m':f2_m})
     # if not 'geq_three_cell_model' in model_dict:
-    #     model_dict['geq_three_cell_model'] = models.load_model(params['tracking']['geq_three_cell_model'], 
+    #     model_dict['geq_three_cell_model'] = models.load_model(params['tracking']['geq_three_cell_model'],
     #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
     #                                                                 'f2_m':f2_m})
 
@@ -4179,7 +4177,7 @@ class Focus():
 
     def __str__(self):
         return(self.print_info())
-            
+
     def add_cell(self, cell):
         self.cells.append(cell)
 
@@ -5595,7 +5593,7 @@ def initialize_track_graph(peak_id,
                                     continue
     #                             print("Linking {} to {}.".format(detection_id, next_dies_state))
                                 elem = (detection_id, next_dies_state, 'die', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-                                
+
                             # the following classes aren't yet implemented
                             elif 'zero_cell' in key:
                                 G.nodes[det.id]['zero_cell_weight'] = detection_prediction
@@ -5878,7 +5876,7 @@ def populate_focus_arrays(Foci, data_dict, cell_quants=False, wide=False):
 
         if focus_counter % 100 == 0:
             print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
-        
+
         # loop over keys in data dictionary, and set
         # values in appropriate array, at appropriate indices
         # to those we find in the focus.
@@ -5891,7 +5889,7 @@ def populate_focus_arrays(Foci, data_dict, cell_quants=False, wide=False):
                         data_dict[key][start_idx:end_idx] = ''
                     else:
                         data_dict[key][start_idx:end_idx] = focus.parent.id
-                    
+
                 if focus.daughters is None:
                     if key == 'child1_id' or key == 'child2_id':
                         data_dict[key][start_idx:end_idx] = ''
@@ -5932,7 +5930,7 @@ def compile_foci_info_long_df(Foci):
     Returns
     ----------------------
 
-    A long DataFrame with 
+    A long DataFrame with
     detailed information about each timepoint for each focus.
     '''
 
@@ -6737,7 +6735,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
 #                 t = frame+1
 #                 frame_cells = filter_cells_containing_val_in_attr(peak_cells, attr='times', val=t)
 #                 next_frame_cells = filter_cells_containing_val_in_attr(peak_cells, attr='times', val=t+1)
-                
+
 #                 # prepare focus regions in this frame
 #                 focus_regions = measure.regionprops(seg_foci_img)
 
@@ -6746,7 +6744,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
 
 #                     pass
 
-                
+
 
 #                 # compare this frame's foci to prior frame's foci for tracking
 #                 if frame > 0:
