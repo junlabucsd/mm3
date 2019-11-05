@@ -12,6 +12,7 @@ import six
 import sys
 import os
 import glob
+import re
 # import time
 import inspect
 import argparse
@@ -88,9 +89,6 @@ if __name__ == "__main__":
     if not os.path.exists(p['chnl_dir']):
         sys.exit("Exiting: Channel directory, {}, not found.".format(p['chnl_dir']))
 
-    # set segmentation image name for segmented images
-    p['seg_img'] = 'seg_otsu' ## be careful here, it is lookgin for segmented images
-
     specs = mm3.load_specs()
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
@@ -98,13 +96,20 @@ if __name__ == "__main__":
     if user_spec_fovs:
         fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
 
+    # set segmentation image name for segmented images
+    seg_suffix_finder = re.compile(r'.+(seg_.+)\.tif$')
+    test_name = glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*.tif'.format(fov_id_list[0])))[0]
+    mat = seg_suffix_finder.match(test_name)
+    p['seg_img'] = mat.groups()[0] ## be careful here, it is lookgin for segmented images
+
     # get paired phase file names and mask file names for each fov
     fov_filename_dict = {}
     for fov_id in fov_id_list:
         if namespace.no_prior_mask:
             mask_filenames = None
         else:
-            mask_filenames = [os.path.join(p['seg_dir'],fname) for fname in glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*{}.tif'.format(fov_id,p['seg_img'])))]
+            mask_filenames = [os.path.join(p['seg_dir'],fname) for fname in glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*{}.tif'.format(fov_id, p['seg_img'])))]
+            
         image_filenames = [fname.replace(p['seg_dir'], p['chnl_dir']).replace(p['seg_img'], 'c{}'.format(namespace.channel)) for fname in mask_filenames]
 
         fov_filename_dict[fov_id] = []
