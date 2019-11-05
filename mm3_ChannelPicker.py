@@ -1018,17 +1018,16 @@ if __name__ == "__main__":
                     img_stack[counter,...] = img_array[slice_increment*j,...]
                     counter += 1
 
-
-            half_width_pad, left_pad, right_pad, half_height_pad, top_pad, bottom_pad = mm3.get_pad_distances(unet_shape, img_height, img_width)
-            pad_dict = {'top':top_pad,
-                       'bottom':bottom_pad,
-                       'right':right_pad,
-                       'left':left_pad}
+            pad_dict = mm3.get_pad_distances(unet_shape, img_height, img_width)
+            
             # pad image to correct size
+            if p['debug']:
+                print("Padding dictionary:", pad_dict)
+
             img_stack = np.pad(img_stack,
                                ((0,0),
-                               (pad_dict['top'],pad_dict['bottom']),
-                               (pad_dict['left'],pad_dict['right'])),
+                               (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                               (pad_dict['left_pad'],pad_dict['right_pad'])),
                                mode='constant')
             img_stack = np.expand_dims(img_stack, -1)
 
