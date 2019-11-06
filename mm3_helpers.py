@@ -136,7 +136,7 @@ def julian_day_number():
     return jdn
 
 def get_plane(filepath):
-    pattern = '(c\d+).tif'
+    pattern = r'(c\d+).tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return res.group(1)
@@ -144,7 +144,7 @@ def get_plane(filepath):
         return None
 
 def get_fov(filepath):
-    pattern = 'xy(\d+)\w*.tif'
+    pattern = r'xy(\d+)\w*.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return int(res.group(1))
@@ -152,7 +152,7 @@ def get_fov(filepath):
         return None
 
 def get_time(filepath):
-    pattern = 't(\d+)xy\w+.tif'
+    pattern = r't(\d+)xy\w+.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return np.int_(res.group(1))
@@ -2375,17 +2375,18 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        # med_stack = np.zeros(img_stack.shape)
-        # selem = morphology.disk(1)
-        #
-        # for frame_idx in range(img_stack.shape[0]):
-        #     tmpImg = img_stack[frame_idx,...]
-        #     med_stack[frame_idx,...] = median(tmpImg, selem)
-        #
-        # # robust normalization of peak's image stack to 1
-        # max_val = np.max(med_stack)
-        # img_stack = img_stack/max_val
-        # img_stack[img_stack > 1] = 1
+        if params['segment']['normalize_to_one'] is not None:
+            med_stack = np.zeros(img_stack.shape)
+            selem = morphology.disk(1)
+            
+            for frame_idx in range(img_stack.shape[0]):
+                tmpImg = img_stack[frame_idx,...]
+                med_stack[frame_idx,...] = median(tmpImg, selem)
+            
+            # robust normalization of peak's image stack to 1
+            max_val = np.max(med_stack)
+            img_stack = img_stack/max_val
+            img_stack[img_stack > 1] = 1
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
