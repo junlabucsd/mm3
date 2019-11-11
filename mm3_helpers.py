@@ -6035,6 +6035,66 @@ def find_all_cell_intensities(Cells,
     # no need to return anything specifically.
     return
 
+def find_cell_intensities_worker(fov_id, peak_id, Cells, midline=True, channel='sub_c3'):
+    '''
+    Finds fluorescenct information for cells. All the cells in Cells
+    should be from one fov/peak. See the function
+    organize_cells_by_channel()
+    This version is the same as find_cell_intensities but return the Cells object for collection by the pool.
+    The original find_cell_intensities is kept for compatibility.
+    '''
+    information('Processing peak {} in FOV {}'.format(peak_id, fov_id))
+    # Load fluorescent images and segmented images for this channel
+    fl_stack = load_stack(fov_id, peak_id, color=channel)
+    seg_stack = load_stack(fov_id, peak_id, color='seg_otsu')
+
+    # determine absolute time index
+    time_table = params['time_table']
+    times_all = []
+    for fov in params['time_table']:
+        times_all = np.append(times_all, [int(x) for x in time_table[fov].keys()])
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+    t0 = times_all[0] # first time index
+
+    # Loop through cells
+    for Cell in Cells.values():
+        # give this cell two lists to hold new information
+        Cell.fl_tots = [] # total fluorescence per time point
+        Cell.fl_area_avgs = [] # avg fluorescence per unit area by timepoint
+        Cell.fl_vol_avgs = [] # avg fluorescence per unit volume by timepoint
+
+        if midline:
+            Cell.mid_fl = [] # avg fluorescence of midline
+
+        # and the time points that make up this cell's life
+        for n, t in enumerate(Cell.times):
+            # create fluorescent image only for this cell and timepoint.
+            fl_image_masked = np.copy(fl_stack[t-t0])
+            fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
+
+            # append total flourescent image
+            Cell.fl_tots.append(np.sum(fl_image_masked))
+            # and the average fluorescence
+            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
+            Cell.fl_vol_avgs.append(np.sum(fl_image_masked) / Cell.volumes[n])
+
+            if midline:
+                # add the midline average by first applying morphology transform
+                bin_mask = np.copy(seg_stack[t-t0])
+                bin_mask[bin_mask != Cell.labels[n]] = 0
+                med_mask, _ = morphology.medial_axis(bin_mask, return_distance=True)
+                # med_mask[med_dist < np.floor(cap_radius/2)] = 0
+                # print(img_fluo[med_mask])
+                if (np.shape(fl_image_masked[med_mask])[0] > 0):
+                    Cell.mid_fl.append(np.nanmean(fl_image_masked[med_mask]))
+                else:
+                    Cell.mid_fl.append(0)
+
+    # return the cell object to the pool initiated by mm3_Colors.
+    return Cells
+
 def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='sub_c2'):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
