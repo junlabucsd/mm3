@@ -15,6 +15,9 @@ except:
     import pickle
 import numpy as np
 from scipy.io import savemat
+import multiprocessing
+from multiprocessing import Pool
+from functools import partial
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -97,14 +100,33 @@ if __name__ == "__main__":
 
     # create dictionary which organizes cells by fov and peak_id
     Cells_by_peak = mm3_plots.organize_cells_by_channel(Complete_Cells, specs)
+    
+    # multiprocessing 
+    color_multiproc = True
+    if color_multiproc:
+        Cells_to_pool = [(fov_id, peak_id, Cells) for fov_id in fov_id_list for peak_id, Cells in Cells_by_peak[fov_id].items()] 
+        # print(Cells_to_pool[0:5])
+        pool = Pool(processes=p['num_analyzers'])
 
+        mapfunc = partial(mm3.find_cell_intensities_worker, channel=namespace.channel)
+        Cells_updates = pool.starmap_async(mapfunc, Cells_to_pool)
+        # [pool.apply_async(mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=True, channel=namespace.channel)) for fov_id in fov_id_list for peak_id, Cells in Cells_by_peak[fov_id].items()]
+
+        pool.close() # tells the process nothing more will be added.
+        pool.join()
+        update_cells = Cells_updates.get() # the result is a list of Cells dictionary, each dict contains several cells
+        update_cells = {cell_id: cell for cells in update_cells for cell_id, cell in cells.items()}
+        for cell_id, cell in update_cells.items():
+            Complete_Cells[cell_id] = cell
+    
     # for each set of cells in one fov/peak, compute the fluorescence
-    for fov_id in fov_id_list:
-        if fov_id in Cells_by_peak:
-            mm3.information('Processing FOV {}.'.format(fov_id))
-            for peak_id, Cells in Cells_by_peak[fov_id].items():
-                mm3.information('Processing peak {}.'.format(peak_id))
-                mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=False)
+    else:
+        for fov_id in fov_id_list:
+            if fov_id in Cells_by_peak:
+                mm3.information('Processing FOV {}.'.format(fov_id))
+                for peak_id, Cells in Cells_by_peak[fov_id].items():
+                    mm3.information('Processing peak {}.'.format(peak_id))
+                    mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=False)
 
     # Just the complete cells, those with mother and daugther
     cell_filename = os.path.basename(cell_file_path)
