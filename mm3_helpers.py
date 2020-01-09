@@ -633,11 +633,6 @@ def make_time_table(analyzed_imgs):
 
         time_table[int(idata['fov'])][int(idata['t'])] = int(t_in_seconds)
 
-    # save to .pkl. This pkl will be loaded into the params
-    # with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'wb') as time_table_file:
-    #     pickle.dump(time_table, time_table_file, protocol=pickle.HIGHEST_PROTOCOL)
-    # with open(os.path.join(params['ana_dir'], 'time_table.txt'), 'w') as time_table_file:
-    #     pprint(time_table, stream=time_table_file)
     with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'w') as time_table_file:
         yaml.dump(data=time_table, stream=time_table_file, default_flow_style=False, tags=None)
     information('Time table saved.')
@@ -3240,7 +3235,7 @@ def get_tracking_model_dict():
 
     if not 'migrate_model' in model_dict:
         model_dict['migrate_model'] = models.load_model(params['tracking']['migrate_model'],
-                                                                    custom_objects={'all_loss':all_loss,
+                                                                    custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                         'f2_m':f2_m})
     if not 'child_model' in model_dict:
         model_dict['child_model'] = models.load_model(params['tracking']['child_model'],
@@ -3248,20 +3243,21 @@ def get_tracking_model_dict():
                                                                     'f2_m':f2_m})
     if not 'appear_model' in model_dict:
         model_dict['appear_model'] = models.load_model(params['tracking']['appear_model'],
-                                        custom_objects={'all_loss':all_loss,
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                     'f2_m':f2_m})
     if not 'die_model' in model_dict:
         model_dict['die_model'] = models.load_model(params['tracking']['die_model'],
-                                        custom_objects={'all_loss':all_loss,
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                     'f2_m':f2_m})
     if not 'disappear_model' in model_dict:
         model_dict['disappear_model'] = models.load_model(params['tracking']['disappear_model'],
-                                        custom_objects={'all_loss':all_loss,
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                     'f2_m':f2_m})
     if not 'born_model' in model_dict:
         model_dict['born_model'] = models.load_model(params['tracking']['born_model'],
-                                        custom_objects={'all_loss':all_loss,
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
                                                                     'f2_m':f2_m})
+    # In future work, may implement predictors for cell number in a given region.
     # if not 'zero_cell_model' in model_dict:
     #     model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'],
     #                                     custom_objects={'absolute_dice_loss':absolute_dice_loss,

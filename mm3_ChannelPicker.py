@@ -993,30 +993,33 @@ if __name__ == "__main__":
 
             predictionDict[fov_id] = {}
 
-            mm3.information('Inferring number of cells in five evenly spaced frames for each trap in fov {}.'.format(fov_id))
+            mm3.information('Inferring number of cells in first frame for each trap in fov {}.'.format(fov_id))
 
             # assign each prediction to the proper fov_id, peak_id in predictions dict
-            counter = 0
+            # counter = 0
             peak_number = len(channel_masks[fov_id])
             for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
                 # get list of tiff file names
                 tiff_file_name = glob.glob(os.path.join(chnl_dir, "*xy{:0=3}_p{:0=4}_c1.tif".format(fov_id, peak_id)))[0]
 
                 img_array = io.imread(tiff_file_name)
-                img_height = img_array.shape[1]
-                img_width = img_array.shape[2]
-                slice_increment = int(img_array.shape[0]/5)
+                # slice_increment = int(img_array.shape[0]/5)
 
                 # set up stack for images from all peaks
                 # this is a bit more complicated than just doing 5 images at a time, but it is much faster
                 #   because you don't have nearly as many data transfer steps
                 if i == 0:
-                    img_stack = np.zeros((5*peak_number,img_height,img_width),dtype='uint16')
+                    # img_stack = np.zeros((5*peak_number,img_height,img_width),dtype='uint16')
+                    img_height = img_array.shape[1]
+                    img_width = img_array.shape[2]
+                    img_stack = np.zeros((peak_number,img_height,img_width),dtype='uint16') # switched to just looking at first timepoint
 
                 # grab 5 images to load and run cell segmentation
-                for j in range(5):
-                    img_stack[counter,...] = img_array[slice_increment*j,...]
-                    counter += 1
+                # for j in range(5):
+                    # img_stack[counter,...] = img_array[slice_increment*j,...]
+                    # counter += 1
+                img_stack[i,...] = img_array[0,...]
+                # counter += 1
 
             pad_dict = mm3.get_pad_distances(unet_shape, img_height, img_width)
             
@@ -1035,11 +1038,11 @@ if __name__ == "__main__":
             image_generator = mm3.CellSegmentationDataGenerator(img_stack, **data_gen_args)
             # run predictions
             predictions = model.predict_generator(image_generator, **predict_args)[:,:,:,0]
-            if p['debug']:
-                fig,ax = plt.subplots(ncols=5);
-                for i in range(5):
-                    ax[i].imshow(predictions[i,:,:]);
-                plt.show();
+            # if p['debug']:
+            #     fig,ax = plt.subplots(ncols=5);
+            #     for i in range(5):
+            #         ax[i].imshow(predictions[i,:,:]);
+            #     plt.show();
 
             # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
             if cellClassThreshold:
@@ -1060,17 +1063,18 @@ if __name__ == "__main__":
                     segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
 
             else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
-                information('Converting predictions to grayscale.')
+                mm3.information('Converting predictions to grayscale.')
                 segmented_imgs = np.around(predictions * 100)
 
             # put number of cells detected into array for predictionDict
-            counter = 0
+            # counter = 0
             for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
 
-                cell_count_array = np.zeros(5, dtype='uint8')
-                for j in range(5):
-                    cell_count_array[j] = int(np.max(segmented_imgs[counter,:,:]))
-                    counter += 1
+                cell_count_array = int(np.max(segmented_imgs[0,:,:]))
+                # cell_count_array = np.zeros(5, dtype='uint8')
+                # for j in range(5):
+                    # cell_count_array[j] = int(np.max(segmented_imgs[counter,:,:]))
+                    # counter += 1
 
                 predictionDict[fov_id][peak_id] = cell_count_array
 
