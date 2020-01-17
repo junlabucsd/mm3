@@ -130,12 +130,41 @@ if __name__ == "__main__":
         for j,peak_id in enumerate(ana_peak_ids):
 
             seg_stack = mm3.load_stack(fov_id, peak_id, color=p['seg_img'])
+            phase_stack = mm3.load_stack(fov_id, peak_id, color=p['phase_plane'])
             # run predictions for each tracking class
             # consider only the top six cells for a given trap when doing tracking
             cell_number = 6
             frame_number = seg_stack.shape[0]
+
             # get region properties
+
+            # for k,time in enumerate(regions_by_time):
+            #     if len(time) > 0:
+            #         print(k, np.max([reg.label for reg in time]))
+            #     else: print(k, 0)
+
+            # sometimes a phase contrast image is missed and has no signal.
+            # This is a workaround for that problem
+            no_signal_frames = []
+            for k,img in enumerate(phase_stack):
+                # if the mean phase image signal is less than 200, add its index to list
+                if np.mean(img) < 200:
+                    no_signal_frames.append(k)
+
+            # loop through segmentation stack and replace frame from missed phase image
+            #   with the prior frame.
+            for k,label_img in enumerate(seg_stack):
+                if k in no_signal_frames:
+                    seg_stack[k,...] = seg_stack[k-1,...]
+
             regions_by_time = [measure.regionprops(label_image=img) for img in seg_stack]
+
+            # print(no_signal_frames)
+
+            # for k,time in enumerate(regions_by_time):
+            #     if len(time) > 0:
+            #         print(k, np.max([reg.label for reg in time]))
+            #     else: print(k, 0)
 
             # have generator yield info for top six cells in all frames
             prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,9))
@@ -160,7 +189,6 @@ if __name__ == "__main__":
                                                     born_threshold=0.85,
                                                     appear_threshold=0.85)
 
-            # tracks[fov_id][peak_id] = mm3.create_lineages_from_graph_2(G, graph_df, fov_id, peak_id)
             tracks.update(mm3.create_lineages_from_graph(G, graph_df, fov_id, peak_id))
 
     mm3.information("Finished lineage creation.")
@@ -175,5 +203,13 @@ if __name__ == "__main__":
 
     with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
         pickle.dump(tracks, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+    if os.path.isfile(os.path.join(p['cell_dir'], 'complete_cells.pkl')):
+        os.remove(os.path.join(p['cell_dir'], 'complete_cells.pkl'))
+
+    os.symlink(
+        os.path.join(p['cell_dir'], 'all_cells.pkl'),
+        os.path.join(p['cell_dir'], 'complete_cells.pkl')
+    )
 
     mm3.information("Finished curating and saving cell data.")
