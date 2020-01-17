@@ -295,13 +295,15 @@ if __name__ == "__main__":
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 mm3.information("Predicting trap locations for first frame.")
-                first_frame_trap_prediction = mm3.get_frame_predictions(img, 
-                                                                        model, 
-                                                                        stack_weights, 
-                                                                        trap_align_metadata['shift_distance'], 
-                                                                        subImageNumber=16, 
-                                                                        padSubImageNumber=25, 
-                                                                        debug=p['debug'])
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning)
+                    first_frame_trap_prediction = mm3.get_frame_predictions(img, 
+                                                                            model, 
+                                                                            stack_weights, 
+                                                                            trap_align_metadata['shift_distance'], 
+                                                                            subImageNumber=16, 
+                                                                            padSubImageNumber=25, 
+                                                                            debug=p['debug'])
 
                 if p['debug']:
                     fig,ax = plt.subplots(nrows=1, ncols=4, figsize=(12,12))
@@ -419,9 +421,11 @@ if __name__ == "__main__":
                         'use_multiprocessing':True,
                         'workers':p['num_analyzers']}
 
-                img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=UserWarning)
+                    img_generator = mm3.TrapSegmentationDataGenerator(align_region_stack, **data_gen_args)
 
-                align_region_predictions = model.predict_generator(img_generator, **predict_gen_args)
+                    align_region_predictions = model.predict_generator(img_generator, **predict_gen_args)
                 #align_region_stack = mm3.apply_median_filter_and_normalize(align_region_stack)
                 #align_region_predictions = model.predict(align_region_stack, batch_size=batch_size)
                 # reduce dimensionality such that the class predictions are now (frame_number,512,512), and each voxel is labelled as the predicted region, i.e., 0=trap, 1=central trough, 2=background.

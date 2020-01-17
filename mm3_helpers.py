@@ -2347,6 +2347,74 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
     return pad_dict
 
+def prediction_post_processing(predictions, pad_dict, unet_shape):
+
+    cellClassThreshold = params['segment']['cell_class_threshold']
+    if cellClassThreshold == 'None': # yaml imports None as a string
+        cellClassThreshold = False
+    min_object_size = params['segment']['min_object_size']
+
+    # remove padding including the added last dimension
+    predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
+                                    pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
+
+    # pad back incase the image had been trimmed
+    predictions = np.pad(predictions,
+                            ((0,0),
+                            (0,pad_dict['bottom_trim']),
+                            (0,pad_dict['right_trim'])),
+                            mode='constant')
+
+    if params['segment']['save_predictions']:
+        pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
+        if not os.path.isdir(params['pred_dir']):
+            os.makedirs(params['pred_dir'])
+        int_preds = (predictions * 255).astype('uint8')
+        tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
+                        int_preds, compress=4)
+
+    # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
+    if cellClassThreshold:
+        predictions[predictions >= cellClassThreshold] = 1
+        predictions[predictions < cellClassThreshold] = 0
+        predictions = predictions.astype('uint8')
+
+        segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
+        # process and label each frame of the channel
+        for frame in range(segmented_imgs.shape[0]):
+            # get rid of small holes
+            predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+            # get rid of small objects.
+            predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
+            # remove labels which touch the boarder
+            predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+            # relabel now
+            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
+
+    else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
+        information('Converting predictions to grayscale.')
+        segmented_imgs = np.around(predictions * 100)
+
+    # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
+    segmented_imgs = segmented_imgs.astype('uint8')
+
+    return(segmented_imgs)
+
+def normalize_stack(img_stack):
+    med_stack = np.zeros(img_stack.shape)
+    selem = morphology.disk(1)
+    
+    for frame_idx in range(img_stack.shape[0]):
+        tmpImg = img_stack[frame_idx,...]
+        med_stack[frame_idx,...] = median(tmpImg, selem)
+    
+    # robust normalization of peak's image stack to 1
+    max_val = np.max(med_stack)
+    img_stack = img_stack/max_val
+    img_stack[img_stack > 1] = 1
+
+    return(img_stack)
+
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     batch_size = params['segment']['batch_size']
@@ -2369,19 +2437,20 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         information('Segmenting peak {}.'.format(peak_id))
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
+        dt = img_stack.dtype
+        # sometimes a phase contrast image is missed and has no signal.
+        # This is a workaround for that problem
+        # we just take the prior timepoint's image and replace the
+        # missing image with it.
+        for k,img in enumerate(img_stack):
+            # if the mean phase image signal is less than 200, add its index to list
+            if ((dt == 'uint16') and (np.mean(img) < 200)):
+                img_stack[k,...] = img_stack[k-1,...]
+            elif ((dt == 'uint8') and (np.mean(img) < 200/(2**16-1)*(2**8-1))):
+                img_stack[k,...] = img_stack[k-1,...]
 
         if params['segment']['normalize_to_one'] is not None:
-            med_stack = np.zeros(img_stack.shape)
-            selem = morphology.disk(1)
-            
-            for frame_idx in range(img_stack.shape[0]):
-                tmpImg = img_stack[frame_idx,...]
-                med_stack[frame_idx,...] = median(tmpImg, selem)
-            
-            # robust normalization of peak's image stack to 1
-            max_val = np.max(med_stack)
-            img_stack = img_stack/max_val
-            img_stack[img_stack > 1] = 1
+            img_stack = normalize_stack(img_stack)
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
@@ -2402,49 +2471,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         predictions = model.predict_generator(image_generator, **predict_args)
 
         # post processing
-        # remove padding including the added last dimension
-        predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
-                                     pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
-
-        # pad back incase the image had been trimmed
-        predictions = np.pad(predictions,
-                             ((0,0),
-                             (0,pad_dict['bottom_trim']),
-                             (0,pad_dict['right_trim'])),
-                             mode='constant')
-
-        if params['segment']['save_predictions']:
-            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
-            if not os.path.isdir(params['pred_dir']):
-                os.makedirs(params['pred_dir'])
-            int_preds = (predictions * 255).astype('uint8')
-            tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
-                            int_preds, compress=4)
-
-        # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
-        if cellClassThreshold:
-            predictions[predictions >= cellClassThreshold] = 1
-            predictions[predictions < cellClassThreshold] = 0
-            predictions = predictions.astype('uint8')
-
-            segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
-            # process and label each frame of the channel
-            for frame in range(segmented_imgs.shape[0]):
-                # get rid of small holes
-                predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-                # get rid of small objects.
-                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
-                # remove labels which touch the boarder
-                predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
-                # relabel now
-                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
-
-        else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
-            information('Converting predictions to grayscale.')
-            segmented_imgs = np.around(predictions * 100)
-
-        # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
-        segmented_imgs = segmented_imgs.astype('uint8')
+        segmented_imgs = prediction_post_processing(predictions, pad_dict, unet_shape)
 
         # save out the segmented stacks
         if params['output'] == 'TIFF':
@@ -2466,6 +2493,64 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
+
+
+def segment_stack_unet(fname, model):
+    '''
+    Segments the channels from one fov using the U-net CNN model.
+
+    Parameters
+    ----------
+    fname : str
+    model : TensorFlow model
+    '''
+
+    # load segmentation parameters
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
+
+    img_stack = io.imread(fname)
+    img_height = img_stack.shape[1]
+    img_width = img_stack.shape[2]
+
+    pad_dict = get_pad_distances(unet_shape, img_height, img_width)
+    batch_size = params['segment']['batch_size']
+    
+    # arguments to predict_generator
+    predict_args = dict(use_multiprocessing=False,
+                        verbose=1)
+
+    if params['segment']['normalize_to_one'] is not None:
+        img_stack = normalize_stack(img_stack)
+
+    # trim and pad image to correct size
+    img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
+    img_stack = np.pad(img_stack,
+                ((0,0),
+                (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                (pad_dict['left_pad'],pad_dict['right_pad'])),
+                mode='constant')
+    img_stack = np.expand_dims(img_stack, -1) # TF expects images to be 4D
+    # set up image generator
+    # image_generator = CellSegmentationDataGenerator(img_stack, **data_gen_args)
+    image_datagen = ImageDataGenerator()
+    image_generator = image_datagen.flow(x=img_stack,
+                                            batch_size=batch_size,
+                                            shuffle=False) # keep same order
+
+    pred = model.predict_generator(image_generator, **predict_args)
+
+    seg = prediction_post_processing(pred, pad_dict, unet_shape)
+
+    # save out the segmented image
+    fname_split = fname.split('_')[:-1]
+    seg_filename = '_'.join(fname_split)
+    seg_filename = seg_filename + "_{}.tif".format(params['seg_img'])
+    # print(seg_filename)
+    
+    tiff.imsave(seg_filename, seg, compress=4)
+
+    return
 
 def segment_fov_unet(fov_id, specs, model, color=None):
     '''
@@ -4386,7 +4471,6 @@ class PredictTrackDataGenerator(utils.Sequence):
             start_idx = idx-2
             end_idx = idx+3
 
-#             print(start_idx, end_idx)
             if start_idx < 0:
                 batch_frame_list = []
                 for empty_idx in range(abs(start_idx)):
@@ -4402,9 +4486,6 @@ class PredictTrackDataGenerator(utils.Sequence):
                 batch_frame_list = self.data[start_idx:end_idx]
 
             for i,frame_region_list in enumerate(batch_frame_list):
-
-                # shape is (max_cell_num, frame_num, cell_feature_num)
-#                 tmp_x = np.zeros((self.dim[0], self.dim[1], self.dim[2]))
 
                 if not frame_region_list:
                     continue
@@ -4426,10 +4507,7 @@ class PredictTrackDataGenerator(utils.Sequence):
                     if region_idx + 1 > self.dim[0]:
                         continue
 
-                    # supplement tmp_x at (region_idx, )
-#                     tmp_x[region_idx, i, :] = cell_info
-
-                    X[idx, cell_index, i, :,0] = cell_info # tmp_x
+                    X[idx, cell_index, i, :,0] = cell_info
 
         return X
 

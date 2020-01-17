@@ -25,8 +25,8 @@ import matplotlib.gridspec as gridspec
 plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
-from skimage import io, morphology, segmentation
-from scipy.misc import imresize
+from skimage import io, morphology, segmentation, transform
+# from scipy.misc import imresize # deprecated
 from skimage.external import tifffile as tiff
 import multiprocessing
 from multiprocessing import Pool
@@ -90,6 +90,9 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
         # load data for figure
         image_data = mm3.load_stack(fov_id, peak_id, color=phase_plane)
 
+        io.imshow(image_data[0,...])
+        plt.show();
+
         first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
         last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
 
@@ -100,7 +103,7 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
 
         # plot the first image in each channel in top row
         ax=axhi
-        ax.imshow(first_img,cmap=plt.cm.gray, interpolation='nearest')
+        ax.imshow(first_img, cmap=plt.cm.gray, interpolation='nearest')
         ax.axis('off')
         ax.set_title(str(peak_id), fontsize = 12)
         if n == 0:
@@ -289,7 +292,11 @@ def fov_cell_segger_plot_channels(fov_id, predictionDict, specs, outputdir='.', 
         # load data for figure
         image_data = mm3.load_stack(fov_id, peak_id, color=phase_plane)
 
-        first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
+        first_img = image_data[0,:,:] # phase image at t=0
+        if np.mean(first_img) < 200:
+            first_img = image_data[1,:,:]
+
+        first_img = rescale_intensity(first_img) # phase image at t=0
         last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
 
         # append an axis handle to ax list while adding a subplot to the figure which has a
@@ -329,7 +336,7 @@ def fov_cell_segger_plot_channels(fov_id, predictionDict, specs, outputdir='.', 
         # finally plot the prediction values as horizontal bar chart
         ax=axlo
         if predictionDict:
-            ax.barh(range(len(predictions)), predictions)
+            ax.barh([0], [predictions])
             #ax.vlines(x=p['channel_picker']['channel_picking_threshold'], ymin=-1, ymax=5, linestyles='dashed',colors='red')
             ax.set_title('cell count', fontsize = 8)
         else:
@@ -340,7 +347,7 @@ def fov_cell_segger_plot_channels(fov_id, predictionDict, specs, outputdir='.', 
         if not n == 0:
             ax.get_yaxis().set_ticks([])
         else:
-            ax.set_yticklabels(labels=["","1","2","3","4","5"])
+            ax.set_yticklabels(labels=[""])
             ax.set_ylabel("")
 
     fig.suptitle("FOV {:d}".format(fov_id),fontsize=14)
@@ -745,7 +752,8 @@ def fov_cell_segger_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
         # finally plot the prediction values as horizontal bar chart
         ax.append(fig.add_subplot(3, npeaks, n + 2*npeaks))
         if predictionDict:
-            ax[-1].barh(range(len(predictions)), predictions)
+            # ax[-1].barh(range(len(predictions)), predictions)
+            ax[-1].barh([0], [predictions])
             #ax[-1].vlines(x=p['channel_picker']['channel_picking_threshold'], ymin=-1, ymax=5, linestyles='dashed',colors='red')
             ax[-1].set_title('cell count', fontsize = 8)
         else:
@@ -756,7 +764,8 @@ def fov_cell_segger_choose_channels_UI(fov_id, predictionDict, specs, UI_images)
         if not n == 1:
             ax[-1].get_yaxis().set_ticks([])
         else:
-            ax[-1].set_yticklabels(labels=["",'1','2','3','4','5'])
+            ax[-1].set_yticklabels(labels=["1"])
+            # ax[-1].set_yticklabels(labels=["",'1','2','3','4','5'])
             ax[-1].set_ylabel("")
 
     # show the plot finally
@@ -804,10 +813,10 @@ def preload_images(specs, fov_id_list):
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
             first_image = p['channel_picker']['first_image']
-            UI_images[fov_id][peak_id]['first'] = imresize(image_data[first_image,:,:], 0.5)
+            UI_images[fov_id][peak_id]['first'] = transform.resize(image_data[first_image,:,:], (int(np.floor(image_data.shape[1]*0.5)),int(np.floor(image_data.shape[2]*0.5))))
             last_image = p['channel_picker']['last_image']
             # phase image at end
-            UI_images[fov_id][peak_id]['last'] = imresize(image_data[last_image,:,:], 0.5)
+            UI_images[fov_id][peak_id]['last'] = transform.resize(image_data[last_image,:,:], (int(np.floor(image_data.shape[1]*0.5)),int(np.floor(image_data.shape[2]*0.5))))
 
     return UI_images
 
@@ -1070,7 +1079,7 @@ if __name__ == "__main__":
             # counter = 0
             for i,peak_id in enumerate(sorted(channel_masks[fov_id].keys())):
 
-                cell_count_array = int(np.max(segmented_imgs[0,:,:]))
+                cell_count_array = int(np.max(segmented_imgs[i,:,:]))
                 # cell_count_array = np.zeros(5, dtype='uint8')
                 # for j in range(5):
                     # cell_count_array[j] = int(np.max(segmented_imgs[counter,:,:]))
