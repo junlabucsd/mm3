@@ -39,12 +39,6 @@ parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
                                     description='Identifies and slices out channels into individual TIFF stacks through time.')
 parser.add_argument('-f', '--paramfile',  type=str,
                     required=True, help='Yaml file containing parameters.')
-parser.add_argument('-o', '--fov',  type=str,
-                    required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
-parser.add_argument('-j', '--nproc',  type=int,
-                    required=False, help='Number of processors to use.')
-parser.add_argument('-m', '--modelfile', type=str,
-                    required=False, help='Path to trained U-net model.')
 namespace = parser.parse_args()
 
 # Load the project parameters file
@@ -59,7 +53,7 @@ p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 # load specs file
 specs = mm3.load_specs()
 
-# locate files to move
+# identify files to be copied to chtc
 files_to_transfer = []
 
 for fov_id,peak_ids in specs.items():
@@ -82,7 +76,7 @@ username = input("Username: ")
 password = getpass("Password for {}@{}: ".format(username,server))
 ssh.connect(server, username=username, password=password)
 
-# transfer files
+# copy files
 sftp = ssh.open_sftp()
 for localpath in files_to_transfer:
 

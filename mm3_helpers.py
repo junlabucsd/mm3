@@ -88,11 +88,14 @@ def information(*objs):
     print(time.strftime("%H:%M:%S", time.localtime()), *objs, file=sys.stdout)
 
 # load the parameters file into a global dictionary for this module
-def init_mm3_helpers(param_file_path):
+def init_mm3_helpers(param_file_path, datapath = None):
     # load all the parameters into a global dictionary
     global params
     with open(param_file_path, 'r') as param_file:
         params = yaml.safe_load(param_file)
+
+    if datapath is not None:
+        params['experiment_directory'] = datapath
 
     # set up how to manage cores for multiprocessing
     params['num_analyzers'] = multiprocessing.cpu_count()
