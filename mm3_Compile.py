@@ -56,6 +56,8 @@ if __name__ == "__main__":
                                      description='Identifies and slices out channels into individual TIFF stacks through time.')
     parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-p', '--path',  type=str,
+                        required=False, help='Path to data directory. Overrides what is in param file')
     parser.add_argument('-o', '--fov',  type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc',  type=int,
@@ -72,6 +74,11 @@ if __name__ == "__main__":
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
+
+    if namespace.path:
+        p = mm3.init_mm3_helpers(param_file_path, datapath=namespace.path) # initialized the helper library
+    else:
+        p = mm3.init_mm3_helpers(param_file_path, datapath=None)
 
     if namespace.fov:
         if '-' in namespace.fov:

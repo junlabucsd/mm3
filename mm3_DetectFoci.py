@@ -35,6 +35,27 @@ if cmd_subfolder not in sys.path:
 
 import mm3_helpers as mm3
 
+def segment_foci_single_file(infile_name, params, namespace):
+
+    mm3.information("Segmenting image {}.".format(infile_name))
+    # load model to pass to algorithm
+    mm3.information("Loading model...")
+
+    if namespace.modelfile:
+        model_file_path = namespace.modelfile
+    else:
+        model_file_path = params['foci']['foci_model_file']
+        
+    seg_model = models.load_model(model_file_path,
+                              custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
+                                                'dice_loss': mm3.dice_loss,
+                                                'precision_m': mm3.precision_m,
+                                                'recall_m': mm3.recall_m,
+                                                'f_precision_m': mm3.f_precision_m})
+    mm3.information("Model loaded.")
+    mm3.segment_stack_unet(infile_name, seg_model, mode='foci')
+    sys.exit("Completed segmenting image {}.".format(infile_name))
+
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
 
@@ -43,6 +64,8 @@ if __name__ == "__main__":
                                      description='Segment cells and create lineages.')
     parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-i', '--infile', type=str,
+                        required=False, help='Use this argument to segment ONLY on image. Name the single file to be segmented.')
     parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.')
     parser.add_argument('-j', '--nproc', type=int,
@@ -81,6 +104,11 @@ if __name__ == "__main__":
     # set segmentation image name for saving and loading segmented images
     p['seg_img'] = 'foci_seg_unet'
     p['pred_img'] = 'foci_pred_unet'
+
+    if namespace.infile:
+
+        fname = namespace.infile
+        segment_foci_single_file(fname, p, namespace)
 
     # load specs file
     specs = mm3.load_specs()

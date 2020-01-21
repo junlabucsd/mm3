@@ -119,11 +119,19 @@ if __name__ == "__main__":
 
     foci = {}
     # foci_info_unet modifies foci dictionary in place, so nothing returned here
-    mm3.dev_foci_info_unet(foci,
-                    Cells,
-                    specs,
-                    p['time_table'],
-                    channel_name="c{}".format(namespace.channel))
+    mm3.foci_info_unet(
+        foci,
+        Cells,
+        specs,
+        p['time_table'],
+        channel_name="c{}".format(namespace.channel)
+    )
+    
+    # mm3.dev_foci_info_unet(foci,
+    #                 Cells,
+    #                 specs,
+    #                 p['time_table'],
+    #                 channel_name="c{}".format(namespace.channel))
 
     # update cell information with newly generated focus information
     #  again, the Cells dictionary are updated in place, so nothing returned

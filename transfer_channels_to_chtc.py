@@ -6,6 +6,7 @@ import os
 import argparse
 import yaml
 import inspect
+from pprint import pprint
 from getpass import getpass
 import glob
 try:
@@ -39,6 +40,12 @@ parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
                                     description='Identifies and slices out channels into individual TIFF stacks through time.')
 parser.add_argument('-f', '--paramfile',  type=str,
                     required=True, help='Yaml file containing parameters.')
+parser.add_argument('-s', '--transfer_segmentation',  action='store_true',
+                    required=False, help='Add this option at command line to send segmentation files.')
+parser.add_argument('-c', '--transfer_all_channels',  action='store_true',
+                    required=False, help='Add this option at command line to send all channels, not just phase.')
+parser.add_argument('-j', '--transfer_job_file',  action='store_true',
+                    required=False, help='Add this option at command line to compile text file containing file names for job submission at chtc.')
 namespace = parser.parse_args()
 
 # Load the project parameters file
@@ -48,6 +55,8 @@ if namespace.paramfile:
 else:
     mm3.warning('No param file specified. Using 100X template.')
     param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+
+param_file_path = os.path.join(os.getcwd(), param_file_path)
 p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
 # load specs file
@@ -55,24 +64,67 @@ specs = mm3.load_specs()
 
 # identify files to be copied to chtc
 files_to_transfer = []
+if namespace.transfer_job_file:
+    job_file_name = '{}_files_list.txt'.format(os.path.basename(param_file_path.split('.')[0]))
+    job_file = open(job_file_name,'w')
 
 for fov_id,peak_ids in specs.items():
     for peak_id,val in peak_ids.items():
         if val == 1:
-            base_name = '{}_xy{:0=3}_p{:0=4}_{}.tif'.format(
+
+            if namespace.transfer_all_channels:
+                base_name = '{}_xy{:0=3}_p{:0=4}_*.tif'.format(
+                    p['experiment_name'],
+                    fov_id,
+                    peak_id
+                )
+                match_list = glob.glob(os.path.join(p['chnl_dir'],base_name))
+
+            else:
+                base_name = '{}_xy{:0=3}_p{:0=4}_{}.tif'.format(
+                    p['experiment_name'],
+                    fov_id,
+                    peak_id,
+                    p['phase_plane']
+                )
+                match_list = glob.glob(os.path.join(p['chnl_dir'],base_name))
+
+            if namespace.transfer_segmentation:
+                base_name = '{}_xy{:0=3}_p{:0=4}_{}.tif'.format(
                 p['experiment_name'],
                 fov_id,
                 peak_id,
-                p['phase_plane']
-            )
-            fname = os.path.join(p['chnl_dir'],base_name)
-            files_to_transfer.append(fname)
+                'seg_unet'
+                )
+                fname = os.path.join(p['seg_dir'],base_name)
+                match_list.append(fname)
+
+            # pprint(match_list)
+
+            files_to_transfer.extend(match_list)
+            match_base_names = [os.path.basename(fname) for fname in match_list]
+
+            if namespace.transfer_job_file:
+                
+                line_to_write = ','.join(match_base_names)
+                line_to_write = line_to_write + '\n'
+
+                job_file.write(line_to_write)
+
+
+if namespace.transfer_job_file:
+    job_file.close()
+    files_to_transfer.append(job_file_name)
+            
+files_to_transfer.append(param_file_path)
+
+print("You'll be sending {} files total to chtc.".format(len(files_to_transfer)))
 
 # connect to chtc
 ssh = paramiko.SSHClient() 
 ssh.load_host_keys(os.path.expanduser(os.path.join("~", ".ssh", "known_hosts")))
-server = input("Hostname: ")
 username = input("Username: ")
+server = input("Hostname: ")
 password = getpass("Password for {}@{}: ".format(username,server))
 ssh.connect(server, username=username, password=password)
 

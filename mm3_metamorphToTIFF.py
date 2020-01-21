@@ -47,8 +47,8 @@ if __name__ == '__main__':
     '''Edit TIFFs from Jeremy's format to the one expected by mm3.'''
 
     # set switches and parameters
-    parser = argparse.ArgumentParser(prog='python mm3_Compile.py',
-                                     description='Identifies and slices out channels into individual TIFF stacks through time.')
+    parser = argparse.ArgumentParser(prog='python mm3_metamorphToTIFF.py',
+                                     description='Converts TIFFs from metamorph into the format expected by mm3.')
     parser.add_argument('-f', '--paramfile',  type=str,
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-p', '--path',  type=str,

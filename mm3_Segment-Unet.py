@@ -50,7 +50,7 @@ def segment_single_file(infile_name, params, namespace):
                               custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
                                               'dice_loss': mm3.dice_loss})
     mm3.information("Model loaded.")
-    mm3.segment_stack_unet(infile_name, seg_model)
+    mm3.segment_stack_unet(infile_name, seg_model, mode='segment')
     sys.exit("Completed segmenting image {}.".format(infile_name))
 
 # when using this script as a function and not as a library the following will execute
