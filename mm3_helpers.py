@@ -147,7 +147,15 @@ def get_plane(filepath):
         return None
 
 def get_fov(filepath):
-    pattern = r'xy(\d+)\w*.tif'
+    pattern = r'xy(\d{3,4})\w*.tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return int(res.group(1))
+    else:
+        return None
+
+def get_peak(filepath):
+    pattern = r'p(\d{3,4})\w*.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return int(res.group(1))
@@ -2350,12 +2358,16 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
     return pad_dict
 
-def prediction_post_processing(predictions, pad_dict, unet_shape):
+def prediction_post_processing(predictions, pad_dict, unet_shape, mode='segment', remote=False):
 
-    cellClassThreshold = params['segment']['cell_class_threshold']
+    if mode == 'segment':
+        cellClassThreshold = params[mode]['cell_class_threshold']
+        min_object_size = params['segment']['min_object_size']
+
+    elif mode == 'foci':
+        cellClassThreshold = params[mode]['focus_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
-    min_object_size = params['segment']['min_object_size']
 
     # remove padding including the added last dimension
     predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
@@ -2368,13 +2380,32 @@ def prediction_post_processing(predictions, pad_dict, unet_shape):
                             (0,pad_dict['right_trim'])),
                             mode='constant')
 
-    if params['segment']['save_predictions']:
-        pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
-        if not os.path.isdir(params['pred_dir']):
-            os.makedirs(params['pred_dir'])
+    if params[mode]['save_predictions']:
+
+        # save out the segmented image
+        if remote:
+            information("Saving predictions in remote mode is not yet supported!!!!!!!!\n \
+                         Moving on to saving your segmentation result.")
+
+        elif mode == 'segment':
+            if not os.path.isdir(params['pred_dir']):
+                os.makedirs(params['pred_dir'])
+            
+            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
+        elif mode == 'foci':
+            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['foci_pred_img'])
+            if not os.path.isdir(params['foci_pred_dir']):
+                os.makedirs(params['foci_pred_dir'])
+        
         int_preds = (predictions * 255).astype('uint8')
-        tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
-                        int_preds, compress=4)
+        
+        if not remote:
+            if mode == 'segment':
+                tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
+                            int_preds, compress=4)
+            elif mode == 'foci':
+                tiff.imsave(os.path.join(params['foci_pred_dir'], pred_filename),
+                            int_preds, compress=4)
 
     # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
     if cellClassThreshold:
@@ -2385,14 +2416,20 @@ def prediction_post_processing(predictions, pad_dict, unet_shape):
         segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
         # process and label each frame of the channel
         for frame in range(segmented_imgs.shape[0]):
-            # get rid of small holes
-            predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-            # get rid of small objects.
-            predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
+            if mode == 'segment':
+                # get rid of small holes
+                predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
+                # get rid of small objects.
+                predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
+            
             # remove labels which touch the boarder
             predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
+
             # relabel now
-            segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
+            if mode == 'segment':
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=1)
+            elif mode == 'foci':
+                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=2)
 
     else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
         information('Converting predictions to grayscale.')
@@ -2498,7 +2535,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
             h5f.close()
 
 
-def segment_stack_unet(fname, model):
+def segment_stack_unet(fname, model, mode='segment'):
     '''
     Segments the channels from one fov using the U-net CNN model.
 
@@ -2517,14 +2554,15 @@ def segment_stack_unet(fname, model):
     img_width = img_stack.shape[2]
 
     pad_dict = get_pad_distances(unet_shape, img_height, img_width)
-    batch_size = params['segment']['batch_size']
+    batch_size = params[mode]['batch_size']
     
     # arguments to predict_generator
     predict_args = dict(use_multiprocessing=False,
                         verbose=1)
 
-    if params['segment']['normalize_to_one'] is not None:
-        img_stack = normalize_stack(img_stack)
+    if mode == 'segment':
+        if params['segment']['normalize_to_one'] is not None:
+            img_stack = normalize_stack(img_stack)
 
     # trim and pad image to correct size
     img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
@@ -2543,7 +2581,7 @@ def segment_stack_unet(fname, model):
 
     pred = model.predict_generator(image_generator, **predict_args)
 
-    seg = prediction_post_processing(pred, pad_dict, unet_shape)
+    seg = prediction_post_processing(pred, pad_dict, unet_shape, mode=mode, remote=True)
 
     # save out the segmented image
     fname_split = fname.split('_')[:-1]
@@ -4781,7 +4819,8 @@ def create_lineages_from_graph(graph,
 
         if same_iter_num > 10:
             print("WARNING: Ten iterations surpassed without decreasing the number of visited nodes.\n \
-                   Breaking tracking loop now. You should probably not trust these results.")
+                   Breaking tracking loop now.\n \
+                   You should not trust these results!")
             break
 
     return tracks

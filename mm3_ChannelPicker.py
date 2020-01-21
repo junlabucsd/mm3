@@ -292,9 +292,13 @@ def fov_cell_segger_plot_channels(fov_id, predictionDict, specs, outputdir='.', 
         # load data for figure
         image_data = mm3.load_stack(fov_id, peak_id, color=phase_plane)
 
-        first_img = image_data[0,:,:] # phase image at t=0
-        if np.mean(first_img) < 200:
-            first_img = image_data[1,:,:]
+        img_idx = 0
+        first_img = image_data[img_idx,:,:] # phase image at t=0
+        print(np.mean(first_img))
+        while np.mean(first_img) < 200:
+            img_idx += 1
+            first_img = image_data[img_idx,:,:]
+            print(np.mean(first_img))
 
         first_img = rescale_intensity(first_img) # phase image at t=0
         last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
