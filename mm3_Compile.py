@@ -82,8 +82,8 @@ if __name__ == "__main__":
 
     if namespace.fov:
         if '-' in namespace.fov:
-            user_spec_fovs = range(int(namespace.fov.split("-")[0]),
-                                   int(namespace.fov.split("-")[1])+1)
+            user_spec_fovs = [i for i in range(int(namespace.fov.split("-")[0]),
+                                               int(namespace.fov.split("-")[1])+1)]
         else:
             user_spec_fovs = [int(val) for val in namespace.fov.split(",")]
     else:
