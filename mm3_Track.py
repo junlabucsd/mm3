@@ -85,7 +85,7 @@ def track_single_file(
     with open(track_file_name, 'wb') as cell_file:
         pickle.dump(tracks, cell_file)
     
-    sys.exit("Completed tracking cells in stack {}.".format(infile_name))
+    sys.exit("Completed tracking cells in stack {}.".format(seg_file_name))
 
 def track_loop(
     fov_id,
@@ -160,97 +160,95 @@ if __name__ == "__main__":
         prog='python mm3_Track.py',
         description='Track cells and create lineages.'
     )
-    subparsers = parser.add_subparsers(
-        help='commands',
-        dest='command'
-    )
-
-    local_parser = subparsers.add_parser(
-        'local',
-        help="Track cells using local hardware. Will save one giant cells file in cell_data"
-    )
-    local_parser.add_argument(
+    parser.add_argument(
         '-f',
         '--paramfile',
         type=str,
         required=True,
         help='Yaml file containing parameters.'
     )
-    local_parser.add_argument(
+    parser.add_argument(
         '-o',
         '--fov',
         type=str,
         required=False,
         help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.'
     )
-    local_parser.add_argument(
+    parser.add_argument(
         '-j',
         '--nproc',
         type=int,
         required=False,
         help='Number of processors to use.'
     )
-
-    chtc_parser = subparsers.add_parser(
-        'chtc',
-        help="Track cells using chtc hardware. Will save one cell file for each fov/peak"
+    parser.add_argument(
+        '-r',
+        '--chtc',
+        action='store_true',
+        required=False,
+        help='Add this flag at the command line if the job will run at chtc.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '-p',
         '--phase_file_name',
         type=str,
-        required=True,
+        required=False,
         help='Name of file containing stack of images for a single fov/peak'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '-s',
         '--seg_file_name',
         type=str,
-        required=True,
+        required=False,
         help='Name of file containing stack of images for a single fov/peak'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--migrate_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained migration model.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--child_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained child model.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--appear_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained appear model.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--die_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained die model.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--disappear_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained disappear model.'
     )
-    chtc_parser.add_argument(
+    parser.add_argument(
         '--born_modelfile',
         type=str,
-        required=True,
+        required=False,
         help='Path to trained born model.'
     )
-    chtc_parser.add_argument(
-        '-j',
-        '--nproc',
-        type=int,
+    parser.add_argument(
+        '--specfile',
+        type=str,
         required=False,
-        help='Number of processors to use.'
+        help='Path to specs file.'
+    )
+    parser.add_argument(
+        '--timefile',
+        type=str,
+        required=False,
+        help='Path to file containing time table.'
     )
 
     namespace = parser.parse_args()
@@ -273,32 +271,21 @@ if __name__ == "__main__":
     else:
         user_spec_fovs = []
 
-    # if namespace.peak:
-    #     if '-' in namespace.peak:
-    #         user_spec_peaks = range(int(namespace.fov.split("-")[0]),
-    #                                int(namespace.fov.split("-")[1])+1)
-    #     else:
-    #         user_spec_peaks = [int(val) for val in namespace.fov.split(",")]
-    # else:
-    #     user_spec_peaks = []
-
     # number of threads for multiprocessing
     if namespace.nproc:
         p['num_analyzers'] = namespace.nproc
     mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
 
-    if not os.path.exists(p['cell_dir']):
-        os.makedirs(p['cell_dir'])
-
     # set segmentation image name for saving and loading segmented images
     p['seg_img'] = 'seg_unet'
 
     # load specs file
-    specs = mm3.load_specs()
-    # pprint(specs) # for debugging
-
-    # Load time table, which goes into params
-    mm3.load_time_table()
+    if namespace.chtc:
+        specs = mm3.load_specs(fname=namespace.specfile)
+        mm3.load_time_table(fname=namespace.timefile)
+    else:
+        specs = mm3.load_specs()
+        mm3.load_time_table()
 
     if namespace.phase_file_name:
         track_single_file(
@@ -307,6 +294,9 @@ if __name__ == "__main__":
             p,
             namespace
         )
+
+    if not os.path.exists(p['cell_dir']):
+        os.makedirs(p['cell_dir'])
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])

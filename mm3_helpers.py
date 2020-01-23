@@ -236,18 +236,26 @@ def load_stack(fov_id, peak_id, color='c1', image_return_number=None):
     return img_stack
 
 # load the time table and add it to the global params
-def load_time_table():
+def load_time_table(fname=None):
     '''Add the time table dictionary to the params global dictionary.
     This is so it can be used during Cell creation.
     '''
 
     # try first for yaml, then for pkl
-    try:
-        with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'rb') as time_table_file:
-            params['time_table'] = yaml.safe_load(time_table_file)
-    except:
-        with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
-            params['time_table'] = pickle.load(time_table_file)
+    if fname is None:
+        try:
+            with open(os.path.join(params['ana_dir'], 'time_table.yaml'), 'rb') as time_table_file:
+                params['time_table'] = yaml.safe_load(time_table_file)
+        except:
+            with open(os.path.join(params['ana_dir'], 'time_table.pkl'), 'rb') as time_table_file:
+                params['time_table'] = pickle.load(time_table_file)
+    else:
+        try:
+            with open(fname, 'rb') as time_table_file:
+                params['time_table'] = yaml.safe_load(time_table_file)
+        except:
+            with open(fname, 'rb') as time_table_file:
+                params['time_table'] = pickle.load(time_table_file)
 
     return
 
@@ -275,18 +283,29 @@ def load_channel_masks():
     return channel_masks
 
 # function for loading the specs file
-def load_specs():
+def load_specs(fname = None):
     '''Load specs file which indicates which channels should be analyzed, used as empties, or ignored.'''
 
-    try:
-        with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
-            specs = yaml.safe_load(specs_file)
-    except:
+    if fname is None:
         try:
-            with open(os.path.join(params['ana_dir'], 'specs.pkl'), 'rb') as specs_file:
-                specs = pickle.load(specs_file)
-        except ValueError:
-            warning('Could not load specs file.')
+            with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+                specs = yaml.safe_load(specs_file)
+        except:
+            try:
+                with open(os.path.join(params['ana_dir'], 'specs.pkl'), 'rb') as specs_file:
+                    specs = pickle.load(specs_file)
+            except ValueError:
+                warning('Could not load specs file.')
+    else:
+        try:
+            with open(fname, 'r') as specs_file:
+                specs = yaml.safe_load(specs_file)
+        except:
+            try:
+                with open(fname, 'rb') as specs_file:
+                    specs = pickle.load(specs_file)
+            except ValueError:
+                warning('Could not load specs file.')
 
     return specs
 
@@ -4676,6 +4695,8 @@ def create_lineages_from_graph(graph,
                     #   move on. Otherwise, append to our list
                     if graph.nodes[successor_node_id]['visited']:
                         continue
+                    if graph.nodes[successor_node_id]['has_input']:
+                        continue
                     else:
                         unvisited_node_ids.append(successor_node_id)
 
@@ -4730,6 +4751,7 @@ def create_lineages_from_graph(graph,
                 current_cell.add_daughter(new_cell, new_cell_time)
 
                 # initialize a scores array to select highest score from the available options
+                # This is working toward identification of the second daughter cell.
                 unvisited_detection_nodes = [unvisited_node_id for unvisited_node_id in unvisited_node_ids if unvisited_node_id.startswith(params['experiment_name'])]
                 child_scores = np.zeros(len(unvisited_detection_nodes))
 
@@ -4737,22 +4759,23 @@ def create_lineages_from_graph(graph,
                 for i in range(len(unvisited_detection_nodes)):
                     successor_node_id = unvisited_detection_nodes[i]
                     if successor_node_id == next_node_id:
-                        child_scores[i] = -np.inf
+                        child_scores[i] = -np.inf # give already-identified child a score of -inf so as not to re-identify it as the second daughter
                         continue
                     child_score = get_score_by_type(prior_node_id, successor_node_id, graph, score_type='child')
                     child_scores[i] = child_score
 
                 try:
-                    second_daughter_score = np.max(child_scores)
+                    # second_daughter_score = np.max(child_scores)
                     # sometimes a second daughter doesn't exist: perhaps parent is at mouth of a trap and one
                     #  daughter is lost to the central channel at division time. In this case, do the following:
-                    if second_daughter_score < np.log(0.5):
+                    if len(child_scores) == 1:
                         current_cell = new_cell
 
                     else:
                         second_daughter_index = np.argmax(child_scores)
                         # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
                         other_daughter_node_id = unvisited_detection_nodes[second_daughter_index]
+                        graph.nodes[other_daughter_node_id]['has_input'] = True
 
                         other_daughter_cell_time = graph.nodes[other_daughter_node_id]['time']
                         other_daughter_cell_region = graph.nodes[other_daughter_node_id]['region']
@@ -4769,6 +4792,14 @@ def create_lineages_from_graph(graph,
 
                         tracks[other_daughter_cell_id] = other_daughter_cell
                         current_cell.add_daughter(other_daughter_cell, new_cell_time)
+
+
+                        ############################## TO DO: #################################################
+                        #### fix problem where other_daughter_cell doesn't get 'visited' here #################
+                        #### I can't just 'visit' it here, because that would block it from use ###############
+                        #### downstream in the graph. I may need to split visited into         ################
+                        #### has_input and has_output. I may also just be able to add has_input ###############
+                        #######################################################################################
 
                         # now we remove current_cell, since it's done, and move on to one of the daughters
                         current_cell = new_cell
@@ -5592,7 +5623,7 @@ def initialize_track_graph(peak_id,
             if det.area is not None:
                 # if the detection represents a segmentation from our imaging, add its ID,
                 #   which is also its key in detection_dict, as a node in G
-                G.add_node(det.id, visited=False, cell_count=1, region=region, time=timepoint)
+                G.add_node(det.id, visited=False, cell_count=1, region=region, time=timepoint, has_input=False)
                 timepoint_list.append(timepoint)
                 node_id_list.append(detection_id)
                 region_label_list.append(region.label)
@@ -5974,52 +6005,78 @@ def compile_cell_info_df(Cells):
 
     return(wide_df,long_df)
 
-def populate_focus_arrays(Foci, data_dict, cell_quants=False, wide=False):
+def populate_focus_arrays(objects, data_dict, cell_quants=False, wide=False):
 
-    focus_counter = 0
-    focus_count = len(Foci)
+    '''
+    populate_focus_arrays 
+
+        Parameters
+        __________
+
+        objects : a dictionary of either Cell objects or Focus objects
+
+        data_dict : a dictionary of key/value pairs that will end up
+                    being column headers/data in the dataframe
+
+        cell_quants : set True if 'objects' argument is a dictionary of Cell
+                      objects, false if it is a dictionary of Foci
+
+        wide : return a wide DataFrame if set to True, otherwise return long
+        '''
+
+    object_counter = 0
+    object_count = len(objects)
     end_idx = 0
 
-    for i,focus in enumerate(Foci.values()):
+    for i,obj in enumerate(objects.values()):
 
         if wide:
             start_idx = i
             end_idx = i + 1
 
         else:
-
             start_idx = end_idx
-            end_idx = len(focus) + start_idx
+            end_idx = len(obj) + start_idx
 
-        if focus_counter % 100 == 0:
-            print("Generating focus information for focus {} out of {}.".format(focus_counter+1, focus_count))
+        if object_counter % 100 == 0:
+            print("Generating information for object {} out of {}.".format(object_counter+1, object_count))
 
         # loop over keys in data dictionary, and set
         # values in appropriate array, at appropriate indices
-        # to those we find in the focus.
+        # to those we find in the object.
         for key in data_dict.keys():
 
             if '_id' in key:
 
                 if key == 'parent_id':
-                    if focus.parent is None:
+                    if obj.parent is None:
                         data_dict[key][start_idx:end_idx] = ''
                     else:
-                        data_dict[key][start_idx:end_idx] = focus.parent.id
+                        data_dict[key][start_idx:end_idx] = obj.parent.id
 
-                if focus.daughters is None:
+                if obj.daughters is None:
                     if key == 'child1_id' or key == 'child2_id':
                         data_dict[key][start_idx:end_idx] = ''
-                elif len(focus.daughters) == 1:
+                elif len(obj.daughters) == 1:
                     if key == 'child2_id':
                         data_dict[key][start_idx:end_idx] = ''
                 elif key == 'child1_id':
-                    data_dict[key][start_idx:end_idx] = focus.daughters[0].id
+                    data_dict[key][start_idx:end_idx] = obj.daughters[0].id
                 elif key == 'child2_id':
-                    data_dict[key][start_idx:end_idx] = focus.daughters[1].id
+                    data_dict[key][start_idx:end_idx] = obj.daughters[1].id
 
             else:
-                attr_vals = getattr(focus, key)
+                if '_fluorescence' in key:
+
+                    key_elements = key.split('_')
+                    fluorescence_channel = key_elements[0]
+                    key_base = '_'.join(key_elements[1:])
+                    attr_vals = getattr(obj, key_base)
+                    attr_vals = attr_vals[fluorescence_channel]
+
+                else:
+                    attr_vals = getattr(obj, key)
+                
                 if (cell_quants and key=='abs_times'):
                     if len(attr_vals) == end_idx-start_idx:
                         data_dict[key][start_idx:end_idx] = attr_vals
@@ -6030,7 +6087,7 @@ def populate_focus_arrays(Foci, data_dict, cell_quants=False, wide=False):
                     # print(attr_vals)
                     data_dict[key][start_idx:end_idx] = attr_vals
 
-        focus_counter += 1
+        object_counter += 1
 
     data_dict['id'] = data_dict['id'].decode()
 

@@ -487,7 +487,7 @@ class TrackItem(QGraphicsScene):
 
 
     def no_track_pickle_lookup(self):
-        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
 
     def get_track_pickle(self):
 
@@ -495,7 +495,7 @@ class TrackItem(QGraphicsScene):
         # look for previously updated tracking information and load that if it is found.
         if not os.path.isfile(self.pickle_file_name):
             # get tracking information in a format usable and updatable by qgraphicsscene
-            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack)
+            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
         else:
             with open(self.pickle_file_name, 'rb') as pickle_file:
                 try:
@@ -701,12 +701,21 @@ class TrackItem(QGraphicsScene):
 
         return(phaseQpixmap, time_regions_and_events)
 
-    def create_tracking_information(self, fov_id, peak_id, label_stack):
+    def create_tracking_information(self, fov_id, peak_id, label_stack, phase_stack):
 
         Complete_Lineages = mm3_plots.organize_cells_by_channel(self.Cells, self.specs)
         All_Lineages = mm3_plots.organize_cells_by_channel(self.All_Cells, self.specs)
 
         t_adj = 1
+
+        # correct for occasional missing of a frame by our microscope
+        dt = phase_stack.dtype
+        for k,img in enumerate(phase_stack):
+            # if the mean phase image signal is less than 200, add its index to list
+            if ((dt == 'uint16') and (np.mean(img) < 200)):
+                label_stack[k,...] = label_stack[k-1,...]
+            elif ((dt == 'uint8') and (np.mean(img) < 200/(2**16-1)*(2**8-1))):
+                label_stack[k,...] = label_stack[k-1,...]
 
         regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
         regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
