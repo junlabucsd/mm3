@@ -67,6 +67,11 @@ files_to_transfer = []
 if namespace.transfer_job_file:
     job_file_name = '{}_files_list.txt'.format(os.path.basename(param_file_path.split('.')[0]))
     job_file = open(job_file_name,'w')
+    spec_file_name = os.path.join(p['ana_dir'], 'specs.yaml')
+    new_spec_file_name = '{}_specs.yaml'.format(p['experiment_name'])
+    time_file_name = os.path.join(p['ana_dir'], 'time_table.yaml')
+    new_time_file_name = '{}_time.yaml'.format(p['experiment_name'])
+    new_param_file_name = '{}_params.yaml'.format(p['experiment_name'])
 
 for fov_id,peak_ids in specs.items():
     for peak_id,val in peak_ids.items():
@@ -103,9 +108,13 @@ for fov_id,peak_ids in specs.items():
 
             files_to_transfer.extend(match_list)
             match_base_names = [os.path.basename(fname) for fname in match_list]
-
+            
             if namespace.transfer_job_file:
-                
+
+                match_base_names.append(new_spec_file_name)
+                match_base_names.append(new_time_file_name)
+                match_base_names.append(param_file_path)
+                    
                 line_to_write = ','.join(match_base_names)
                 line_to_write = line_to_write + '\n'
 
@@ -116,7 +125,7 @@ if namespace.transfer_job_file:
     job_file.close()
     files_to_transfer.append(job_file_name)
             
-files_to_transfer.append(param_file_path)
+# files_to_transfer.append(param_file_path)
 
 print("You'll be sending {} files total to chtc.".format(len(files_to_transfer)))
 
@@ -135,6 +144,13 @@ for localpath in files_to_transfer:
     print(localpath)
     remotepath = localpath.split('/')[-1]
     sftp.put(localpath, remotepath)
+
+sftp.put(param_file_path, new_param_file_name)
+
+if namespace.transfer_job_file:
+
+    sftp.put(spec_file_name, new_spec_file_name)
+    sftp.put(time_file_name, new_time_file_name)
 
 sftp.close()
 ssh.close()
