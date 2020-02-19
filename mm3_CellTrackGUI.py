@@ -703,8 +703,8 @@ class TrackItem(QGraphicsScene):
 
     def create_tracking_information(self, fov_id, peak_id, label_stack, phase_stack):
 
-        Complete_Lineages = mm3_plots.organize_cells_by_channel(self.Cells, self.specs)
-        All_Lineages = mm3_plots.organize_cells_by_channel(self.All_Cells, self.specs)
+        # Complete_Lineages = mm3_plots.organize_cells_by_channel(self.Cells, self.specs)
+        # All_Lineages = mm3_plots.organize_cells_by_channel(self.All_Cells, self.specs)
 
         t_adj = 1
 

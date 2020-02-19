@@ -13,6 +13,7 @@ import glob
 import re
 from skimage import io, measure, morphology
 from skimage.external import tifffile as tiff
+from sklearn import cluster
 from scipy import stats
 from pprint import pprint # for human readable file output
 try:
@@ -154,7 +155,7 @@ if __name__ == "__main__":
             mm3.information('Removing images after time {}'.format(t_end))
             # go through list and find first place where timepoint is equivalent to t_end
             for n, ifile in enumerate(found_files):
-                string = re.compile('t%03dxy|t%04dxy' % (t_end, t_end)) # account for 3 and 4 digit
+                string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_end, t_end)) # account for 3 and 4 digit
                 if re.search(string, ifile):
                     found_files = found_files[:n]
                     break
@@ -165,7 +166,7 @@ if __name__ == "__main__":
             mm3.information('Filtering TIFFs by FOV.')
             fitered_files = []
             for fov_id in user_spec_fovs:
-                fov_string = 'xy%02d' % fov_id # xy01
+                fov_string = 'xy{:0=2}'.format(fov_id) # xy01
                 fitered_files += [ifile for ifile in found_files if fov_string in ifile]
 
             found_files = fitered_files[:]
@@ -219,13 +220,17 @@ if __name__ == "__main__":
             else:
                 model_file_path = p['compile']['model_file_traps']
             # *** Need parameter for weights
-            model = models.load_model(model_file_path,
-                                      custom_objects={'tversky_loss': mm3.tversky_loss,
-                                                      'cce_tversky_loss': mm3.cce_tversky_loss})
+            model = models.load_model(
+                model_file_path,
+                custom_objects={
+                    'tversky_loss': mm3.tversky_loss,
+                    'cce_tversky_loss': mm3.cce_tversky_loss
+                }
+            )
             mm3.information("Model loaded.")
 
             # initialize pool for getting image metadata
-            pool = Pool(p['num_analyzers'])
+            # pool = Pool(p['num_analyzers'])
 
             # loop over images and get information
             for fn in found_files:
@@ -233,24 +238,24 @@ if __name__ == "__main__":
                 # for each file name. Won't look for channels, just gets the metadata for later use by Unet
 
                 # This is the non-parallelized version (useful for debug)
-                # analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
+                analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
 
                 # Parallelized
-                analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn,))
+                # analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn,))
 
-            mm3.information('Waiting for image metadata pool to be finished.')
-            pool.close() # tells the process nothing more will be added.
-            pool.join() # blocks script until everything has been processed and workers exit
+            # mm3.information('Waiting for image metadata pool to be finished.')
+            # pool.close() # tells the process nothing more will be added.
+            # pool.join() # blocks script until everything has been processed and workers exit
 
             mm3.information('Image metadata pool finished, getting results.')
 
             # get results from the pool and put them in a dictionary
-            for fn in analyzed_imgs.keys():
-               result = analyzed_imgs[fn]
-               if result.successful():
-                   analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
-               else:
-                   analyzed_imgs[fn] = False # put a false there if it's bad
+            # for fn in analyzed_imgs.keys():
+            #    result = analyzed_imgs[fn]
+            #    if result.successful():
+            #        analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
+            #    else:
+            #        analyzed_imgs[fn] = False # put a false there if it's bad
 
             # print(analyzed_imgs)
 
@@ -259,6 +264,10 @@ if __name__ == "__main__":
             file_names.sort() # sort the file names by time
             file_names = np.asarray(file_names)
             fov_ids = [analyzed_imgs[key]['fov'] for key in analyzed_imgs.keys()]
+
+            if p['debug']:
+                print(file_names)
+                print(fov_ids)
 
             unique_fov_ids = np.unique(fov_ids)
 
@@ -333,11 +342,13 @@ if __name__ == "__main__":
                 trap_props = measure.regionprops(trap_labels)
 
                 trap_area_threshold = p['compile']['trap_area_threshold']
-                trap_bboxes = mm3.get_frame_trap_bounding_boxes(trap_labels,
-                                                                   trap_props,
-                                                                   trapAreaThreshold=trap_area_threshold,
-                                                                   trapWidth=trap_align_metadata['trap_width'],
-                                                                   trapHeight=trap_align_metadata['trap_height'])
+                trap_bboxes, trap_rotations = mm3.get_frame_trap_bounding_boxes(
+                    trap_labels,
+                    trap_props,
+                    trapAreaThreshold=trap_area_threshold,
+                    trapWidth=trap_align_metadata['trap_width'],
+                    trapHeight=trap_align_metadata['trap_height']
+                )
 
                 # create boolean array to contain filtered, correctly-shaped trap bounding boxes
                 first_frame_trap_mask = np.zeros(traps.shape)
@@ -346,6 +357,9 @@ if __name__ == "__main__":
 
                 good_trap_labels = measure.label(first_frame_trap_mask)
                 good_trap_props = measure.regionprops(good_trap_labels)
+                # add trap rotation angle to each regionprops object in good_trap_props
+                for i,reg in enumerate(good_trap_props):
+                    reg.rotation_angle = trap_rotations[i]
 
                 # widen the traps to merge them into "trap regions" above and below the central trough
                 dilated_traps = morphology.dilation(first_frame_trap_mask, dilator)
@@ -468,11 +482,13 @@ if __name__ == "__main__":
                     frame_trap_labels = measure.label(align_traps[frame,:,:])
                     frame_trap_props = measure.regionprops(frame_trap_labels)
 
-                    trap_bboxes = mm3.get_frame_trap_bounding_boxes(frame_trap_labels,
-                                                                    frame_trap_props,
-                                                                    trapAreaThreshold=trap_area_threshold,
-                                                                    trapWidth=trap_align_metadata['trap_width'],
-                                                                    trapHeight=trap_align_metadata['trap_height'])
+                    trap_bboxes, _ = mm3.get_frame_trap_bounding_boxes(
+                        frame_trap_labels,
+                        frame_trap_props,
+                        trapAreaThreshold=trap_area_threshold,
+                        trapWidth=trap_align_metadata['trap_width'],
+                        trapHeight=trap_align_metadata['trap_height']
+                    )
 
                     for i,bbox in enumerate(trap_bboxes):
                         align_trap_mask_stack[frame,bbox[0]:bbox[2],bbox[1]:bbox[3]] = True
@@ -492,8 +508,8 @@ if __name__ == "__main__":
                 trapTriggered = False
                 for frame in range(trap_align_metadata['frame_count']):
                     anyTraps = np.any(labelled_align_trap_mask_stack[frame,:,:] > 0)
-                    # if anyTraps is False, that means no traps were detected for this frame. This usuall occurs due to a bug in our imaging system,
-                    #    which can cause it to miss the occasional frame. Should be fine to snag labels from prior frame.
+                    # if anyTraps is False, that means no traps were detected for this frame. This usually occurs due to a bug in our imaging system,
+                    #    which can cause it to miss the occasional frame. Should be fine to snag labels from adjacent frame.
                     if not anyTraps:
                         trapTriggered = True
                         mm3.information("Frame at index {} has no detected traps. Borrowing labels from an adjacent frame.".format(frame))
@@ -533,7 +549,7 @@ if __name__ == "__main__":
 
                 for label in bad_align_trap_props:
                     labelled_align_trap_mask_stack[labelled_align_trap_mask_stack == label] = 0
-
+                
                 align_centroids = []
                 for frame in range(trap_align_metadata['frame_count']):
                     align_centroids.append([reg.centroid for reg in measure.regionprops(labelled_align_trap_mask_stack[frame,:,:])])
@@ -543,14 +559,22 @@ if __name__ == "__main__":
                 integer_shifts = np.round(shifts).astype('int16')
 
                 good_trap_bboxes_dict = {}
+                good_trap_rotations_dict = {}
                 for trap in good_trap_props:
                     good_trap_bboxes_dict[trap.label] = trap.bbox
+                    good_trap_rotations_dict[trap.label] = trap.rotation_angle
 
                 # pprint(good_trap_bboxes_dict) # uncomment for debugging
                 bbox_shift_dict = mm3.shift_bounding_boxes(good_trap_bboxes_dict, integer_shifts, img.shape[0])
                 # pprint(bbox_shift_dict) # uncomment for debugging
 
-                trap_images_fov_dict, trap_closed_end_px_dict = mm3.crop_traps(fov_file_names, good_trap_props, good_trap_labels, bbox_shift_dict, trap_align_metadata)
+                trap_images_fov_dict, trap_closed_end_px_dict = mm3.crop_traps(
+                    fov_file_names,
+                    good_trap_rotations_dict,
+                    good_trap_labels,
+                    bbox_shift_dict,
+                    trap_align_metadata
+                )
 
                 for fn in fov_file_names:
                     analyzed_imgs[fn]['channels'] = trap_closed_end_px_dict[fn]

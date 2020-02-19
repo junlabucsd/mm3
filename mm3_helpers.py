@@ -147,7 +147,7 @@ def get_plane(filepath):
         return None
 
 def get_fov(filepath):
-    pattern = r'xy(\d{3,4})\w*.tif'
+    pattern = r'xy(\d{2,4})\w*.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return int(res.group(1))
@@ -1211,7 +1211,7 @@ def predict_first_image_channels(img, model,
 # takes initial U-net centroids for trap locations, and creats bounding boxes for each trap at the defined height and width
 def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000, trapWidth=27, trapHeight=256):
 
-    badTrapLabels = [reg.label for reg in trapProps if reg.area < trapAreaThreshold] # filter out small "trap" regions
+    badTrapLabels = [reg.label for reg in trapProps if reg.area < trapAreaThreshold] # filter out small regions
     goodTraps = trapLabels.copy()
 
     for label in badTrapLabels:
@@ -1219,9 +1219,12 @@ def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000,
 
     goodTrapProps = measure.regionprops(goodTraps)
     trapCentroids = [(int(np.round(reg.centroid[0])),int(np.round(reg.centroid[1]))) for reg in goodTrapProps] # get centroids as integers
-    trapBboxes = []
+    trap_orientations = [reg.orientation for reg in goodTrapProps]
 
-    for centroid in trapCentroids:
+    trapBboxes = []
+    trap_rotations = []
+
+    for i,centroid in enumerate(trapCentroids):
         rowIndex = centroid[0]
         colIndex = centroid[1]
 
@@ -1242,20 +1245,35 @@ def get_frame_trap_bounding_boxes(trapLabels, trapProps, trapAreaThreshold=2000,
 
         trapBboxes.append((minRow,minCol,maxRow,maxCol))
 
-    return(trapBboxes)
+        orientation = trap_orientations[i]
+
+        if orientation < 0:
+            orientation = np.pi + orientation
+        rotation_angle = -1 * orientation / np.pi * 180 + 90
+
+        trap_rotations.append(rotation_angle)
+
+    return(trapBboxes,trap_rotations)
 
 # this function performs image alignment as defined by the shifts passed as an argument
-def crop_traps(fileNames, trapProps, labelledTraps, bboxesDict, trap_align_metadata):
+def crop_traps(fileNames, trap_rotations_dict, labelledTraps, bboxesDict, trap_align_metadata):
 
     frameNum = trap_align_metadata['frame_count']
     channelNum = trap_align_metadata['plane_number']
-    trapImagesDict = {key:np.zeros((frameNum,
-                                       trap_align_metadata['trap_height'],
-                                       trap_align_metadata['trap_width'],
-                                       channelNum)) for key in bboxesDict}
+    trapImagesDict = {
+        key:np.zeros(
+            (
+                frameNum,
+                trap_align_metadata['trap_height'],
+                trap_align_metadata['trap_width'],
+                channelNum
+            )
+        ) for key in bboxesDict
+    }
     trapClosedEndPxDict = {}
     flipImageDict = {}
     trapMask = labelledTraps
+    pad_size = 20
 
     for frame in range(frameNum):
 
@@ -1267,12 +1285,54 @@ def crop_traps(fileNames, trapProps, labelledTraps, bboxesDict, trap_align_metad
         if len(fullFrameImg.shape) == 3:
             if fullFrameImg.shape[0] < 3: # for tifs with less than three imaging channels, the first dimension separates channels
                 fullFrameImg = np.transpose(fullFrameImg, (1,2,0))
+
+        # if frame == 0:
+        #     row_num = fullFrameImg.shape[0]
+        #     col_num = fullFrameImg.shape[1]
+
         trapClosedEndPxDict[fileNames[frame]] = {key:{} for key in bboxesDict.keys()}
 
         for key in trapImagesDict.keys():
 
+            rotation_angle = trap_rotations_dict[key]
             bbox = bboxesDict[key][frame]
-            trapImagesDict[key][frame,:,:,:] = fullFrameImg[bbox[0]:bbox[2],bbox[1]:bbox[3],:]
+            # rotation_center = (int(np.round((bbox[1]+bbox[3])/2)), int(np.round((bbox[0]+bbox[2])/2)))
+
+            if np.abs(rotation_angle) > 1.5:
+
+                # PADDING IS SLOW!!!! MOVE ABOVE AND PAD FOR EACH IMAGE, REGARDLESS OF ROTATION OF A GIVEN TRAP
+                padded_fullFrameImg = np.pad(
+                    fullFrameImg,
+                    ((pad_size,pad_size), (pad_size,pad_size), (0,0)),
+                    mode='constant'
+                )
+
+                min_row = bbox[0]
+                max_row = bbox[2] + 2*pad_size
+                min_col = bbox[1]
+                max_col = bbox[3] + 2*pad_size
+
+                tmp_img = padded_fullFrameImg[min_row:max_row, min_col:max_col, :]
+
+                for rot_frame in range(tmp_img.shape[-1]):
+                    tmp_img[:,:,rot_frame] = transform.rotate(
+                            tmp_img[:,:,rot_frame],
+                            angle=rotation_angle,
+                            preserve_range=True
+                        )
+                trapImagesDict[key][frame,:,:,:] = tmp_img[pad_size:-pad_size,pad_size:-pad_size,:]
+
+                # for rot_frame in range(fullFrameImg.shape[-1]):
+
+                #     fullFrameImg[:,:,rot_frame] = transform.rotate(
+                #         fullFrameImg[:,:,rot_frame],
+                #         angle=rotation_angle,
+                #         center=rotation_center,
+                #         preserve_range=True
+                #     )
+
+            else:
+                trapImagesDict[key][frame,:,:,:] = fullFrameImg[bbox[0]:bbox[2],bbox[1]:bbox[3],:]
 
             #tmpImg = np.reshape(fullFrameImg[trapMask==key], (trapHeight,trapWidth,channelNum))
 
@@ -2480,7 +2540,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     cellClassThreshold = params['segment']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
-    min_object_size = params['segment']['min_object_size']
+    # min_object_size = params['segment']['min_object_size']
 
     # arguments to data generator
     # data_gen_args = {'batch_size':batch_size,
@@ -2688,6 +2748,7 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                            (pad_dict['left_pad'],pad_dict['right_pad'])),
                            mode='constant')
         img_stack = np.expand_dims(img_stack, -1)
+        # print(img_stack.dtype)
         # set up image generator
         image_generator = FocusSegmentationDataGenerator(img_stack, **data_gen_args)
 
@@ -2995,6 +3056,7 @@ class FocusSegmentationDataGenerator(utils.Sequence):
 
         # Generate data
         X = self.__data_generation(array_list_temp)
+        X = X.astype('float32')
 
         return X
 
