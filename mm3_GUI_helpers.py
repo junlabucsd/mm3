@@ -602,8 +602,8 @@ class PhaseWidget(QWidget):
 
                 self.frameIndex = 0
                 self.img = self.phaseStack[self.frameIndex,:,:]
-                # self.originalImgMax = np.max(self.img)
-                self.originalImgMax = np.max(self.phaseStack)
+                self.originalImgMax = np.max(self.img)
+                # self.originalImgMax = np.max(self.phaseStack)
                 originalRGBImg = color.gray2rgb(self.img/2**16*2**8).astype('uint8')
                 self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
 
@@ -617,7 +617,7 @@ class PhaseWidget(QWidget):
                 self.label.setPixmap(self.phaseQpixmap)
 
         def setImg(self):
-                # self.originalImgMax = np.max(self.img)
+                self.originalImgMax = np.max(self.img)
                 originalRGBImg = color.gray2rgb(self.img/2**16*2**8).astype('uint8')
                 self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
 
