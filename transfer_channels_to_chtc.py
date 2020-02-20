@@ -84,6 +84,7 @@ for fov_id,peak_ids in specs.items():
                     peak_id
                 )
                 match_list = glob.glob(os.path.join(p['chnl_dir'],base_name))
+                match_list.sort()
 
             else:
                 base_name = '{}_xy{:0=3}_p{:0=4}_{}.tif'.format(
@@ -96,10 +97,10 @@ for fov_id,peak_ids in specs.items():
 
             if namespace.transfer_segmentation:
                 base_name = '{}_xy{:0=3}_p{:0=4}_{}.tif'.format(
-                p['experiment_name'],
-                fov_id,
-                peak_id,
-                'seg_unet'
+                    p['experiment_name'],
+                    fov_id,
+                    peak_id,
+                    'seg_unet'
                 )
                 fname = os.path.join(p['seg_dir'],base_name)
                 match_list.append(fname)
@@ -113,7 +114,7 @@ for fov_id,peak_ids in specs.items():
 
                 match_base_names.append(new_spec_file_name)
                 match_base_names.append(new_time_file_name)
-                match_base_names.append(param_file_path)
+                match_base_names.append(param_file_path.split('/')[-1])
                     
                 line_to_write = ','.join(match_base_names)
                 line_to_write = line_to_write + '\n'
