@@ -117,21 +117,24 @@ if __name__ == "__main__":
     with open(os.path.join(p['cell_dir'],'all_cells.pkl'), 'rb') as cell_file:
         Cells = pickle.load(cell_file)
 
+    ########################################################################################################################
+    ########## TO DO: reorganize how tracking is done, so that it goes cell-by-cell, rather than frame-by-frame. ###########
+    ########################################################################################################################
     foci = {}
     # foci_info_unet modifies foci dictionary in place, so nothing returned here
-    mm3.foci_info_unet(
-        foci,
-        Cells,
-        specs,
-        p['time_table'],
-        channel_name="c{}".format(namespace.channel)
-    )
+    # mm3.foci_info_unet(
+    #     foci,
+    #     Cells,
+    #     specs,
+    #     p['time_table'],
+    #     channel_name="c{}".format(namespace.channel)
+    # )
     
-    # mm3.dev_foci_info_unet(foci,
-    #                 Cells,
-    #                 specs,
-    #                 p['time_table'],
-    #                 channel_name="c{}".format(namespace.channel))
+    mm3.dev_foci_info_unet(foci,
+                    Cells,
+                    specs,
+                    p['time_table'],
+                    channel_name="c{}".format(namespace.channel))
 
     # update cell information with newly generated focus information
     #  again, the Cells dictionary are updated in place, so nothing returned
