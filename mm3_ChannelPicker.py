@@ -26,7 +26,6 @@ plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
 from skimage import io, morphology, segmentation
-from scipy.misc import imresize
 from skimage.external import tifffile as tiff
 import multiprocessing
 from multiprocessing import Pool
@@ -804,10 +803,10 @@ def preload_images(specs, fov_id_list):
             UI_images[fov_id][peak_id] = {'first' : None, 'last' : None} # init dictionary
              # phase image at t=0. Rescale intenstiy and also cut the size in half
             first_image = p['channel_picker']['first_image']
-            UI_images[fov_id][peak_id]['first'] = imresize(image_data[first_image,:,:], 0.5)
+            UI_images[fov_id][peak_id]['first'] = image_data[first_image,::2,::2]
             last_image = p['channel_picker']['last_image']
             # phase image at end
-            UI_images[fov_id][peak_id]['last'] = imresize(image_data[last_image,:,:], 0.5)
+            UI_images[fov_id][peak_id]['last'] = image_data[last_image,::2,::2]
 
     return UI_images
 
@@ -1019,7 +1018,7 @@ if __name__ == "__main__":
                     counter += 1
 
             pad_dict = mm3.get_pad_distances(unet_shape, img_height, img_width)
-            
+
             # pad image to correct size
             if p['debug']:
                 print("Padding dictionary:", pad_dict)
@@ -1236,12 +1235,7 @@ if __name__ == "__main__":
                                               outputdir=outputdir, phase_plane=p['phase_plane'])
 
     # Save out specs file in yaml format
-    if not os.path.isfile(os.path.join(ana_dir, 'specs.yaml')):
-        with open(os.path.join(ana_dir, 'specs.yaml'), 'w') as specs_file:
-            yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
-    else:
-        mm3.warning('specs.yaml file already exists in analysis folder. Saving to specs_1.yaml')
-        with open(os.path.join(ana_dir, 'specs_1.yaml'), 'w') as specs_file:
-            yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
+    with open(os.path.join(ana_dir, 'specs.yaml'), 'w') as specs_file:
+        yaml.dump(data=specs, stream=specs_file, default_flow_style=False, tags=None)
 
     mm3.information('Finished.')
