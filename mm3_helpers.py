@@ -2374,7 +2374,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        if params['segment']['normalize_to_one'] is not None:
+        if params['segment']['normalize_to_one']:
             med_stack = np.zeros(img_stack.shape)
             selem = morphology.disk(1)
 
