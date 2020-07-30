@@ -130,7 +130,7 @@ if __name__ == "__main__":
     #     channel_name="c{}".format(namespace.channel)
     # )
     
-    mm3.dev_foci_info_unet(foci,
+    mm3.foci_info_unet(foci,
                     Cells,
                     specs,
                     p['time_table'],

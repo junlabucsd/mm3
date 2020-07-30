@@ -240,9 +240,8 @@ class TrackItem(QGraphicsScene):
 
         self.specs = specs
         self.channel = channel
-        # add QImages to scene (try three frames)
+        # add QImages to scene
         self.fov_id_list = [fov_id for fov_id in self.specs.keys()]
-        # self.center_frame_index = 1
 
         self.fovIndex = 0
         self.fov_id = self.fov_id_list[self.fovIndex]
@@ -251,22 +250,33 @@ class TrackItem(QGraphicsScene):
 
         self.peakIndex = 0
         self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+        print(self.peak_id)
+        print(self.fov_id)
 
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
-        # read in images
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
 
-        # time_int = params['moviemaker']['seconds_per_time_index']/60
+        # read in cell tracking info
+        cell_filename_all = os.path.join(params['cell_dir'], 'all_cells.pkl')
+        with open(cell_filename_all, 'rb') as cell_file:
+            self.All_Cells = pickle.load(cell_file)
 
+        self.fov_Cells = mm3.filter_cells(self.All_Cells, attr="fov", val=self.fov_id)
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
+
+        # read in focus tracking info
         focus_filename_all = os.path.join(params['foci_track_dir'], 'all_foci.pkl')
-
         with open(focus_filename_all, 'rb') as focus_file:
             self.All_Foci = pickle.load(focus_file)
-        # mm3.calculate_pole_age(self.foci) # add poleage
+
+        self.fov_Foci = mm3.filter_cells(self.All_Foci, attr="fov", val=self.fov_id)
+        self.these_Foci = mm3.filter_cells(self.fov_Foci, attr="fov", val=self.peak_id)
 
         plot_dir = os.path.join(params['foci_track_dir'], 'plots')
         if not os.path.exists(plot_dir):
@@ -337,13 +347,14 @@ class TrackItem(QGraphicsScene):
         track_info = self.track_info
 
         for t, time_info in track_info.items():
-            for region_label, region in time_info['regions'].items():
+            for cell_id, cell_info in time_info.items():
+                for region_label, region in cell_info['regions'].items():
 
-                if 'region_graphic' in track_info[t]['regions'][region_label]:
-                    if 'pen' in track_info[t]['regions'][region_label]['region_graphic']:
-                        track_info[t]['regions'][region_label]['region_graphic'].pop('pen')
-                    if 'brush' in track_info[t]['regions'][region_label]['region_graphic']:
-                        track_info[t]['regions'][region_label]['region_graphic'].pop('brush')
+                    if 'region_graphic' in region:
+                        if 'pen' in region['region_graphic']:
+                            region['region_graphic'].pop('pen')
+                        if 'brush' in region['region_graphic']:
+                            region['region_graphic'].pop('brush')
 
         with open(self.pickle_file_name, 'wb') as track_file:
             try:
@@ -376,7 +387,7 @@ class TrackItem(QGraphicsScene):
             track_file_name_df.to_csv(df_file_name,index=False)
 
     def no_track_pickle_lookup(self):
-        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
+        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack, self.cellLabelStack, self.these_Cells)
 
     def get_track_pickle(self):
 
@@ -384,7 +395,7 @@ class TrackItem(QGraphicsScene):
         # look for previously updated tracking information and load that if it is found.
         if not os.path.isfile(self.pickle_file_name):
             # get tracking information in a format usable and updatable by qgraphicsscene
-            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
+            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack, self.cellLabelStack, self.these_Cells)
         else:
             with open(self.pickle_file_name, 'rb') as pickle_file:
                 try:
@@ -411,9 +422,14 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
+
+        self.fov_Cells = mm3.filter_cells(self.All_Cells, attr="fov", val=self.fov_id)
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
@@ -434,9 +450,13 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
+
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
@@ -457,11 +477,13 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        # print(self.phaseImgPath)
-        # print(self.labelImgPath)
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
+
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
@@ -487,11 +509,14 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
-        # print(self.phaseImgPath)
-        # print(self.labelImgPath)
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
+
+        self.fov_Cells = mm3.filter_cells(self.All_Cells, attr="fov", val=self.fov_id)
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
@@ -516,9 +541,14 @@ class TrackItem(QGraphicsScene):
         # construct image stack file names from params
         self.phaseImgPath = os.path.join(params['chnl_dir'], "{}_xy{:0=3}_p{:0=4}_c{}.tif".format(params['experiment_name'], self.fov_id, self.peak_id, self.channel))
         self.labelImgPath = os.path.join(params['foci_seg_dir'], "{}_xy{:0=3}_p{:0=4}_foci_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
+        self.cellLabelImgPath = os.path.join(params['seg_dir'], "{}_xy{:0=3}_p{:0=4}_seg_unet.tif".format(params['experiment_name'], self.fov_id, self.peak_id))
 
         self.labelStack = io.imread(self.labelImgPath)
         self.phaseStack = io.imread(self.phaseImgPath)
+        self.cellLabelStack = io.imread(self.cellLabelImgPath)
+
+        self.fov_Cells = mm3.filter_cells(self.All_Cells, attr="fov", val=self.fov_id)
+        self.these_Cells = mm3.filter_cells(self.fov_Cells, attr="peak", val=self.peak_id)
 
         # look for previously edited info and load it if it is found
         self.get_track_pickle()
@@ -563,61 +593,325 @@ class TrackItem(QGraphicsScene):
         RGBLabelImg = (RGBLabelImg*255).astype('uint8')
         originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
         RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-        # pprint(regions)
-        time_regions_and_events = self.track_info[time]
-        regions = time_regions_and_events['regions']
-        time_regions_and_events['time'] = time
+        
+        time_info = self.track_info[time]
+        time_info['time'] = time
 
-        for region_id in regions.keys():
-            brush = QBrush()
-            brush.setStyle(Qt.SolidPattern)
-            pen = QPen()
-            pen.setStyle(Qt.SolidLine)
-            props = regions[region_id]['props']
-            coords = props.coords
-            min_row, min_col, max_row, max_col = props.bbox
-            label = props.label
-            centroidY,centroidX = props.centroid
-            brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
-            brushColor.setAlphaF(0.15)
-            brush.setColor(brushColor)
-            pen.setColor(brushColor)
+        for cell_info in time_info.values():
+            regions = cell_info['regions']
+            for region in regions.values():
+                brush = QBrush()
+                brush.setStyle(Qt.SolidPattern)
+                pen = QPen()
+                pen.setStyle(Qt.SolidLine)
+                props = region['props']
+                coords = props.coords
+                min_row, min_col, max_row, max_col = props.bbox
+                label = props.label
+                centroidY,centroidX = props.centroid
+                brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
+                brushColor.setAlphaF(0.15)
+                brush.setColor(brushColor)
+                pen.setColor(brushColor)
 
-            regions[region_id]['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
-                                                    'left_x':min_col, 'right_x':max_col,
-                                                    'coords':coords,
-                                                    'pen':pen, 'brush':brush}
+                region['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
+                                            'left_x':min_col, 'right_x':max_col,
+                                            'coords':coords,
+                                            'pen':pen, 'brush':brush}
 
-        return(phaseQpixmap, time_regions_and_events)
+        return(phaseQpixmap, time_info)
 
-    def create_tracking_information(self, fov_id, peak_id, label_stack, img_stack):
+    # def get_foci_regions_by_time(self, focus_label_stack):
+    #     '''This function provides support to detect to which cell each focus belongs, and to
+    #     add additional information to each focus' regionprops based on that focus' position
+    #     within its cell.
+    #     '''
+
+    #     t_adj = 1
+    #     foci_by_time = {frame+t_adj: {} for frame in range(focus_label_stack.shape[0])}
+    #     cell_id_list = [k for k in self.these_Cells.keys()]
+
+    #     # get to first timepoint containing cells
+    #     for t in foci_by_time.keys():
+
+    #         t_foci = mm3.filter_cells_containing_val_in_attr(self.these_Cells, attr='times', val=t)
+    #         if t_cells:
+    #             break
+
+
+
+
+
+    #     skipped_cells = []
+    #     # loop over cells, begining with cells at current time
+    #     for cell_id,cell in t_cells.items():
+
+    #         foci_in_cell = cell.foci
+
+    #         for t in cell.times:
+                
+    #             cell_idx = cell.times.index(t)
+    #             foci_in_cell = cell.foci
+
+    #             these_foci = {focus_id:focus for focus_id,focus in foci_in_cell.items() if t in focus.times}
+
+
+    #         t_foci = mm3.filter_cells_containing_val_in_attr(self.these_Foci, attr='times', val=t)
+            
+    #         if len(t_foci) > 0:
+                
+    #             for focus_id,focus in t_foci.items():
+
+    #                 focus_idx = focus.times.index(t)
+    #                 # loop over cells to which this focus belongs
+    #                 for cell in focus.cells:
+    #                     cell_times = cell.times
+    #                     # if the current time is in this cell grab the index
+    #                     #  for this cell and its id
+    #                     if t in cell_times:
+    #                         cell_idx = cell.times.index(t)
+    #                         cell_id = cell.id
+    #                         break
+                    
+    #                 cell_y,cell_x = cell.centroids[cell_idx]
+    #                 focus_y,focus_x = focus.regions[focus_idx].centroid
+                    
+    #                 focus.regions[focus_idx].cell_y_pos = cell_y-focus_y
+    #                 focus.regions[focus_idx].cell_x_pos = cell_x-focus_x
+    #                 focus.daughter_cell_ids = []
+    #                 if cell.daughters:
+    #                     for daughter_cell in cell.daughters:
+    #                         focus.daughter_cell_ids.append(daughter_cell.id)
+    #                 cell_data[t].append(focus)
+
+    #     return(foci_by_cell_and_time)
+
+
+    def create_tracking_information(self, fov_id, peak_id, label_stack, img_stack, cell_label_stack, Cells):
 
         t_adj = 1
+        foci_tmp = mm3_plots.find_cells_of_fov_and_peak(self.All_Foci, fov_id, peak_id)
+        print('There are {} foci for this trap'.format(len(foci_tmp)))
+        
+        regions_and_events_by_time = {frame+t_adj: {} for frame in range(label_stack.shape[0])}
+        # iterate through all times, collecting focus information and adding
+        # cell-centric tracking info to the dictionary as we go
+        for t,t_info in regions_and_events_by_time.items():
 
-        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:], img_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
-        regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
+            # keep only foci with this time in their 'times' attribute
+            t_foci = mm3.filter_cells_containing_val_in_attr(foci_tmp, attr='times', val=t)
+            print('\n',t)
 
-        # loop through regions and add them to the main dictionary.
-        for t, regions in regions_by_time.items():
-            # this is a list, while we want it to be a dictionary with the region label as the key
-            for region in regions:
+            for focus_id,focus in t_foci.items():
+
+                focus_idx = focus.times.index(t)
+                focus_cell_labels = focus.cell_labels
+                focus_cell_label = focus_cell_labels[focus_idx]
+                focus_region = focus.regions[focus_idx]
+                
+                for cell in focus.cells:
+                    cell_times = cell.times
+                    # if the current time is in this cell grab the index
+                    #  for this cell and its id, then break the loop
+                    if t in cell_times:
+                        cell_idx = cell.times.index(t)
+                        cell_id = cell.id
+                        break
+
+                # print('Focus {} is in cell {}.'.format(focus_id, cell_id))
+                # print([c.id for c in focus.cells])
+                # instantiate the regions and matrix info dictionary.
+                #  Will add regionprops and events in the 'regions' dict later.
+                if not cell_id in t_info:
+                    t_info[cell_id] = {'regions' : {}, 'matrix' : None}
+
+                    cell_info = t_info[cell_id]
+
+                    # We need to build the interaction matrix for each cell.
+                    # First we need to know the number of regions in cell at time t
+                    #  so that we can instantiate an interaction matrix with correct 
+                    #  firt dimension
+                    # Loop through cell's foci, filtering them by time
+                    n_regions_in_t = 0
+                    # print(cell.foci)
+##########################################################################################
+# #######################################################################################
+# somehow I'm occasionally dropping a focus!!!!!!!!!!!!!!!!
+# I think the issue must be in mm3_helpers.py, lines 6853-8127                    
+# maybe if a focus is small its overlap with pior foci is small compared to larger
+# foci that are also present and overlapping. In this case, maybe my code just drops
+#  the small focus.
+                    for cell_focus in cell.foci.values():
+                        print(cell_focus.id)
+                        print(cell_focus.times)
+                        if t in cell_focus.times:
+                            n_regions_in_t += 1
+                            print('n_regions_in_t: ', n_regions_in_t)
+
+                    # check next timepoint in cell to get second dimension of matrix.
+                    n_regions_in_t_plus_1 = 0
+                    # if the cell has another time beyond this one, do the following
+
+                    # print('current time: ', t)
+                    # print('cell times: ', cell.times)
+                    # print('cell daughters: ', cell.daughters)
+                    if t+1 in cell.times:
+                        # loop through foci in the cell
+                        for cell_focus in cell.foci.values():
+                            print(cell_focus.times)
+                            # if the focus is present in the cell's next time,
+                            # add one to n_regions_in_t_plus_1
+                            if t+1 in cell_focus.times:
+                                n_regions_in_t_plus_1 += 1
+                                print('focus in next t: ', n_regions_in_t_plus_1)
+                    # if the next timpoint doesn't exist in the cell, 
+                    # the cell could have divided.
+                    # check then if the cell divided and add daughter cell
+                    # foci to second dimension of matrix 
+                    elif cell.daughters is not None:
+                        for daughter_cell in cell.daughters:
+                            for cell_focus in daughter_cell.foci.values():
+                                if t+1 in cell_focus.times:
+                                    n_regions_in_t_plus_1 += 1
+                                    print('focus in daughter, next t: ', n_regions_in_t_plus_1)
+
+###################################################################################################################
+###################################################################################################################
+################################### I need to update to count correctly ###########################################
+###################################################################################################################
+###################################################################################################################
+
+                    cell_info['matrix'] = np.zeros(
+                        (n_regions_in_t+1, n_regions_in_t_plus_1+1),
+                        dtype=np.int
+                    )
+
+                    print(cell_info['matrix'])
+                    # print(t)
+
+                # create default events list and add to the information for this
+                #   cell/focus combination
                 default_events = np.zeros(6, dtype=np.int)
                 default_events[5] = 1 # set N to 1
-                regions_and_events_by_time[t]['regions'][region.label] = {'props' : region,
-                                                                      'events' : default_events}
+                # add information at 'focus_cell_label'
+                cell_info['regions'][focus_cell_label] = {
+                    'props' : focus_region,
+                    'events' : default_events,
+                }
+
+                # Check for when focus has less time points than it should
+                # if (focus.times[-1] - focus.times[0])+1 > len(focus.times):
+                #     print('Focus {} has less time points than it should, skipping.'.format(focus_id))
+                #     continue
+                
+                # Now we can populate the cell_info matrix with the focus' interaction info
+                #  We can also update the focus' events list
+
+                # M migration, event 0
+                # If the focus has another time point after this one then it must have migrated
+                max_focus_time = np.max(focus.times)
+                # print('focus {} has max time {}.'.format(focus_id,max_focus_time))
+                if t < max_focus_time:
+                    cell_info['regions'][focus_cell_label]['events'][0] = 1
+
+                    # update matrix using this region label and the next one
+                    print(focus_cell_label, focus_cell_labels[focus_idx+1], cell_info['matrix'])
+                    cell_info['matrix'][focus_cell_label, focus_cell_labels[focus_idx+1]] = 1
+
+                # S division, 1
+                if focus.daughters and t == max_focus_time:
+                    cell_info['regions'][focus_cell_label]['events'][1] = 1
+
+                    # daughter 1 and 2 label
+                    d1_label = self.All_Foci[focus.daughters[0]].cell_labels[0]
+
+                    try:
+                        d2_label = self.All_Foci[focus.daughters[1]].cell_labels[0]
+                        cell_info['matrix'][focus_cell_label, d1_label] = 1
+                        cell_info['matrix'][focus_cell_label, d2_label] = 1
+
+                    except IndexError as e:
+                        print("At timepoint {} there was an index error in assigning daughters: {}".format(t,e))
+
+                # I appears, 2
+                if not t == 1:
+                    if not focus.parent and focus_idx == 0:
+                        cell_info['regions'][focus_cell_label]['events'][2] = 1
+
+                # O disappears, 3
+                if not focus.daughters and t == max_focus_time:
+                    cell_info['regions'][focus_cell_label]['events'][3] = 1
+                    cell_info['matrix'][focus_cell_label, 0] = 1
+
+                # N no data, 4 - Set this to zero as this region as been checked.
+                cell_info['regions'][focus_cell_label]['events'][5] = 0
+
+        # If any focus has still not been visited,
+        #  make their appropriate matrix value 1, which should be in the first column.
+        for t,t_data in regions_and_events_by_time.items():
+            for cell_id,cell_data in t_data.items():
+                for region,region_data in cell_data['regions'].items():
+                    if region_data['events'][5] == 1:
+                        cell_data['matrix'][region, 0] = 1
+
+            # if not cell_id in regions_and_events_by_cell_and_time:
+            #     regions_and_events_by_cell_and_time[cell_id] = {}
+            
+            # cell_data = regions_and_events_by_cell_and_time[cell_id]
+            
+            # for t,t_region_list in this_cell_time_info.items():
+
+            #     if not t in cell_data:
+            #         cell_data[t] = {'regions' : {}, 'matrix' : None}
+
+            #     for i,region in enumerate(t_region_list):
+                
+            #         default_events = np.zeros(6, dtype=np.int)
+            #         default_events[5] = 1 # set N to 1
+            #         cell_data[t]['regions'][i+1] = {
+            #             'props' : region,
+            #             'events' : default_events,
+            #         }
+                
         # create default interaction matrix
         # Now that we know how many regions there are per time point, we will create a default matrix which indicates how regions are connected to each between this time point, t, and the next one, t+1. The row index will be the region label of the region in t, and the column index will be the region label of the region in t+1.
         # If a region migrates from t to t+1, its row should have a sum of 1 corresponding from which region (row) to which region (column) it moved. If the region divided, then both of the daughter columns will get value 1.
         # Note that the regions are labeled from 1, but Numpy arrays and indexed from zero. We can use this to store some additional informaiton. If a region disappears, it will receive a 1 in the column with index 0.
         # In the last time point all regions will be connected to the disappear column
-        for t, t_data in regions_and_events_by_time.items():
-            n_regions_in_t = len(regions_by_time[t])
-            if t+1 in regions_by_time:
-                n_regions_in_t_plus_1 = len(regions_by_time[t+1])
-            else:
-                n_regions_in_t_plus_1 = 0
+        # for cell_id, this_cell_time_info in regions_and_events_by_cell_and_time.items():
+        #     for t,t_data in this_cell_time_info.items():
+        #         n_regions_in_t = len(t_data['regions'])
+        #         if t+1 in this_cell_time_info:
+        #             n_regions_in_t_plus_1 = len(this_cell_time_info[t+1]['regions'])
+        #         else:
+        #             n_regions_in_t_plus_1 = 0
 
-            t_data['matrix'] = np.zeros((n_regions_in_t+1, n_regions_in_t_plus_1+1), dtype=np.int)
+        #         t_data['matrix'] = np.zeros((n_regions_in_t+1, n_regions_in_t_plus_1+1), dtype=np.int)
+        
+
+        # regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
+
+        # # loop through regions and add them to the main dictionary.
+        # for t, regions in regions_by_time.items():
+        #     # this is a list, while we want it to be a dictionary with the region label as the key
+        #     for region in regions:
+        #         default_events = np.zeros(6, dtype=np.int)
+        #         default_events[5] = 1 # set N to 1
+        #         regions_and_events_by_time[t]['regions'][region.label] = {'props' : region,
+        #                                                                 'events' : default_events}
+        # create default interaction matrix
+        # Now that we know how many regions there are per time point, we will create a default matrix which indicates how regions are connected to each between this time point, t, and the next one, t+1. The row index will be the region label of the region in t, and the column index will be the region label of the region in t+1.
+        # If a region migrates from t to t+1, its row should have a sum of 1 corresponding from which region (row) to which region (column) it moved. If the region divided, then both of the daughter columns will get value 1.
+        # Note that the regions are labeled from 1, but Numpy arrays and indexed from zero. We can use this to store some additional informaiton. If a region disappears, it will receive a 1 in the column with index 0.
+        # In the last time point all regions will be connected to the disappear column
+        # for t, t_data in regions_and_events_by_time.items():
+        #     n_regions_in_t = len(regions_by_time[t])
+        #     if t+1 in regions_by_time:
+        #         n_regions_in_t_plus_1 = len(regions_by_time[t+1])
+        #     else:
+        #         n_regions_in_t_plus_1 = 0
+
+        #     t_data['matrix'] = np.zeros((n_regions_in_t+1, n_regions_in_t_plus_1+1), dtype=np.int)
 
         # Loop over foci and edit event information
         # We will use the focus dictionary All_Foci.
@@ -625,80 +919,95 @@ class TrackItem(QGraphicsScene):
         # We will go through each focus by its time points and edit the events associated with that region.
         # We will also edit the matrix when appropriate.
         # pull out only the foci in of this FOV
-        foci_tmp = mm3_plots.find_cells_of_fov_and_peak(self.All_Foci, fov_id, peak_id)
-        print('There are {} foci for this trap'.format(len(foci_tmp)))
 
-        for focus_id, focus_tmp in foci_tmp.items():
+        # for focus_id,focus_tmp in foci_tmp.items():
 
-            # Check for when focus has less time points than it should
-            # if (focus_tmp.times[-1] - focus_tmp.times[0])+1 > len(focus_tmp.times):
-            #     print('Focus {} has less time points than it should, skipping.'.format(focus_id))
-            #     continue
-            unique_times = list(np.unique(focus_tmp.times))
-            focus_tmp_labels = [focus_tmp.labels[focus_tmp.times.index(t)] for t in unique_times]
+        #     cell_id = focus_id_cell_id_lut[focus_id]
+        #     cell_data = regions_and_events_by_cell_and_time[cell_id]
+        #     # Check for when focus has less time points than it should
+        #     # if (focus_tmp.times[-1] - focus_tmp.times[0])+1 > len(focus_tmp.times):
+        #     #     print('Focus {} has less time points than it should, skipping.'.format(focus_id))
+        #     #     continue
+        #     unique_times = list(np.unique(focus_tmp.times))
+        #     focus_tmp_labels = [focus_tmp.cell_labels[focus_tmp.times.index(t)] for t in unique_times]
 
-            # Go over the time points of this focus and edit appropriate information main dictionary
-            for i, t in enumerate(unique_times):
+        #     # Go over the time points of this focus and edit appropriate information main dictionary
+        #     for i, t in enumerate(unique_times):
 
-                # get the region label
-                label_tmp = focus_tmp_labels[i]
+        #         # get the region label
+        #         label_tmp = focus_tmp_labels[i]
 
-                # M migration, event 0
-                # If the focus has another time point after this one then it must have migrated
-                if i != len(unique_times)-1:
-                    regions_and_events_by_time[t]['regions'][label_tmp]['events'][0] = 1
+        #         # M migration, event 0
+        #         # If the focus has another time point after this one then it must have migrated
+        #         if i != len(unique_times)-1:
+        #             cell_data[t]['regions'][label_tmp]['events'][0] = 1
+        #             # regions_and_events_by_time[t]['regions'][label_tmp]['events'][0] = 1
 
-                    # update matrix using this region label and the next one
-                    # print(label_tmp, focus_tmp_labels[i+1], regions_and_events_by_time[t]['matrix'])
-                    regions_and_events_by_time[t]['matrix'][label_tmp, focus_tmp_labels[i+1]] = 1
+        #             # update matrix using this region label and the next one
+        #             # print(label_tmp, focus_tmp_labels[i+1], regions_and_events_by_time[t]['matrix'])
+        #             cell_data[t]['matrix'][label_tmp, focus_tmp_labels[i+1]] = 1
+        #             # regions_and_events_by_time[t]['matrix'][label_tmp, focus_tmp_labels[i+1]] = 1
 
-                # S division, 1
-                if focus_tmp.daughters and i == len(unique_times)-1:
-                    regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
+        #         # S division, 1
+        #         if focus_tmp.daughters and i == len(unique_times)-1:
+        #             cell_data[t]['regions'][label_tmp]['events'][1] = 1
+        #             # regions_and_events_by_time[t]['regions'][label_tmp]['events'][1] = 1
 
-                    # daughter 1 and 2 label
-                    # d1_label = self.All_Foci[focus_tmp.daughters[0].id].labels[0]
-                    d1_label = self.All_Foci[focus_tmp.daughters[0]].labels[0]
+        #             # daughter 1 and 2 label
+        #             # d1_label = self.All_Foci[focus_tmp.daughters[0].id].labels[0]
+        #             d1_label = self.All_Foci[focus_tmp.daughters[0]].labels[0]
 
-                    try:
-                        # d2_label = self.All_Foci[focus_tmp.daughters[1].id].labels[0]
-                        d2_label = self.All_Foci[focus_tmp.daughters[1]].labels[0]
-                        regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
-                        regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
+        #             try:
+        #                 # d2_label = self.All_Foci[focus_tmp.daughters[1].id].labels[0]
+        #                 d2_label = self.All_Foci[focus_tmp.daughters[1]].labels[0]
+        #                 cell_data[t]['matrix'][label_tmp, d1_label] = 1
+        #                 cell_data[t]['matrix'][label_tmp, d2_label] = 1
+        #                 # regions_and_events_by_time[t]['matrix'][label_tmp, d1_label] = 1
+        #                 # regions_and_events_by_time[t]['matrix'][label_tmp, d2_label] = 1
 
-                    except IndexError as e:
-                        print("At timepoint {} there was an index error in assigning daughters: {}".format(t,e))
+        #             except IndexError as e:
+        #                 print("At timepoint {} there was an index error in assigning daughters: {}".format(t,e))
 
-                # I appears, 2
-                if not t == 1:
-                    if not focus_tmp.parent and i == 0:
-                        regions_and_events_by_time[t]['regions'][label_tmp]['events'][2] = 1
+        #         # I appears, 2
+        #         if not t == 1:
+        #             if not focus_tmp.parent and i == 0:
+        #                 cell_data[t]['regions'][label_tmp]['events'][2] = 1
+        #                 # regions_and_events_by_time[t]['regions'][label_tmp]['events'][2] = 1
 
-                # O disappears, 3
-                if not focus_tmp.daughters and i == len(unique_times)-1:
-                    regions_and_events_by_time[t]['regions'][label_tmp]['events'][3] = 1
-                    regions_and_events_by_time[t]['matrix'][label_tmp, 0] = 1
+        #         # O disappears, 3
+        #         if not focus_tmp.daughters and i == len(unique_times)-1:
+        #             cell_data[t]['regions'][label_tmp]['events'][3] = 1
+        #             cell_data[t]['matrix'][label_tmp, 0] = 1
+        #             # regions_and_events_by_time[t]['regions'][label_tmp]['events'][3] = 1
+        #             # regions_and_events_by_time[t]['matrix'][label_tmp, 0] = 1
 
-                # N no data, 4 - Set this to zero as this region as been checked.
-                regions_and_events_by_time[t]['regions'][label_tmp]['events'][5] = 0
+        #         # N no data, 4 - Set this to zero as this region as been checked.
+        #         cell_data[t]['regions'][label_tmp]['events'][5] = 0
+        #         # regions_and_events_by_time[t]['regions'][label_tmp]['events'][5] = 0
 
-        # Set remaining regions to event space [0 0 0 0 1 1]
-        # Also make their appropriate matrix value 1, which should be in the first column.
-        for t, t_data in regions_and_events_by_time.items():
-            for region, region_data in t_data['regions'].items():
-                if region_data['events'][5] == 1:
+        # # Set remaining regions to event space [0 0 0 0 1 1]
+        # # Also make their appropriate matrix value 1, which should be in the first column.
+        # for cell_id,cell_data in regions_and_events_by_cell_and_time.items():
+        #     for t, t_data in cell_data.items():
+        #         for region, region_data in t_data['regions'].items():
+        #             if region_data['events'][5] == 1:
 
-                    t_data['matrix'][region, 0] = 1
+        #                 t_data['matrix'][region, 0] = 1
 
-        return(regions_and_events_by_time)
+        # for t, t_data in regions_and_events_by_time.items():
+        #     for region, region_data in t_data['regions'].items():
+        #         if region_data['events'][5] == 1:
+
+        #             t_data['matrix'][region, 0] = 1
+
+        return(regions_and_events_by_cell_and_time)
 
     def add_regions_to_frame(self, regions_and_events, frame):
         # loop through foci within this frame and add their ellipses as children of their corresponding qpixmap object
         regions = regions_and_events['regions']
         # print(regions_and_events)
         frame_time = regions_and_events['time']
-        for region_id in regions.keys():
-            region = regions[region_id]
+        for region_id,region in regions.items():
             # construct the ellipse
             graphic = region['region_graphic']
             top_left = QPoint(graphic['left_x'],graphic['top_y'])
@@ -715,8 +1024,9 @@ class TrackItem(QGraphicsScene):
             ellipse = QGraphicsEllipseItem(rect, frame)
             # add focus information to the QGraphicsEllipseItem
             ellipse.focusMatrix = regions_and_events['matrix']
-            ellipse.focusEvents = regions_and_events['regions'][region_id]['events']
-            ellipse.focusProps = regions_and_events['regions'][region_id]['props']
+            ellipse.focusEvents = region['events']
+            ellipse.focusProps = region['props']
+            print(region['props'])
             ellipse.time = frame_time
             ellipse.setBrush(brush)
             ellipse.setPen(pen)
@@ -971,6 +1281,13 @@ class TrackItem(QGraphicsScene):
         # get all foci in the frame to update each one, in case they were indirectly affected by the event that was drawn
         for focus in frame.childItems():
 
+            #############################################################################################
+            #############################################################################################
+            #############  THIS PART ALSO NEEDS REWRITTEN TO ACCOMODATE CELL-CENTRIC CHANGES!!!! ########
+            #############################################################################################
+            #############################################################################################
+            # CHANGE LABEL TO CELL-CENTRIC LABEL!!!!!!!!!!!!
+            # GET THE CELL TO WHICH THE FOCUS BELONGS!!!!!!!!!
             focus_label = focus.focusProps.label
             # print(focus_label)
             # grab all currently-drawn events for the focus of interest
@@ -981,57 +1298,63 @@ class TrackItem(QGraphicsScene):
             #  # Fetch the focus's original information
             #    'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
             #     If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
-            time_matrix = self.track_info[frame_time]['matrix']
-            focus_events = self.track_info[frame_time]['regions'][focus_label]['events']
+            # GO THROUGH DICTIONARY OF TRACK_INFO IN CELL_CENTRIC WAY!!!!!!
 
-            # print("Events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
-            #       focus_events, "\n\n", time_matrix, "\n")
-            # relabel all interactions for this focus as zero to later fill in appropriate 1's based on updated events
+            t_info = self.track_info[frame_time]
+            for cell_info in t_info.values():
 
-            time_matrix[focus_label,:] = 0
-            # print(focus_events) # for debugging to verify changes are being made appropriately.
-            # set all focus events temporarily to zero to fill back in with appropriate 1's
-            focus_events[...] = 0
 
-            # If an event is a migration or a child line, determine whether
-            #   the migration line starts at the focus to be updated, and whether
-            #   the child line begins or ends at the current focus.
-            #   Update events array and linkage matrix accordingly
-            for event in events:
-                event_type = event.type()
-                # if the event is a migration or child line
-                if event_type in self.line_events_list:
-                    # if the line starts with the focus to be updated, set the appropriate
-                    #  index in focus_events to 1.
+                time_matrix = cell_info['matrix']
+                focus_events = cell_info['regions'][focus_label]['events']
 
-                    if event.startItem == focus:
+                # print("Events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
+                #       focus_events, "\n\n", time_matrix, "\n")
+                # relabel all interactions for this focus as zero to later fill in appropriate 1's based on updated events
+
+                time_matrix[focus_label,:] = 0
+                # print(focus_events) # for debugging to verify changes are being made appropriately.
+                # set all focus events temporarily to zero to fill back in with appropriate 1's
+                focus_events[...] = 0
+
+                # If an event is a migration or a child line, determine whether
+                #   the migration line starts at the focus to be updated, and whether
+                #   the child line begins or ends at the current focus.
+                #   Update events array and linkage matrix accordingly
+                for event in events:
+                    event_type = event.type()
+                    # if the event is a migration or child line
+                    if event_type in self.line_events_list:
+                        # if the line starts with the focus to be updated, set the appropriate
+                        #  index in focus_events to 1.
+
+                        if event.startItem == focus:
+                            focus_events[self.event_type_index_lookup[event_type]] = 1
+                            start_focus_label = event.startItem.focusProps.label
+                            end_focus_label = event.endItem.focusProps.label
+                            # print(start_focus_label, end_focus_label)
+                            time_matrix[start_focus_label,end_focus_label] = 1
+
+                        # if event_type == "ChildLine":
+                        #     # if the event is a child line that terminates with this focus,
+                        #     #   set the 'born' index of focus_events to 1
+                        #     if event.endItem == focus:
+                        #         focus_events[self.event_type_index_lookup["BornSymbol"]] = 1
+
+                    # # If the event is zeroFocusSymbol or Appear, do this
+                    # elif event_type in self.end_check_events_list:
+
+                    #     for i,old_event_type in enumerate(events):
+                    #         print(i, old_event_type)
+
+                    # if the event is either disappear or die, do this stuff
+                    else:
                         focus_events[self.event_type_index_lookup[event_type]] = 1
-                        start_focus_label = event.startItem.focusProps.label
-                        end_focus_label = event.endItem.focusProps.label
-                        # print(start_focus_label, end_focus_label)
-                        time_matrix[start_focus_label,end_focus_label] = 1
-
-                    # if event_type == "ChildLine":
-                    #     # if the event is a child line that terminates with this focus,
-                    #     #   set the 'born' index of focus_events to 1
-                    #     if event.endItem == focus:
-                    #         focus_events[self.event_type_index_lookup["BornSymbol"]] = 1
-
-                # # If the event is zeroFocusSymbol or Appear, do this
-                # elif event_type in self.end_check_events_list:
-
-                #     for i,old_event_type in enumerate(events):
-                #         print(i, old_event_type)
-
-                # if the event is either disappear or die, do this stuff
-                else:
-                    focus_events[self.event_type_index_lookup[event_type]] = 1
-                    if event_type == "DissapearSymbol":
-                        focus_label = event.item.focusProps.label
-                        time_matrix[focus_label,0] = 1
+                        if event_type == "DissapearSymbol":
+                            focus_label = event.item.focusProps.label
+                            time_matrix[focus_label,0] = 1
 
             # print("New events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
-                  # focus_events, "\n\n", time_matrix, "\n")
+                    # focus_events, "\n\n", time_matrix, "\n")
 
     def remove_old_conflicting_events(self, event):
         # This function derives the foci involved in a given newly-annotated event and evaluates
