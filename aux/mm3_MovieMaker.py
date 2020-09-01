@@ -251,6 +251,7 @@ if __name__ == "__main__":
         if auto_phase_levels:
             # automatically scale images
             imin['phase'], imax['phase'] = find_img_min_max(images[::100])
+            print('phase levels' + str(imin['phase']) +' ' +str( imax['phase']))
 
         # use first image to set size of frame
         image = tiff.imread(images[0]) # pull out an image
@@ -286,6 +287,7 @@ if __name__ == "__main__":
 
         pipe = sp.Popen(command, stdin=sp.PIPE)
 
+        images = sorted(images,key=mm3.get_time)
         # display a frame and send it to write
         for img in images:
             # skip images not specified by param file.
