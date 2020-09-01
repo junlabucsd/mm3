@@ -2198,10 +2198,10 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['segment']['otsu']['OTSU_threshold']
-    first_opening_size = params['segment']['otsu']['first_opening_size']
-    distance_threshold = params['segment']['otsu']['distance_threshold']
-    second_opening_size = params['segment']['otsu']['second_opening_size']
+    OTSU_threshold = params['segment']['OTSU_threshold']
+    first_opening_size = params['segment']['first_opening_size']
+    distance_threshold = params['segment']['distance_threshold']
+    second_opening_size = params['segment']['second_opening_size']
     min_object_size = params['segment']['min_object_size']
 
     # threshold image
@@ -2353,8 +2353,8 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['unet']['batch_size']
-    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
+    batch_size = params['segment']['batch_size']
+    cellClassThreshold = params['segment']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
@@ -2389,6 +2389,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
+
         img_stack = np.pad(img_stack,
                            ((0,0),
                            (pad_dict['top_pad'],pad_dict['bottom_pad']),
@@ -2409,6 +2410,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
                                      pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
+
 
         # pad back incase the image had been trimmed
         predictions = np.pad(predictions,
@@ -2488,8 +2490,8 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['unet']['trained_model_image_height'],
-                  params['segment']['unet']['trained_model_image_width'])
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -3701,14 +3703,28 @@ class Cell():
                                        (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
         # calculate elongation rate.
-        try:
-            times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
-            log_lengths = np.float64(np.log(self.lengths_w_div))
-            p = np.polyfit(times, log_lengths, 1) # this wants float64
-            self.elong_rate = p[0] * 60.0 # convert to hours
-        except:
-            self.elong_rate = np.float64('NaN')
-            warning('Elongation rate calculate failed for {}.'.format(self.id))
+        if self.birth_time > 146:
+            try:
+                times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
+
+                log_lengths = np.float64(np.log(self.lengths_w_div))
+
+                p = np.polyfit(times, log_lengths, 1) # this wants float64
+                self.elong_rate = p[0] * 60.0 # convert to hours
+
+            except:
+                warning('Abs_times elongation rate calculate failed for {}.'.format(self.id))
+                self.elong_rate = np.float64('NaN')
+
+        else:
+            try:
+                times = np.float64((np.array(self.times_w_div) - self.times_w_div[0]) *5.)
+                log_lengths = np.float64(np.log(self.lengths_w_div))
+                p = np.polyfit(times, log_lengths, 1) # this wants float64
+                self.elong_rate = p[0] * 60.0 # convert to hours
+            except:
+                warning('times elongation rate calculate failed for {}.'.format(self.id))
+                self.elong_rate = np.float64('NaN')
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
@@ -6163,7 +6179,10 @@ def foci_analysis(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
+    try:
+        image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
+    except IOError:
+        image_data_seg = load_stack(fov_id, peak_id, color='seg_otsu')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
@@ -6179,7 +6198,9 @@ def foci_analysis(fov_id, peak_id, Cells):
     for cell_id, cell in six.iteritems(Cells):
 
         information('Extracting foci information for %s.' % (cell_id))
-
+        if cell.death is None:
+            print('fixing cell death')
+            cell.death = np.nan
         # declare lists holding information about foci.
         disp_l = []
         disp_w = []
@@ -6284,9 +6305,9 @@ def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
         # if there is no information, append an empty list.
         # Should this be NaN?
         else:
-            disp_l.append([])
-            disp_w.append([])
-            foci_h.append([])
+            disp_l.append(np.nan)
+            disp_w.append(np.nan)
+            foci_h.append(np.nan)
             # foci_stack[i] = image_data_temp_seg
 
     # add information to the cell (will replace old data)
@@ -6404,9 +6425,15 @@ def foci_lap(img, img_foci, cell, t):
             # print('peak', peak_fit)
             if x_fit <= 0 or x_fit >= radius*2 or y_fit <= 0 or y_fit >= radius*2:
                 if debug_foci: print('Throw out foci (gaus fit not in gfit_area)')
+                # disp_l = np.append(disp_l,0)
+                # disp_w = np.append(0,0)
+                # foci_h = np.append(0,0)
                 continue
             elif peak_fit/cell_fl_median < peak_med_ratio:
                 if debug_foci: print('Peak does not pass height test.')
+                # disp_l = np.append(0, 0)
+                # disp_w = np.append(0, 0)
+                # foci_h = np.append(0, 0)
                 continue
             else:
                 # find x and y position relative to the whole image (convert from small box)
@@ -6500,6 +6527,9 @@ def foci_lap(img, img_foci, cell, t):
     #     img_overlay[y_temp+1,x_temp-1] = 12
     #     img_overlay[y_temp+1,x_temp] = 12
     #     img_overlay[y_temp+1,x_temp+1] = 12
+    # if disp_l == []: disp_l = [] # displacement in length of foci from cell center
+    # if disp_w == []: disp_w = [] # displacement in width of foci from cell center
+    # if foci_h == []: foci_h = []
 
     return disp_l, disp_w, foci_h
 
