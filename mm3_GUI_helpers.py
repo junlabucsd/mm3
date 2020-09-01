@@ -311,7 +311,7 @@ class MaskTransparencyWidget(QWidget):
                         for pix in zip(rr,cc):
                                 rowIndex = pix[0]
                                 colIndex = pix[1]
-                                self.maskQimage.setPixelColor(colIndex, rowIndex, self.brushColor)
+                                self.maskQimage.setPixel(colIndex, rowIndex, self.brushColor.rgba())
 
                         self.maskQpixmap = QPixmap(self.maskQimage)
                         self.label.setPixmap(self.maskQpixmap)
