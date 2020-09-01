@@ -8,6 +8,7 @@ import os
 import inspect
 import argparse
 import yaml
+import numpy as np
 try:
     import cPickle as pickle
 except:
@@ -99,8 +100,13 @@ if __name__ == "__main__":
     if namespace.cellfile:
         cell_file_path = namespace.cellfile
     else:
-        mm3.warning('No cell file specified. Using complete_cells.pkl.')
-        cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
+        try:
+            cell_file_path = os.path.join(p['cell_dir'], 'complete_cells_filtered_foci.pkl')
+            mm3.warning('Using complete_cells_filtered.pkl.')
+
+        except IOError:
+            cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
+            mm3.warning('Using complete_cells.pkl.')
 
     with open(cell_file_path, 'rb') as cell_file:
         Cells = pickle.load(cell_file)
@@ -113,23 +119,22 @@ if __name__ == "__main__":
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-
     ### foci analysis
+
+    for cell_id, cell in six.iteritems(Cells):
+        if cell.death is None:
+            cell.death = np.nan
+
     mm3.information("Starting foci analysis.")
 
     # create dictionary which organizes cells by fov and peak_id
     Cells_by_peak = organize_cells_by_channel(Cells, specs)
-
     # for each set of cells in one fov/peak, find the foci
     for fov_id in fov_id_list:
         if not fov_id in Cells_by_peak:
             continue
 
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
-            # test
-            # print ('Peak no',peak_id)
-            # print ('Cells_of_peak')
-            # print (Cells_of_peak)
             if (len(Cells_of_peak) == 0):
                 continue
 
@@ -137,11 +142,13 @@ if __name__ == "__main__":
 
             # test
             # sys.exit()
-
+    # for (cell_id, cell) in Cells.items():
+    #     print(cell.__dict__)
     # Output data to both dictionary and the .mat format used by the GUI
     cell_filename = os.path.basename(cell_file_path)
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:
         pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
         sio.savemat(cell_file, Cells)
 
