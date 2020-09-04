@@ -2736,7 +2736,7 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     # arguments to data generator
     data_gen_args = {'batch_size':params['foci']['batch_size'],
                      'n_channels':1,
-                     'normalize_to_one':False,
+                     'normalize_to_one':True,
                      'shuffle':False}
     # arguments to predict_generator
     predict_args = dict(use_multiprocessing=False,
@@ -3077,7 +3077,10 @@ class FocusSegmentationDataGenerator(utils.Sequence):
     def __data_generation(self, array_list_temp):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels), 'uint16')
+        if self.normalize_to_one:
+            X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels), 'float64')
+        else:
+            X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels), 'uint16')
 
         if self.normalize_to_one:
             max_pixels = []
@@ -3088,9 +3091,9 @@ class FocusSegmentationDataGenerator(utils.Sequence):
             try:
                 tmpImg = array_list_temp[i]
                 if self.normalize_to_one:
-                    # tmpMedian = filters.median(tmpImg, self.selem)
-                    tmpMax = np.max(tmpImg)
-                    max_pixels.append(tmpMax)
+                    medImg = filters.median(tmpImg, self.selem)
+                    tmpImg = tmpImg/np.max(medImg)
+                    tmpImg[tmpImg > 1] = 1
             except IndexError:
                 X = X[:i,...]
                 break
@@ -3110,13 +3113,13 @@ class FocusSegmentationDataGenerator(utils.Sequence):
             X[i,:,:,0] = tmpImg
 
 
-        if self.normalize_to_one:
-            channel_max = np.max(max_pixels) / (2**8 - 1)
-            # print("Channel max: {}".format(channel_max))
-            # print("Array max: {}".format(np.max(X)))
-            X = X/channel_max
-            # print("Normalized array max: {}".format(np.max(X)))
-            X[X > 1] = 1
+        # if self.normalize_to_one:
+        #     channel_max = np.max(max_pixels) / (2**8 - 1)
+        #     # print("Channel max: {}".format(channel_max))
+        #     # print("Array max: {}".format(np.max(X)))
+        #     X = X/channel_max
+        #     # print("Normalized array max: {}".format(np.max(X)))
+        #     X[X > 1] = 1
 
         return (X)
 
@@ -3980,6 +3983,62 @@ class CellTree():
     def get_top_from_cell(self, cell_id):
         pass
 
+class OrphanFocusCell():
+    '''
+    The CellFromGraph class is one cell that has been born.
+    It is not neccesarily a cell that has divided.
+    '''
+
+    # initialize (birth) the cell
+    def __init__(self, fov_id, peak_id, t):
+        '''The cell must be given a unique cell_id and passed the region
+        information from the segmentation
+
+        Parameters
+        __________
+
+        cell_id : str
+            cell_id is a string in the form fXpXtXrX
+            f is 3 digit FOV number
+            p is 4 digit peak number
+            t is 4 digit time point at time of birth
+            r is region label for that segmentation
+            Use the function create_cell_id to do return a proper string.
+
+        region : region properties object
+            Information about the labeled region from
+            skimage.measure.regionprops()
+
+        parent_id : str
+            id of the parent if there is one.
+            '''
+
+        # create all the attributes
+        # id
+        self.id = 'orphan'
+
+        # identification convenience
+        self.fov = fov_id
+        self.peak = peak_id
+        self.birth_label = 'orphan'
+        self.regions = None
+
+        # parent is a CellFromGraph object, can be None
+        self.parent = None
+
+        # daughters is updated when cell divides
+        # if this is none then the cell did not divide
+        self.daughters = None
+
+        # birth and division time
+        self.birth_time = t
+        self.division_time = None # filled out if cell divides
+
+        # the following information is on a per timepoint basis
+        self.times = [t]
+        self.abs_times = [params['time_table'][self.fov][t]] # elapsed time in seconds
+
+
 # this is the object that holds all information for a cell
 class CellFromGraph():
     '''
@@ -4279,6 +4338,59 @@ class CellFromGraph():
         df = pd.DataFrame(data, index=data['id'])
 
         return(df)
+
+class OrphanFocus():
+    '''
+    The OrphanFocus class holds information on fluorescent foci that are not in any cell object.
+    '''
+
+    # initialize the focus
+    def __init__(self,
+                 cell,
+                 region,
+                 seg_img,
+                 intensity_image,
+                 t):
+        '''The cell must be given a unique cell_id and passed the region
+        information from the segmentation
+
+        Parameters
+        __________
+
+        cell : an OrphanFocusCell object
+
+        region : region properties object
+            Information about the labeled region from
+            skimage.measure.regionprops()
+
+        seg_img : 2D numpy array
+            Labelled image of cell segmentations
+
+        intensity_image : 2D numpy array
+            Fluorescence image with foci
+        '''
+
+        # create all the attributes
+        # id
+        focus_id = create_focus_id(region,
+                                   t,
+                                   cell.peak,
+                                   cell.fov,
+                                   experiment_name=params['experiment_name'])
+        self.id = focus_id
+
+        # identification convenience
+        self.appear_label = int(region.label)
+        self.regions = [region]
+        self.fov = cell.fov
+        self.peak = cell.peak
+
+        # cell is an OrphanFocusCell object
+        self.cells = [cell]
+
+        # appearance and split time
+        self.appear_time = t
+        self.times = [t]
 
 # this is the object that holds all information for a fluorescent focus
 # this class can eventually be used in focus tracking, much like the Cell class
@@ -6005,6 +6117,18 @@ def filter_cells(Cells, attr, val, idx=None, debug=False):
 
     return Filtered_Cells
 
+def filter_orphan_foci(Foci):
+    '''Return only cells whose designated attribute equals "val".'''
+
+    Filtered_Foci = {}
+
+    for focus_id, focus in Foci.items():
+        if isinstance(focus, OrphanFocus):
+            continue
+        Filtered_Foci[focus_id] = focus
+
+    return Filtered_Foci
+
 def filter_cells_containing_val_in_attr(Cells, attr, val):
     '''Return only cells that have val in list attribute, attr.'''
 
@@ -6859,7 +6983,9 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                     peak_foci = filter_cells(fov_foci,
                                              attr='peak',
                                              val=peak_id)
+                    
                     prior_frame_foci = filter_cells_containing_val_in_attr(peak_foci, attr='times', val=t-1)
+                    prior_frame_foci = filter_orphan_foci(prior_frame_foci)
 
                     # if there were foci in prior frame, do stuff
                     if len(prior_frame_foci) > 0:
@@ -6870,6 +6996,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                         #   between focus positions
                         compare_array = np.zeros((np.max(prior_seg_foci_img),
                                                 np.max(seg_foci_img)))
+                        
                         # populate the array with dice indices
                         for prior_focus_idx in range(np.max(prior_seg_foci_img)):
 
@@ -6890,7 +7017,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 # multiply the two images and place max into campare_array
                                 product = gaus_1 * gaus_2
                                 compare_array[prior_focus_idx, this_focus_idx] = np.max(product)
-
+                                
                         # which rows of each column are maximum product of gaussian blurs?
                         max_cols_by_row = np.argmax(compare_array, axis=1)
                         for r_idx in range(compare_array.shape[0]):
@@ -6899,6 +7026,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 if c_idx == max_col_idx:
                                     continue
                                 compare_array[r_idx,c_idx] = 0
+                                
                         max_inds = np.argmax(compare_array, axis=0)
                         
                         # if compare_array has greater than 1 row, check sd of each column
@@ -6920,8 +7048,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 # grab this frame's region belonging to tracked focus
                                 tracked_label = tracked_idx + 1
                                 (tracked_region_idx, tracked_region) = [(_,reg) for _,reg in enumerate(focus_regions) if reg.label == tracked_label][0]
-                                # pop the region from focus_regions
-                                del focus_regions[tracked_region_idx]
+                                (orig_tracked_idx, orig_tracked_region) = [(_,reg) for _,reg in enumerate(orig_focus_regions) if reg.label == tracked_label][0]
 
                                 # grab prior frame's region belonging to tracked focus
                                 prior_tracked_label = max_inds[tracked_idx] + 1
@@ -6936,9 +7063,17 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                     t = t-1,
                                     debug=False
                                 )
+
+#####################################################################################################################
+# here I have to remove this focus from orig_focus_regions so that I have the right cell_centric_labels later #######
+#####################################################################################################################
+
                                 if len(prior_tracked_foci) == 0:
                                     continue
                                 # pprint(prior_tracked_foci)
+
+                                # pop the region from focus_regions
+                                del focus_regions[tracked_region_idx]
 
                                 prior_tracked_focus = [val for val in prior_tracked_foci.values()][0]
 
@@ -7111,20 +7246,42 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                     intensity_image = fl_img,
                                     t = t
                                 )
+                                # since we've already identified the cell, break this loop
+                                # and move on to next focus
+                                break
 
-                    for new_id in new_ids:
-                        # if new_id is not a key in the foci dictionary,
-                        #   that suggests the focus doesn't overlap well
-                        #   with any cells in this frame, so we'll relabel
-                        #   this frame of seg_foci_stack to zero for that
-                        #   focus to avoid trying to track a focus
-                        #   that doesn't exist.
+                        # if we didn't fint a cell for this focus,
+                        # create the focus object, but make it's cell label 0 to denote its orphan status
                         if new_id not in foci:
 
-                            # get label of new_id's region
-                            this_label = int(new_id[-2:])
-                            # set pixels in this frame that match this label to 0
-                            seg_foci_stack[frame, seg_foci_img == this_label] = 0
+                            # create a placeholder region with label = 0 to mark as orphan
+                            focus_region.cell_centric_label = 0
+
+                            foci[new_id] = OrphanFocus(
+                                cell = OrphanFocusCell(
+                                    fov_id,
+                                    peak_id,
+                                    t
+                                ),
+                                region = focus_region,
+                                seg_img = seg_foci_img,
+                                intensity_image = fl_img,
+                                t = t
+                            )
+
+                    # for new_id in new_ids:
+                    #     # if new_id is not a key in the foci dictionary,
+                    #     #   that suggests the focus doesn't overlap well
+                    #     #   with any cells in this frame, so we'll relabel
+                    #     #   this frame of seg_foci_stack to zero for that
+                    #     #   focus to avoid trying to track a focus
+                    #     #   that doesn't exist.
+                    #     if new_id not in foci:
+
+                    #         # get label of new_id's region
+                    #         this_label = int(new_id[-2:])
+                    #         # set pixels in this frame that match this label to 0
+                    #         seg_foci_stack[frame, seg_foci_img == this_label] = 0
 
     return
 
@@ -7139,6 +7296,8 @@ def update_cell_foci(cells, foci):
     in foci dictionary
     '''
     for focus_id, focus in foci.items():
+        if isinstance(focus, OrphanFocus):
+            continue
         for cell in focus.cells:
 
             cell_id = cell.id
