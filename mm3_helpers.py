@@ -6198,9 +6198,6 @@ def foci_analysis(fov_id, peak_id, Cells):
     for cell_id, cell in six.iteritems(Cells):
 
         information('Extracting foci information for %s.' % (cell_id))
-        if cell.death is None:
-            print('fixing cell death')
-            cell.death = np.nan
         # declare lists holding information about foci.
         disp_l = []
         disp_w = []
