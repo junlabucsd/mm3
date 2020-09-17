@@ -100,13 +100,8 @@ if __name__ == "__main__":
     if namespace.cellfile:
         cell_file_path = namespace.cellfile
     else:
-        try:
-            cell_file_path = os.path.join(p['cell_dir'], 'complete_cells_filtered_foci.pkl')
-            mm3.warning('Using complete_cells_filtered.pkl.')
-
-        except IOError:
-            cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
-            mm3.warning('Using complete_cells.pkl.')
+        mm3.warning('No cell file specified. Using complete_cells.pkl.')
+        cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
 
     with open(cell_file_path, 'rb') as cell_file:
         Cells = pickle.load(cell_file)
@@ -140,10 +135,7 @@ if __name__ == "__main__":
 
             mm3.foci_analysis(fov_id, peak_id, Cells_of_peak)
 
-            # test
-            # sys.exit()
-    # for (cell_id, cell) in Cells.items():
-    #     print(cell.__dict__)
+
     # Output data to both dictionary and the .mat format used by the GUI
     cell_filename = os.path.basename(cell_file_path)
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:

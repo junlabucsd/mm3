@@ -69,6 +69,8 @@ mpl.rc('font', **font)
 mpl.rcParams['pdf.fonttype'] = 42
 from matplotlib.patches import Ellipse
 
+#from memory_profiler import profile
+
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
@@ -2351,6 +2353,7 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
     return pad_dict
 
+#@profile
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
     batch_size = params['segment']['batch_size']
@@ -2389,7 +2392,6 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
-
         img_stack = np.pad(img_stack,
                            ((0,0),
                            (pad_dict['top_pad'],pad_dict['bottom_pad']),
@@ -2410,7 +2412,6 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
                                      pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
-
 
         # pad back incase the image had been trimmed
         predictions = np.pad(predictions,
@@ -2473,6 +2474,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
 
+#@profile
 def segment_fov_unet(fov_id, specs, model, color=None):
     '''
     Segments the channels from one fov using the U-net CNN model.
@@ -2512,6 +2514,7 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         if spec == 1:
             ana_peak_ids.append(peak_id)
     ana_peak_ids.sort() # sort for repeatability
+    #ana_peak_ids = ana_peak_ids[:2]
 
     segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
 
@@ -3703,28 +3706,16 @@ class Cell():
                                        (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
         # calculate elongation rate.
-        if self.birth_time > 146:
-            try:
-                times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
 
-                log_lengths = np.float64(np.log(self.lengths_w_div))
+        try:
+            times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
+            log_lengths = np.float64(np.log(self.lengths_w_div))
+            p = np.polyfit(times, log_lengths, 1) # this wants float64
+            self.elong_rate = p[0] * 60.0 # convert to hours
 
-                p = np.polyfit(times, log_lengths, 1) # this wants float64
-                self.elong_rate = p[0] * 60.0 # convert to hours
-
-            except:
-                warning('Abs_times elongation rate calculate failed for {}.'.format(self.id))
-                self.elong_rate = np.float64('NaN')
-
-        else:
-            try:
-                times = np.float64((np.array(self.times_w_div) - self.times_w_div[0]) *5.)
-                log_lengths = np.float64(np.log(self.lengths_w_div))
-                p = np.polyfit(times, log_lengths, 1) # this wants float64
-                self.elong_rate = p[0] * 60.0 # convert to hours
-            except:
-                warning('times elongation rate calculate failed for {}.'.format(self.id))
-                self.elong_rate = np.float64('NaN')
+        except:
+            self.elong_rate = np.float64('NaN')
+            warning('Elongation rate calculate failed for {}.'.format(self.id))
 
         # calculate the septum position as a number between 0 and 1
         # which indicates the size of daughter closer to the closed end
@@ -6422,15 +6413,9 @@ def foci_lap(img, img_foci, cell, t):
             # print('peak', peak_fit)
             if x_fit <= 0 or x_fit >= radius*2 or y_fit <= 0 or y_fit >= radius*2:
                 if debug_foci: print('Throw out foci (gaus fit not in gfit_area)')
-                # disp_l = np.append(disp_l,0)
-                # disp_w = np.append(0,0)
-                # foci_h = np.append(0,0)
                 continue
             elif peak_fit/cell_fl_median < peak_med_ratio:
                 if debug_foci: print('Peak does not pass height test.')
-                # disp_l = np.append(0, 0)
-                # disp_w = np.append(0, 0)
-                # foci_h = np.append(0, 0)
                 continue
             else:
                 # find x and y position relative to the whole image (convert from small box)
@@ -6509,24 +6494,6 @@ def foci_lap(img, img_foci, cell, t):
         plt.close('all')
         nblobs = len(blobs)
         print ("nblobs = {:d}".format(nblobs))
-
-    # img_overlay = img
-    # for i, spot in enumerate(xx):
-    #     y_temp = int(yy[i])
-    #     x_temp = int(xx[i])
-    #
-    #     img_overlay[y_temp-1,x_temp-1] = 12
-    #     img_overlay[y_temp-1,x_temp] = 12
-    #     img_overlay[y_temp-1,x_temp+1] = 12
-    #     img_overlay[y_temp,x_temp-1] = 12
-    #     img_overlay[y_temp,x_temp] = 12
-    #     img_overlay[y_temp,x_temp+1] = 12
-    #     img_overlay[y_temp+1,x_temp-1] = 12
-    #     img_overlay[y_temp+1,x_temp] = 12
-    #     img_overlay[y_temp+1,x_temp+1] = 12
-    # if disp_l == []: disp_l = [] # displacement in length of foci from cell center
-    # if disp_w == []: disp_w = [] # displacement in width of foci from cell center
-    # if foci_h == []: foci_h = []
 
     return disp_l, disp_w, foci_h
 
