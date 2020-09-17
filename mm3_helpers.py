@@ -69,6 +69,8 @@ mpl.rc('font', **font)
 mpl.rcParams['pdf.fonttype'] = 42
 from matplotlib.patches import Ellipse
 
+#from memory_profiler import profile
+
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
@@ -2198,10 +2200,10 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['segment']['otsu']['OTSU_threshold']
-    first_opening_size = params['segment']['otsu']['first_opening_size']
-    distance_threshold = params['segment']['otsu']['distance_threshold']
-    second_opening_size = params['segment']['otsu']['second_opening_size']
+    OTSU_threshold = params['segment']['OTSU_threshold']
+    first_opening_size = params['segment']['first_opening_size']
+    distance_threshold = params['segment']['distance_threshold']
+    second_opening_size = params['segment']['second_opening_size']
     min_object_size = params['segment']['min_object_size']
 
     # threshold image
@@ -2351,10 +2353,11 @@ def get_pad_distances(unet_shape, img_height, img_width):
 
     return pad_dict
 
+#@profile
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['unet']['batch_size']
-    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
+    batch_size = params['segment']['batch_size']
+    cellClassThreshold = params['segment']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
@@ -2471,6 +2474,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                 compression="gzip", shuffle=True, fletcher32=True)
             h5f.close()
 
+#@profile
 def segment_fov_unet(fov_id, specs, model, color=None):
     '''
     Segments the channels from one fov using the U-net CNN model.
@@ -2488,8 +2492,8 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['unet']['trained_model_image_height'],
-                  params['segment']['unet']['trained_model_image_width'])
+    unet_shape = (params['segment']['trained_model_image_height'],
+                  params['segment']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2510,6 +2514,7 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         if spec == 1:
             ana_peak_ids.append(peak_id)
     ana_peak_ids.sort() # sort for repeatability
+    #ana_peak_ids = ana_peak_ids[:2]
 
     segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model)
 
@@ -3701,11 +3706,13 @@ class Cell():
                                        (4/3) * np.pi * (self.widths_w_div[i]/2)**3)
 
         # calculate elongation rate.
+
         try:
             times = np.float64((np.array(self.abs_times) - self.abs_times[0]) / 60.0)
             log_lengths = np.float64(np.log(self.lengths_w_div))
             p = np.polyfit(times, log_lengths, 1) # this wants float64
             self.elong_rate = p[0] * 60.0 # convert to hours
+
         except:
             self.elong_rate = np.float64('NaN')
             warning('Elongation rate calculate failed for {}.'.format(self.id))
@@ -6163,7 +6170,10 @@ def foci_analysis(fov_id, peak_id, Cells):
     #     os.makedirs(foci_dir)
 
     # Import segmented and fluorescenct images
-    image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
+    try:
+        image_data_seg = load_stack(fov_id, peak_id, color='seg_unet')
+    except IOError:
+        image_data_seg = load_stack(fov_id, peak_id, color='seg_otsu')
     image_data_FL = load_stack(fov_id, peak_id,
                                color='sub_{}'.format(params['foci']['foci_plane']))
 
@@ -6179,7 +6189,6 @@ def foci_analysis(fov_id, peak_id, Cells):
     for cell_id, cell in six.iteritems(Cells):
 
         information('Extracting foci information for %s.' % (cell_id))
-
         # declare lists holding information about foci.
         disp_l = []
         disp_w = []
@@ -6284,9 +6293,9 @@ def foci_cell(cell_id, cell, t0, image_data_seg, image_data_FL):
         # if there is no information, append an empty list.
         # Should this be NaN?
         else:
-            disp_l.append([])
-            disp_w.append([])
-            foci_h.append([])
+            disp_l.append(np.nan)
+            disp_w.append(np.nan)
+            foci_h.append(np.nan)
             # foci_stack[i] = image_data_temp_seg
 
     # add information to the cell (will replace old data)
@@ -6485,21 +6494,6 @@ def foci_lap(img, img_foci, cell, t):
         plt.close('all')
         nblobs = len(blobs)
         print ("nblobs = {:d}".format(nblobs))
-
-    # img_overlay = img
-    # for i, spot in enumerate(xx):
-    #     y_temp = int(yy[i])
-    #     x_temp = int(xx[i])
-    #
-    #     img_overlay[y_temp-1,x_temp-1] = 12
-    #     img_overlay[y_temp-1,x_temp] = 12
-    #     img_overlay[y_temp-1,x_temp+1] = 12
-    #     img_overlay[y_temp,x_temp-1] = 12
-    #     img_overlay[y_temp,x_temp] = 12
-    #     img_overlay[y_temp,x_temp+1] = 12
-    #     img_overlay[y_temp+1,x_temp-1] = 12
-    #     img_overlay[y_temp+1,x_temp] = 12
-    #     img_overlay[y_temp+1,x_temp+1] = 12
 
     return disp_l, disp_w, foci_h
 
