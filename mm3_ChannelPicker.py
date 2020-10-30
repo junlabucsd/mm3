@@ -33,7 +33,8 @@ from multiprocessing import Pool
 import warnings
 import h5py
 
-from tensorflow.python.keras import models
+from tensorflow.keras import models
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 # user modules
 # realpath() will make your script run, even if you symlink it
@@ -985,6 +986,7 @@ if __name__ == "__main__":
         unet_shape = (p['segment']['trained_model_image_height'],
                       p['segment']['trained_model_image_width'])
 
+        batch_size = p['segment']['batch_size']
         cellClassThreshold = p['segment']['cell_class_threshold']
         if cellClassThreshold == 'None': # yaml imports None as a string
             cellClassThreshold = False
@@ -999,8 +1001,8 @@ if __name__ == "__main__":
                          'shuffle':False}
         # arguments to predict_generator
         predict_args = dict(use_multiprocessing=True,
-                            workers=p['num_analyzers'],
-                            verbose=1)
+                        workers=p['num_analyzers'],
+                        verbose=1)
 
         for fov_id in fov_id_list:
 
@@ -1047,10 +1049,13 @@ if __name__ == "__main__":
                                mode='constant')
             img_stack = np.expand_dims(img_stack, -1)
 
-            # set up image generator
-            image_generator = mm3.CellSegmentationDataGenerator(img_stack, **data_gen_args)
-            # run predictions
-            predictions = model.predict_generator(image_generator, **predict_args)[:,:,:,0]
+            image_datagen = ImageDataGenerator()
+            image_generator = image_datagen.flow(x=img_stack,
+                                                batch_size=batch_size,
+                                                shuffle=False) # keep same order
+
+            # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
+            predictions = model.predict_generator(image_generator, **predict_args)
             # if p['debug']:
             #     fig,ax = plt.subplots(ncols=5);
             #     for i in range(5):

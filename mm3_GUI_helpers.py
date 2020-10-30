@@ -604,27 +604,33 @@ class PhaseWidget(QWidget):
                 self.img = self.phaseStack[self.frameIndex,:,:]
                 self.originalImgMax = np.max(self.img)
                 # self.originalImgMax = np.max(self.phaseStack)
-                originalRGBImg = color.gray2rgb(self.img/2**16*2**8).astype('uint8')
-                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
+                originalRGBImg = color.gray2rgb(self.img)
+                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGBA64)
 
-                rescaledImg = self.img/self.originalImgMax*255
-                RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
+                rescaledImg = self.img/self.originalImgMax*(2**16-1)
+                RGBImg = color.gray2rgba(rescaledImg)
                 self.originalHeight, self.originalWidth, self.originalChannelNumber = RGBImg.shape
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGBA64).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
+
+                # rescaledImg = self.img/self.originalImgMax*255
+                # RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
+                # self.originalHeight, self.originalWidth, self.originalChannelNumber = RGBImg.shape
+                # self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
+                # self.phaseQpixmap = QPixmap(self.phaseQimage)
 
                 self.label = QLabel(self)
                 self.label.setPixmap(self.phaseQpixmap)
 
         def setImg(self):
                 self.originalImgMax = np.max(self.img)
-                originalRGBImg = color.gray2rgb(self.img/2**16*2**8).astype('uint8')
-                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGB888)
+                originalRGBImg = color.gray2rgb(self.img)
+                self.originalPhaseQImage = QImage(originalRGBImg, originalRGBImg.shape[1], originalRGBImg.shape[0], originalRGBImg.strides[0], QImage.Format_RGBA64)
 
                 # rescaledImg = self.img/np.max(self.img)*255
-                rescaledImg = self.img/self.originalImgMax*255
-                RGBImg = color.gray2rgb(rescaledImg).astype('uint8')
-                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGB888).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
+                rescaledImg = self.img/self.originalImgMax*(2**16-1)
+                RGBImg = color.gray2rgb(rescaledImg)
+                self.phaseQimage = QImage(RGBImg, RGBImg.shape[1], RGBImg.shape[0], RGBImg.strides[0], QImage.Format_RGBA64).scaled(1024, 1024, aspectRatioMode=Qt.KeepAspectRatio)
                 self.phaseQpixmap = QPixmap(self.phaseQimage)
                 self.label.setPixmap(self.phaseQpixmap)
 

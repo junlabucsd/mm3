@@ -1153,14 +1153,16 @@ def predict_first_image_channels(img, model,
                         'workers':params['num_analyzers']}
 
     img_generator = TrapSegmentationDataGenerator(crops, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     prediction = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     #print(prediction.shape)
 
     cropsExpand = tileImage(imgStackExpand, subImageNumber=padSubImageNumber)
     cropsExpand = np.expand_dims(cropsExpand, -1)
     img_generator = TrapSegmentationDataGenerator(cropsExpand, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     predictionExpand = imageConcatenatorFeatures2(predictions, subImageNumber=padSubImageNumber)
     predictionExpand = util.crop(predictionExpand, ((0,0),(shiftDistance,shiftDistance),(shiftDistance,shiftDistance),(0,0)))
     #print(predictionExpand.shape)
@@ -1168,7 +1170,8 @@ def predict_first_image_channels(img, model,
     cropsShiftLeft = tileImage(imgStackShiftLeft, subImageNumber=subImageNumber)
     cropsShiftLeft = np.expand_dims(cropsShiftLeft, -1)
     img_generator = TrapSegmentationDataGenerator(cropsShiftLeft, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     predictionLeft = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionLeft = np.pad(predictionLeft, pad_width=((0,0),(0,0),(0,shiftDistance),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,shiftDistance:,:]
@@ -1177,7 +1180,8 @@ def predict_first_image_channels(img, model,
     cropsShiftRight = tileImage(imgStackShiftRight, subImageNumber=subImageNumber)
     cropsShiftRight = np.expand_dims(cropsShiftRight, -1)
     img_generator = TrapSegmentationDataGenerator(cropsShiftRight, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     predictionRight = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionRight = np.pad(predictionRight, pad_width=((0,0),(0,0),(shiftDistance,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:,:(-1*shiftDistance),:]
@@ -1187,7 +1191,8 @@ def predict_first_image_channels(img, model,
     #print(cropsShiftUp.shape)
     cropsShiftUp = np.expand_dims(cropsShiftUp, -1)
     img_generator = TrapSegmentationDataGenerator(cropsShiftUp, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     predictionUp = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionUp = np.pad(predictionUp, pad_width=((0,0),(0,shiftDistance),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,shiftDistance:,:,:]
@@ -1196,7 +1201,8 @@ def predict_first_image_channels(img, model,
     cropsShiftDown = tileImage(imgStackShiftDown, subImageNumber=subImageNumber)
     cropsShiftDown = np.expand_dims(cropsShiftDown, -1)
     img_generator = TrapSegmentationDataGenerator(cropsShiftDown, **data_gen_args)
-    predictions = model.predict_generator(img_generator, **predict_gen_args)
+    # predictions = model.predict_generator(img_generator, **predict_gen_args)
+    predictions = model.predict(img_generator, **predict_gen_args)
     predictionDown = imageConcatenatorFeatures(predictions, subImageNumber=subImageNumber)
     predictionDown = np.pad(predictionDown, pad_width=((0,0),(shiftDistance,0),(0,0),(0,0)),
                       mode='constant', constant_values=((0,0),(0,0),(0,0),(0,0)))[:,:(-1*shiftDistance),:,:]
@@ -2595,7 +2601,8 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                              shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
-        predictions = model.predict_generator(image_generator, **predict_args)
+        # predictions = model.predict_generator(image_generator, **predict_args)
+        predictions = model.predict(image_generator, **predict_args)
 
         # post processing
         segmented_imgs = prediction_post_processing(predictions, pad_dict, unet_shape)
@@ -2666,7 +2673,8 @@ def segment_stack_unet(fname, model, mode='segment'):
                                             batch_size=batch_size,
                                             shuffle=False) # keep same order
 
-    pred = model.predict_generator(image_generator, **predict_args)
+    # pred = model.predict_generator(image_generator, **predict_args)
+    pred = model.predict(image_generator, **predict_args)
 
     seg = prediction_post_processing(pred, pad_dict, unet_shape, mode=mode, remote=True)
 
@@ -2736,7 +2744,7 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     # arguments to data generator
     data_gen_args = {'batch_size':params['foci']['batch_size'],
                      'n_channels':1,
-                     'normalize_to_one':True,
+                     'normalize_to_one':False,
                      'shuffle':False}
     # arguments to predict_generator
     predict_args = dict(use_multiprocessing=False,
@@ -2761,7 +2769,7 @@ def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         image_generator = FocusSegmentationDataGenerator(img_stack, **data_gen_args)
 
         # predict foci locations.
-        predictions = model.predict_generator(image_generator, **predict_args)
+        predictions = model.predict(image_generator, **predict_args)
 
         # post processing
         # remove padding including the added last dimension
@@ -2927,10 +2935,12 @@ class CellSegmentationDataGenerator(utils.Sequence):
                 X = X[:i,...]
                 break
 
+            tmpImg = tmpImg.astype('float32')
+
             # ensure image is uint8
-            if tmpImg.dtype=="uint16":
-                tmpImg = tmpImg / 2**16 * 2**8
-                tmpImg = tmpImg.astype('uint8')
+            # if tmpImg.dtype=="uint16":
+            #     tmpImg = tmpImg / 2**16 * 2**8
+            #     tmpImg = tmpImg.astype('uint8')
 
             if self.normalize_to_one:
                 with warnings.catch_warnings():
@@ -3082,8 +3092,8 @@ class FocusSegmentationDataGenerator(utils.Sequence):
         else:
             X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels), 'uint16')
 
-        if self.normalize_to_one:
-            max_pixels = []
+        # if self.normalize_to_one:
+        #     max_pixels = []
 
         # Generate data
         for i in range(self.batch_size):
@@ -3252,6 +3262,18 @@ def all_loss(y_true, y_pred):
 
 def absolute_dice_loss(y_true, y_pred):
     loss = dice_loss(y_true, y_pred) + absolute_diff(y_true, y_pred)
+    return loss
+
+def weighted_bce(y_true, y_pred):
+    bce = losses.binary_crossentropy(y_true, y_pred)
+    bce = tf.expand_dims(bce, -1)
+    y_true = tf.cast(y_true, 'float32')
+    weights = y_true * 80. + 1.
+    weighted_loss = tf.reduce_mean(bce * weights)
+    return weighted_loss
+
+def weighted_bce_dice_loss(y_true, y_pred):
+    loss = weighted_bce(y_true, y_pred) + dice_loss(y_true, y_pred)
     return loss
 
 def recall_m(y_true, y_pred):
@@ -6232,6 +6254,11 @@ def populate_focus_arrays(objects, data_dict, cell_quants=False, wide=False):
 
     for i,obj in enumerate(objects.values()):
 
+        try:
+            len(obj)
+        except TypeError:
+            continue
+
         if wide:
             start_idx = i
             end_idx = i + 1
@@ -6401,8 +6428,13 @@ def compile_foci_info_long_df(Foci):
 
     # count the number of rows that will be in the long dataframe
     long_df_row_number = 0
-    for focus in Foci.values():
-        long_df_row_number += len(focus)
+    orphan_ids = []
+    for k,focus in Foci.items():
+        try:
+            long_df_row_number += len(focus)
+        except TypeError:
+            orphan_ids.append(k)
+            continue
 
     # initialize some arrays for filling with data
     data = {

@@ -137,12 +137,14 @@ if __name__ == "__main__":
     seg_model = models.load_model(
         model_file_path,
         custom_objects = {
+            'weighted_bce_dice_loss': mm3.weighted_bce_dice_loss,
             'weighted_bce': mm3.weighted_bce,
             'bce_dice_loss': mm3.bce_dice_loss,
             'dice_loss': mm3.dice_loss,
             'precision_m': mm3.precision_m,
             'recall_m': mm3.recall_m,
-            'f_precision_m': mm3.f_precision_m
+            'f_precision_m': mm3.f_precision_m,
+            'f2_m': mm3.f2_m
         }
     )
     mm3.information("Model loaded.")
