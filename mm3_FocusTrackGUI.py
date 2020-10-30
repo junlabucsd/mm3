@@ -708,34 +708,14 @@ class TrackItem(QGraphicsScene):
             for focus_id,focus in t_foci.items():
 
                 focus_idx = focus.times.index(t)
-                focus_cell_label = focus.cell_labels[focus_idx]
+                # focus_cell_label = focus.cell_labels[focus_idx]
                 focus_region = focus.regions[focus_idx]
                 
-                for cell in focus.cells:
-                    cell_times = cell.times
-                    # if the current time is in this cell grab the index
-                    #  for this cell and its id, then break the loop
-                    if t in cell_times:
-                        cell_idx = cell.times.index(t)
-                        cell_id = cell.id
-                        break
-
-                # print('Focus {} is in cell {}.'.format(focus_id, cell_id))
-                # print([c.id for c in focus.cells])
-                # instantiate the regions and matrix info dictionary.
-                #  Will add regionprops and events in the 'regions' dict later.
-                if not cell_id in t_cells:
-                    t_cells[cell_id] = {'regions' : {}, 'matrix' : None, 'daughters' : None}
-
-                    cell_info = t_cells[cell_id]
-                    if cell.daughters is not None:
-                        cell_info['daughters'] = [d.id for d in cell.daughters]
-
-                    # We need to build the interaction matrix for each cell.
-                    # First we need to know the number of regions in cell at time t
+                    # We need to build the interaction matrix for each frame.
+                    # First we need to know the number of regions in frame at time t
                     #  so that we can instantiate an interaction matrix with correct 
-                    #  firt dimension
-                    # Loop through cell's foci, filtering them by time
+                    #  first dimension
+                    # Loop through frame's foci, filtering them by time
                     n_regions_in_t = 0
                     # print(cell.foci)
 

@@ -7024,8 +7024,9 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                         prior_regions = measure.regionprops(prior_seg_foci_img)
 
                         # compare_array is prior_focus_number x this_focus_number
-                        #   contains dice indices for each pairwise comparison
-                        #   between focus positions
+                        #   contains product of multiplying blurred focus mask
+                        #   for each pair-wise comparison of foci from the prior
+                        #   frame to this frame
                         compare_array = np.zeros((np.max(prior_seg_foci_img),
                                                 np.max(seg_foci_img)))
                         
@@ -7033,6 +7034,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                         for prior_focus_idx in range(np.max(prior_seg_foci_img)):
 
                             prior_focus_mask = np.zeros(seg_foci_img.shape)
+                            # set this focus' pixels to 1
                             prior_focus_mask[prior_seg_foci_img == (prior_focus_idx + 1)] = 1
 
                             # apply gaussian blur with sigma=1 to prior focus mask
@@ -7051,6 +7053,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 compare_array[prior_focus_idx, this_focus_idx] = np.max(product)
                                 
                         # which rows of each column are maximum product of gaussian blurs?
+                        # reset other cells in compare_array to 0
                         max_cols_by_row = np.argmax(compare_array, axis=1)
                         for r_idx in range(compare_array.shape[0]):
                             max_col_idx = max_cols_by_row[r_idx]
@@ -7134,10 +7137,10 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                     pixels_one = len(np.where(masked_focus_img == 1)[0])
 
                                     # if over half the focus is within this cell, do the following
-                                    if pixels_two/pixels_one >= 0.5:
+                                    if pixels_two/pixels_one > 0:
 
                                         # focus belongs to this cell, so now we need to keep only foci
-                                        # in this cell, relabel foci with cell-centric focus labels
+                                        # in this cell, relabel foci with cell-centric focus labels 
                                         # current focus' label is 'tracked_label'.
                                         # iterate from 1 to 'tracked_label', successively adding
                                         # foci within this cell to the mask, then labelling the resulting mask
@@ -7154,7 +7157,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                             pixels_one = len(np.where(masked_focus_img == 1)[0])
 
                                             # if over half the focus is within this cell, keep the focus
-                                            if pixels_two/pixels_one >= 0.5:
+                                            if pixels_two/pixels_one > 0:
                                                 foci_in_cell_seg_img = foci_in_cell_seg_img + masked_focus_img
 
                                         foci_in_cell_label_img = measure.label(foci_in_cell_seg_img)
@@ -7245,7 +7248,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                             pixels_one = len(np.where(masked_focus_img == 1)[0])
 
                             # if over half the focus is within this cell, do the following
-                            if pixels_two/pixels_one >= 0.5:
+                            if pixels_two/pixels_one > 0:
 
                                 # focus belongs to this cell, so now we need to keep only foci
                                 # in this cell, relabel foci, and get new labels for cell-centric focus
@@ -7262,7 +7265,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                     pixels_one = len(np.where(masked_focus_img == 1)[0])
 
                                     # if over half the focus is within this cell, keep the focus
-                                    if pixels_two/pixels_one >= 0.5:
+                                    if pixels_two/pixels_one > 0:
                                         retained_foci_seg_img = retained_foci_seg_img + masked_focus_img
 
                                 retained_foci_label_img = measure.label(retained_foci_seg_img)
@@ -7282,7 +7285,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                 # and move on to next focus
                                 break
 
-                        # if we didn't fint a cell for this focus,
+                        # if we didn't find a cell for this focus,
                         # create the focus object, but make it's cell label 0 to denote its orphan status
                         if new_id not in foci:
 
