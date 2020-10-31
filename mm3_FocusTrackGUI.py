@@ -388,7 +388,7 @@ class TrackItem(QGraphicsScene):
             track_file_name_df.to_csv(df_file_name,index=False)
 
     def no_track_pickle_lookup(self):
-        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack, self.cellLabelStack, self.these_Cells)
+        self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
 
     def get_track_pickle(self):
 
@@ -396,7 +396,7 @@ class TrackItem(QGraphicsScene):
         # look for previously updated tracking information and load that if it is found.
         if not os.path.isfile(self.pickle_file_name):
             # get tracking information in a format usable and updatable by qgraphicsscene
-            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack, self.cellLabelStack, self.these_Cells)
+            self.track_info = self.create_tracking_information(self.fov_id, self.peak_id, self.labelStack, self.phaseStack)
         else:
             with open(self.pickle_file_name, 'rb') as pickle_file:
                 try:
@@ -598,27 +598,27 @@ class TrackItem(QGraphicsScene):
         time_info = self.track_info[time]
         time_info['time'] = time
 
-        for cell_data in time_info['cells'].values():
-            regions = cell_data['regions']
-            for region in regions.values():
-                brush = QBrush()
-                brush.setStyle(Qt.SolidPattern)
-                pen = QPen()
-                pen.setStyle(Qt.SolidLine)
-                props = region['props']
-                coords = props.coords
-                min_row, min_col, max_row, max_col = props.bbox
-                label = props.label
-                centroidY,centroidX = props.centroid
-                brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
-                brushColor.setAlphaF(0.15)
-                brush.setColor(brushColor)
-                pen.setColor(brushColor)
+        # for cell_data in time_info['cells'].values():
+        regions = time_info['regions']
+        for region in regions.values():
+            brush = QBrush()
+            brush.setStyle(Qt.SolidPattern)
+            pen = QPen()
+            pen.setStyle(Qt.SolidLine)
+            props = region['props']
+            coords = props.coords
+            min_row, min_col, max_row, max_col = props.bbox
+            label = props.label
+            centroidY,centroidX = props.centroid
+            brushColor = RGBLabelImg.pixelColor(centroidX,centroidY)
+            brushColor.setAlphaF(0.15)
+            brush.setColor(brushColor)
+            pen.setColor(brushColor)
 
-                region['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
-                                            'left_x':min_col, 'right_x':max_col,
-                                            'coords':coords,
-                                            'pen':pen, 'brush':brush}
+            region['region_graphic'] = {'top_y':min_row, 'bottom_y':max_row,
+                                        'left_x':min_col, 'right_x':max_col,
+                                        'coords':coords,
+                                        'pen':pen, 'brush':brush}
 
         return(phaseQpixmap, time_info)
 
@@ -731,7 +731,6 @@ class TrackItem(QGraphicsScene):
             if (focus_tmp.times[-1] - focus_tmp.times[0])+1 > len(focus_tmp.times):
                 print('Focus {} has less time points than it should, skipping.'.format(focus_id))
                 continue
-#################################################################
 
             for i,t in enumerate(focus_tmp.times):
 
@@ -740,7 +739,7 @@ class TrackItem(QGraphicsScene):
 
                 # M migration, event 0
                 # If the focus has another time point after this one then it must have migrated
-                max_focus_time = np.max(focus.times)
+                max_focus_time = np.max(focus_tmp.times)
                 # print('focus {} has max time {}.'.format(focus_id,max_focus_time))
                 if t < max_focus_time:
                     t_info['regions'][label_tmp]['events'][0] = 1
@@ -750,7 +749,7 @@ class TrackItem(QGraphicsScene):
                     t_info['matrix'][label_tmp, focus_tmp.labels[i+1]] = 1
 
                 # S division, 1
-                if focus.daughters and t == max_focus_time:
+                if focus_tmp.daughters and t == max_focus_time:
                     t_info['regions'][label_tmp]['events'][1] = 1
 
                     # daughter 1 and 2 label
@@ -766,11 +765,11 @@ class TrackItem(QGraphicsScene):
 
                 # I appears, 2
                 if not t == 1:
-                    if not focus.parent and focus_idx == 0:
+                    if not focus_tmp.parent and i == 0:
                         t_info['regions'][label_tmp]['events'][2] = 1
 
                 # O disappears, 3
-                if not focus.daughters and t == max_focus_time:
+                if not focus_tmp.daughters and t == max_focus_time:
                     t_info['regions'][label_tmp]['events'][3] = 1
                     t_info['matrix'][label_tmp, 0] = 1
 
@@ -938,57 +937,61 @@ class TrackItem(QGraphicsScene):
 
     def add_regions_to_frame(self, t_info, frame):
         # loop through foci within this frame and add their ellipses as children of their corresponding qpixmap object
-        all_t_cells = t_info['cells']
+        # all_t_cells = t_info['cells']
         # print(regions_and_events)
         frame_time = t_info['time']
-        for cell_id,cell_info in all_t_cells.items():
-            regions = cell_info['regions']
-            for region in regions.values():
-                # construct the ellipse
-                graphic = region['region_graphic']
-                top_left = QPoint(graphic['left_x'],graphic['top_y'])
-                bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
-                rect = QRectF(top_left,bottom_right)
+        # for cell_id,cell_info in all_t_cells.items():
+        regions = t_info['regions']
+        for region in regions.values():
+            # construct the ellipse
+            graphic = region['region_graphic']
+            top_left = QPoint(graphic['left_x'],graphic['top_y'])
+            bottom_right = QPoint(graphic['right_x'],graphic['bottom_y'])
+            rect = QRectF(top_left,bottom_right)
 
-                # painter_path = graphic['path']
-                pen = graphic['pen']
-                brush = graphic['brush']
+            # painter_path = graphic['path']
+            pen = graphic['pen']
+            brush = graphic['brush']
 
-                # focus = FocusItem(region, parent=frame)
+            # focus = FocusItem(region, parent=frame)
 
-                # instantiate a QGraphicsEllipseItem
-                ellipse = QGraphicsEllipseItem(rect, frame)
-                # add focus information to the QGraphicsEllipseItem
-                ellipse.focusMatrix = cell_info['matrix']
-                ellipse.focusEvents = region['events']
-                ellipse.focusProps = region['props']
-                ellipse.cell_id = cell_id
-                ellipse.cell_daughters = cell_info['daughters']
-                # print(dir(region['props']))
-                ellipse.time = frame_time
-                ellipse.setBrush(brush)
-                ellipse.setPen(pen)
+            # instantiate a QGraphicsEllipseItem
+            ellipse = QGraphicsEllipseItem(rect, frame)
+            # add focus information to the QGraphicsEllipseItem
+            ellipse.focusMatrix = t_info['matrix']
+            ellipse.focusEvents = region['events']
+            ellipse.focusProps = region['props']
 
-                # # add focus information to the QGraphicsPathItem
-                # path = QGraphicsPathItem(painter_path, frame)
-                # path.focusMatrix = regions_and_events['matrix']
-                # path.focusEvents = regions_and_events['regions'][region_id]['events']
-                # path.focusProps = regions_and_events['regions'][region_id]['props']
-                # path.time = frame_time
-                # path.setBrush(brush)
-                # path.setPen(pen)
+            #################### 2020-10-31 #####################
+            # ellipse.cell_id = cell_id
+            # ellipse.cell_daughters = t_info['daughters']
+            #####################################################
 
-                # set up QPainter object to actually paint the QGraphicsPathItem
-                # painter = QPainter()
-                # paint_device = QPaintDevice()
-                # painter.begin(paint_device)
-                # painter.setPen(pen)
-                # painter.setBrush(brush)
-                # painter.drawPath(painter_path)
-                # painter.end()
+            # print(dir(region['props']))
+            ellipse.time = frame_time
+            ellipse.setBrush(brush)
+            ellipse.setPen(pen)
 
-                # path.paint()
-                #
+            # # add focus information to the QGraphicsPathItem
+            # path = QGraphicsPathItem(painter_path, frame)
+            # path.focusMatrix = regions_and_events['matrix']
+            # path.focusEvents = regions_and_events['regions'][region_id]['events']
+            # path.focusProps = regions_and_events['regions'][region_id]['props']
+            # path.time = frame_time
+            # path.setBrush(brush)
+            # path.setPen(pen)
+
+            # set up QPainter object to actually paint the QGraphicsPathItem
+            # painter = QPainter()
+            # paint_device = QPaintDevice()
+            # painter.begin(paint_device)
+            # painter.setPen(pen)
+            # painter.setBrush(brush)
+            # painter.drawPath(painter_path)
+            # painter.end()
+
+            # path.paint()
+            #
 
     def draw_focus_events(self, start_time=1, end_time=None, update=False, original_event_type=None):
 
@@ -1013,12 +1016,6 @@ class TrackItem(QGraphicsScene):
         # The 'events' array is binary. The events are [migration, division, death, birth, appearance, disappearance, no_data], where a 0 at a given position in the 'events'
         #      array indicates the given event did not occur, and a 1 indicates it did occur.
 
-
-##############################################################################################
-## Okay, so I don't have a counting issue after all. I have a cell-centrism issue again.
-## The code below loops over all regions in each frame, ignoring cells.
-## Needs updated to be gnostic to cells.
-
         # loop through frames at valid times
         for time in valid_times:
             # print()
@@ -1041,15 +1038,18 @@ class TrackItem(QGraphicsScene):
                                         self.removeItem(items[i])
 
                             focus_properties = startItem.focusProps
-                            focus_label = focus_properties.cell_centric_label
+                            focus_label = focus_properties.label
                             focus_interactions = startItem.focusMatrix[focus_label,:]
                             focus_events = startItem.focusEvents
-                            start_cell_id = startItem.cell_id
-                            start_cell_compare_ids = startItem.cell_daughters
-                            if start_cell_compare_ids is not None:
-                                start_cell_compare_ids.append(start_cell_id)
-                            else:
-                                start_cell_compare_ids = [start_cell_id]
+                            ############################ 2020-10-31 #################################
+                            # start_cell_id = startItem.cell_id
+                            # start_cell_compare_ids = startItem.cell_daughters
+                            # if start_cell_compare_ids is not None:
+                            #     start_cell_compare_ids.append(start_cell_id)
+                            # else:
+                            #     start_cell_compare_ids = [start_cell_id]
+                            ########################################################################
+
                             # print('cell label: ', focus_label)
                             # print('events: ', focus_events)
                             # print('interactions: ', focus_interactions)
@@ -1083,33 +1083,37 @@ class TrackItem(QGraphicsScene):
                                         # if the item is an ellipse, move on to look into it further
                                         if endItem.type() == 4:
                                             end_focus_properties = endItem.focusProps
-                                            end_focus_label = end_focus_properties.cell_centric_label
-                                            end_cell_id = endItem.cell_id
+                                            end_focus_label = end_focus_properties.label
+                                            # end_cell_id = endItem.cell_id
                                             # see whether this ellipse's cell is in the startItem's cell or daughters
-                                            if end_cell_id in start_cell_compare_ids:
+
+                                            ############### 2020-10-31 ####################
+                                            # if end_cell_id in start_cell_compare_ids:
+                                            ###############################################
+
                                                 # test whether this ellipse represents the
                                                 #  focus that interacts with the focus represented
                                                 #  by self.startItem
-                                                if focus_interactions[end_focus_label] == 1:
-                                                    # if this is the focus that interacts with the former frame's focus, draw the line.
-                                                    endPointY = end_focus_properties.centroid[0]
-                                                    endPointX = end_focus_properties.centroid[1] + endItem.parentItem().x()
-                                                    lastPoint = QPoint(endPointX, endPointY)
-                                                    if 0 in event_indices:
-                                                        # If the zero-th element in event_indices was 1, the focus migrates in the next frame
-                                                        #  get the information from focus_matrix to figure out to which region
-                                                        #  in the next frame it migrated
-                                                        # set self.migration = True
-                                                        self.set_migration()
+                                            if focus_interactions[end_focus_label] == 1:
+                                                # if this is the focus that interacts with the former frame's focus, draw the line.
+                                                endPointY = end_focus_properties.centroid[0]
+                                                endPointX = end_focus_properties.centroid[1] + endItem.parentItem().x()
+                                                lastPoint = QPoint(endPointX, endPointY)
+                                                if 0 in event_indices:
+                                                    # If the zero-th element in event_indices was 1, the focus migrates in the next frame
+                                                    #  get the information from focus_matrix to figure out to which region
+                                                    #  in the next frame it migrated
+                                                    # set self.migration = True
+                                                    self.set_migration()
 
-                                                    if 1 in event_indices:
-                                                        self.set_children()
+                                                if 1 in event_indices:
+                                                    self.set_children()
 
-                                                    if 4 in event_indices:
-                                                        self.set_join()
+                                                if 4 in event_indices:
+                                                    self.set_join()
 
-                                                    eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem, lastPoint=lastPoint, endItem=endItem)
-                                                    self.addItem(eventItem)
+                                                eventItem = self.set_event_item(firstPoint=firstPoint, startItem=startItem, lastPoint=lastPoint, endItem=endItem)
+                                                self.addItem(eventItem)
                                 except KeyError:
                                     continue
 
@@ -1240,7 +1244,7 @@ class TrackItem(QGraphicsScene):
         # get all foci in the frame to update each one, in case they were indirectly affected by the event that was drawn
         for focus in frame.childItems():
 
-            focus_label = focus.focusProps.cell_centric_label
+            focus_label = focus.focusProps.label
             # print(focus_label)
             # grab all currently-drawn events for the focus of interest
             events, event_items = self.get_all_focus_event_items(focus, return_forbidden_items_list=True)
@@ -1252,45 +1256,46 @@ class TrackItem(QGraphicsScene):
             #     If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
             
             t_info = self.track_info[frame_time]
-            all_t_cells = t_info['cells']
-            for cell_info in all_t_cells.values():
+            # pprint(t_info)
+            # all_t_cells = t_info['cells']
+            # for cell_info in all_t_cells.values():
 
-                time_matrix = cell_info['matrix']
-                focus_events = cell_info['regions'][focus_label]['events']
+            time_matrix = t_info['matrix']
+            focus_events = t_info['regions'][focus_label]['events']
 
-                # print("Events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
-                #       focus_events, "\n\n", time_matrix, "\n")
-                # relabel all interactions for this focus as zero to later fill in appropriate 1's based on updated events
+            # print("Events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
+            #       focus_events, "\n\n", time_matrix, "\n")
+            # relabel all interactions for this focus as zero to later fill in appropriate 1's based on updated events
 
-                time_matrix[focus_label,:] = 0
-                # print(focus_events) # for debugging to verify changes are being made appropriately.
-                # set all focus events temporarily to zero to fill back in with appropriate 1's
-                focus_events[...] = 0
+            time_matrix[focus_label,:] = 0
+            # print(focus_events) # for debugging to verify changes are being made appropriately.
+            # set all focus events temporarily to zero to fill back in with appropriate 1's
+            focus_events[...] = 0
 
-                # If an event is a migration or a child line, determine whether
-                #   the migration line starts at the focus to be updated, and whether
-                #   the child line begins or ends at the current focus.
-                #   Update events array and linkage matrix accordingly
-                for event in events:
-                    event_type = event.type()
-                    # if the event is a migration or child line
-                    if event_type in self.line_events_list:
-                        # if the line starts with the focus to be updated, set the appropriate
-                        #  index in focus_events to 1.
+            # If an event is a migration or a child line, determine whether
+            #   the migration line starts at the focus to be updated, and whether
+            #   the child line begins or ends at the current focus.
+            #   Update events array and linkage matrix accordingly
+            for event in events:
+                event_type = event.type()
+                # if the event is a migration or child line
+                if event_type in self.line_events_list:
+                    # if the line starts with the focus to be updated, set the appropriate
+                    #  index in focus_events to 1.
 
-                        if event.startItem == focus:
-                            focus_events[self.event_type_index_lookup[event_type]] = 1
-                            start_focus_label = event.startItem.focusProps.cell_centric_label
-                            end_focus_label = event.endItem.focusProps.cell_centric_label
-                            # print(start_focus_label, end_focus_label)
-                            time_matrix[start_focus_label,end_focus_label] = 1
-
-                    # if the event is either disappear or die, do this stuff
-                    else:
+                    if event.startItem == focus:
                         focus_events[self.event_type_index_lookup[event_type]] = 1
-                        if event_type == "DissapearSymbol":
-                            focus_label = event.item.focusProps.cell_centric_label
-                            time_matrix[focus_label,0] = 1
+                        start_focus_label = event.startItem.focusProps.label
+                        end_focus_label = event.endItem.focusProps.label
+                        # print(start_focus_label, end_focus_label)
+                        time_matrix[start_focus_label,end_focus_label] = 1
+
+                # if the event is either disappear or die, do this stuff
+                else:
+                    focus_events[self.event_type_index_lookup[event_type]] = 1
+                    if event_type == "DissapearSymbol":
+                        focus_label = event.item.focusProps.label
+                        time_matrix[focus_label,0] = 1
 
             # print("New events and matrix for focus {} at time {}: \n\n".format(focus_label, frame_time),
                     # focus_events, "\n\n", time_matrix, "\n")

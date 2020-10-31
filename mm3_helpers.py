@@ -4406,6 +4406,9 @@ class OrphanFocus():
         self.regions = [region]
         self.fov = cell.fov
         self.peak = cell.peak
+        self.labels = [region.label]
+        self.daughters = None
+        self.parent = None
 
         # cell is an OrphanFocusCell object
         self.cells = [cell]
