@@ -347,9 +347,9 @@ class TrackItem(QGraphicsScene):
         track_info = self.track_info
 
         for t, time_info in track_info.items():
-            all_t_cells = time_info['cells']
-            for cell_id, cell_info in all_t_cells.items():
-                for region_label, region in cell_info['regions'].items():
+            # all_t_cells = time_info['cells']
+            # for cell_id, cell_info in all_t_cells.items():
+                for region_label, region in time_info['regions'].items():
 
                     if 'region_graphic' in region:
                         if 'pen' in region['region_graphic']:
@@ -692,7 +692,7 @@ class TrackItem(QGraphicsScene):
 
         t_adj = 1
         
-        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
+        regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:], img_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
         regions_and_events_by_time = {frame+t_adj: {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
         # iterate through all times, collecting focus information and adding
         # cell-centric tracking info to the dictionary as we go

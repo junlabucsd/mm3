@@ -1148,9 +1148,11 @@ def predict_first_image_channels(img, model,
                          'n_channels':1,
                          'normalize_to_one':True,
                          'shuffle':False}
-    predict_gen_args = {'verbose':1,
-                        'use_multiprocessing':True,
-                        'workers':params['num_analyzers']}
+    predict_gen_args = {
+        'verbose':1,
+        'use_multiprocessing':False,
+        # 'workers':params['num_analyzers'],
+    }
 
     img_generator = TrapSegmentationDataGenerator(crops, **data_gen_args)
     # predictions = model.predict_generator(img_generator, **predict_gen_args)
@@ -2562,8 +2564,8 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     #                  'normalize_to_one':False,
     #                  'shuffle':False}
     # arguments to predict_generator
-    predict_args = dict(use_multiprocessing=True,
-                        workers=params['num_analyzers'],
+    predict_args = dict(use_multiprocessing=False,
+                        # workers=params['num_analyzers'],
                         verbose=1)
 
     for peak_id in ana_peak_ids:
@@ -5972,6 +5974,256 @@ def initialize_track_graph(peak_id,
                                   'region_label':region_label_list})
     return(G, graph_df)
 
+def initialize_focus_track_graph(peak_id,
+                                fov_id,
+                                experiment_name,
+                                predictions_dict,
+                                regions_by_time,
+                                max_focus_number=6,
+                                appear_threshold=0.75):
+
+    detection_dict = {}
+    frame_num = predictions_dict['migrate_model_predictions'].shape[0]
+
+    ebunch = []
+
+    G = nx.MultiDiGraph()
+    # create common start point
+    G.add_node('A')
+    # create common end point
+    G.add_node('B')
+
+    last_frame = False
+
+    node_id_list = []
+    timepoint_list = []
+    region_label_list = []
+
+    for frame_idx in range(frame_num):
+
+        timepoint = frame_idx + 1
+        paired_detection_time = timepoint+1
+
+        # get detections for this frame
+        frame_regions_list = regions_by_time[frame_idx]
+
+        # if we're at the end of the imaging, make all cells migrate to node 'B'
+        if timepoint == frame_num:
+            last_frame = True
+        else:
+            paired_frame_regions_list = regions_by_time[frame_idx+1]
+
+        # get state change probabilities (class predictions) for this frame
+        frame_prediction_dict = {key:val[frame_idx,...] for key,val in predictions_dict.items() if key != 'general_model_predictions'}
+        # for i in range(len(predictions_dict['general_model_predictions'])):
+            # frame_general_prediction = predictions_dict['general_model_predictions'][]
+
+        # create the "will be born" and "will appear" nodes for this frame
+        prior_born_state = 'born_{:0=4}'.format(timepoint-1)
+        born_state = 'born_{:0=4}'.format(timepoint)
+        G.add_node(born_state, visited=False, time=timepoint)
+
+        prior_appear_state = 'appear_{:0=4}'.format(timepoint-1)
+        appear_state = 'appear_{:0=4}'.format(timepoint)
+        G.add_node(appear_state, visited=False, time=timepoint)
+
+        if frame_idx == 0:
+            ebunch.append(('A', appear_state, 'start', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
+            ebunch.append(('A', born_state, 'start', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
+
+        # create the "Dies" and "Disappeared" nodes to link from prior frame
+        prior_dies_state = 'dies_{:0=4}'.format(timepoint-1)
+        dies_state = 'dies_{:0=4}'.format(timepoint)
+        next_dies_state = 'dies_{:0=4}'.format(timepoint+1)
+        G.add_node(dies_state, visited=False, time=timepoint)
+
+        prior_disappear_state = 'disappear_{:0=4}'.format(timepoint-1)
+        disappear_state = 'disappear_{:0=4}'.format(timepoint)
+        next_disappear_state = 'disappear_{:0=4}'.format(timepoint+1)
+        G.add_node(disappear_state, visited=False, time=timepoint)
+
+        node_id_list.extend([born_state, dies_state, appear_state, disappear_state])
+        timepoint_list.extend([timepoint, timepoint, timepoint, timepoint])
+        region_label_list.extend([0,0,0,0])
+
+        if frame_idx > 0:
+
+            ebunch.append((prior_dies_state, dies_state, 'die', {'weight':1.1, 'score':1*np.log(1.1)})) # impossible to move out of dies track
+            ebunch.append((prior_disappear_state, disappear_state, 'disappear', {'weight':1.1, 'score':1*np.log(1.1)})) # impossible to move out of disappear track
+            ebunch.append((prior_born_state, born_state, 'born', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
+            ebunch.append((prior_appear_state, appear_state, 'appear', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
+
+        if last_frame:
+            ebunch.append((appear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
+            ebunch.append((disappear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
+            ebunch.append((born_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
+            ebunch.append((dies_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
+
+        for region_idx in range(max_cell_number):
+
+            # the tracking models assume there are 6 detections in each frame, regardless of how many
+            #   are actually there. Therefore, this try/except logic will catch cases where there
+            #   were fewer than 6 detections in a frame.
+            try:
+                region = frame_regions_list[region_idx]
+                region_label = region.label
+            except IndexError:
+                region = None
+                region_label = region_idx + 1
+
+            # create the name for this detection
+            detection_id = create_detection_id(timepoint,
+                                                peak_id,
+                                                fov_id,
+                                                region_label,
+                                                experiment_name=experiment_name)
+
+            det = Detection(detection_id, region, timepoint)
+            detection_dict[det.id] = det
+
+            if det.area is not None:
+                # if the detection represents a segmentation from our imaging, add its ID,
+                #   which is also its key in detection_dict, as a node in G
+                G.add_node(det.id, visited=False, cell_count=1, region=region, time=timepoint, has_input=False)
+                timepoint_list.append(timepoint)
+                node_id_list.append(detection_id)
+                region_label_list.append(region.label)
+                # also set up all edges for this detection's node in our ebunch
+                #   loop through prediction types and add each to the ebunch
+
+                for key,val in frame_prediction_dict.items():
+
+                    if frame_idx == 0:
+
+                        ebunch.append(('A', detection_id, 'start', {'weight':1, 'score':1*np.log(1)}))
+
+                    if last_frame:
+
+                        ebunch.append((detection_id, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
+
+                        if val.shape[0] == max_cell_number ** 2:
+                            continue
+
+                        else:
+                            frame_predictions = val
+                            detection_prediction = frame_predictions[region_idx]
+
+                            if key == 'appear_model_predictions':
+                                if frame_idx == 0:
+                                    continue
+                                elem = (prior_appear_state, detection_id, 'appear', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            elif 'born' in key:
+                                if frame_idx == 0:
+                                    continue
+                                elem = (prior_born_state, detection_id, 'born', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            elif 'zero_cell' in key:
+                                G.nodes[det.id]['zero_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
+
+                            elif 'one_cell' in key:
+                                G.nodes[det.id]['one_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
+
+                            elif 'two_cell' in key:
+                                G.nodes[det.id]['two_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
+
+                            ebunch.append(elem)
+
+                    else:
+                        # if the array is cell_number^2, reshape it to cell_number x cell_number
+                        #  Then slice our detection's row and iterate over paired_cells
+                        if val.shape[0] == max_cell_number**2:
+
+                            frame_predictions = val.reshape((max_cell_number,max_cell_number))
+                            detection_predictions = frame_predictions[region_idx,:]
+
+                            # loop through paired detection predictions, test whether paired detection exists
+                            #  then append the edge to our ebunch
+                            for paired_cell_idx in range(detection_predictions.size):
+
+                                # attempt to grab the paired detection. If we get an IndexError, it doesn't exist.
+                                try:
+                                    paired_detection = paired_frame_regions_list[paired_cell_idx]
+                                except IndexError:
+                                    continue
+
+                                # create the paired detection's id for use in our ebunch
+                                paired_detection_id = create_detection_id(paired_detection_time,
+                                                                            peak_id,
+                                                                            fov_id,
+                                                                            paired_detection.label,
+                                                                            experiment_name=experiment_name)
+
+                                paired_prediction = detection_predictions[paired_cell_idx]
+                                if 'child_' in key:
+                                    child_weight = paired_prediction
+                                    elem = (detection_id, paired_detection_id, 'child', {'child_weight':child_weight, 'score':1*np.log(child_weight)})
+                                    ebunch.append(elem)
+
+                                if 'migrate_' in key:
+                                    migrate_weight = paired_prediction
+                                    elem = (detection_id, paired_detection_id, 'migrate', {'migrate_weight':migrate_weight, 'score':1*np.log(migrate_weight)})
+                                    ebunch.append(elem)
+
+                                # if 'interaction_' in key:
+                                #     interaction_weight = paired_prediction
+                                #     elem = (detection_id, paired_detection_id, 'interaction', {'weight':interaction_weight, 'score':1*np.log(interaction_weight)})
+                                #     ebunch.append(elem)
+
+                        # if the array is cell_number long, do similar stuff as above.
+                        elif val.shape[0] == max_cell_number:
+
+                            frame_predictions = val
+                            detection_prediction = frame_predictions[region_idx]
+
+                            if key == 'appear_model_predictions':
+                                if frame_idx == 0:
+                                    continue
+    #                             print("Linking {} to {}.".format(prior_appear_state, detection_id))
+                                elem = (prior_appear_state, detection_id, 'appear', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            elif 'disappear_' in key:
+                                if last_frame:
+                                    continue
+    #                             print("Linking {} to {}.".format(detection_id, next_disappear_state))
+                                elem = (detection_id, next_disappear_state, 'disappear', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            elif 'born_' in key:
+                                if frame_idx == 0:
+                                    continue
+    #                             print("Linking {} to {}.".format(prior_born_state, detection_id))
+                                elem = (prior_born_state, detection_id, 'born', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            elif 'die_model' in key:
+                                if last_frame:
+                                    continue
+    #                             print("Linking {} to {}.".format(detection_id, next_dies_state))
+                                elem = (detection_id, next_dies_state, 'die', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
+
+                            # the following classes aren't yet implemented
+                            elif 'zero_cell' in key:
+                                G.nodes[det.id]['zero_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
+
+                            elif 'one_cell' in key:
+                                G.nodes[det.id]['one_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['one_cell_score'] = 1*np.log(detection_prediction)
+
+                            elif 'two_cell' in key:
+                                G.nodes[det.id]['two_cell_weight'] = detection_prediction
+                                G.nodes[det.id]['two_cell_score'] = 1*np.log(detection_prediction)
+
+                            ebunch.append(elem)
+
+    G.add_edges_from(ebunch)
+    graph_df = pd.DataFrame(data={'timepoint':timepoint_list,
+                                  'node_id':node_id_list,
+                                  'region_label':region_label_list})
+    return(G, graph_df)
+
 # function for a growing cell, used to calculate growth rate
 def cell_growth_func(t, sb, elong_rate):
     '''
@@ -7101,10 +7353,6 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
                                     t = t-1,
                                     debug=False
                                 )
-
-#####################################################################################################################
-# here I have to remove this focus from orig_focus_regions so that I have the right cell_centric_labels later #######
-#####################################################################################################################
 
                                 if len(prior_tracked_foci) == 0:
                                     continue

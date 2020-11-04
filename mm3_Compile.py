@@ -438,9 +438,11 @@ if __name__ == "__main__":
                          'n_channels':1,
                          'normalize_to_one':True,
                          'shuffle':False}
-                predict_gen_args = {'verbose':1,
-                        'use_multiprocessing':True,
-                        'workers':p['num_analyzers']}
+                predict_gen_args = {
+                    'verbose':1,
+                    'use_multiprocessing':False,
+                    # 'workers':p['num_analyzers'],
+                }
 
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=UserWarning)
