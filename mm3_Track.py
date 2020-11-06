@@ -87,6 +87,46 @@ def track_single_file(
     
     sys.exit("Completed tracking cells in stack {}.".format(seg_file_name))
 
+def run_cells(tracks,
+              peak_id,
+              fov_id,
+              params,
+              predictions_dict,
+              regions_by_time,
+              born_threshold = 0.85,
+              appear_threshold = 0.85):
+
+    G,graph_df = mm3.initialize_track_graph(peak_id=peak_id,
+                                            fov_id=fov_id,
+                                            experiment_name=params['experiment_name'],
+                                            predictions_dict=predictions_dict,
+                                            regions_by_time = regions_by_time,
+                                            born_threshold=born_threshold,
+                                            appear_threshold=appear_threshold)
+
+    tracks.update(mm3.create_lineages_from_graph(G, graph_df, fov_id, peak_id))
+
+def run_foci(tracks,
+             peak_id,
+             fov_id,
+             params,
+             predictions_dict,
+             regions_by_time,
+             Cells,
+             appear_threshold = 0.85):
+
+    G,graph_df = mm3.initialize_focus_track_graph(
+        peak_id=peak_id,
+        fov_id=fov_id,
+        experiment_name=params['experiment_name'],
+        predictions_dict=predictions_dict,
+        regions_by_time = regions_by_time,
+        appear_threshold=appear_threshold,
+    )
+
+    tracks.update(mm3.create_focus_lineages_from_graph(G, graph_df, fov_id, peak_id, Cells))
+
+
 def track_loop(
     fov_id,
     peak_id,
@@ -94,18 +134,23 @@ def track_loop(
     tracks,
     model_dict,
     cell_number = 6, 
-    phase_file_name = None,
-    seg_file_name = None):
+    data_number = 9,
+    img_file_name = None,
+    seg_file_name = None,
+    track_type = 'cells'):
 
-    if phase_file_name is None:
+    if img_file_name is None:
 
-        seg_stack = mm3.load_stack(fov_id, peak_id, color=params['seg_img'])
-        phase_stack = mm3.load_stack(fov_id, peak_id, color=params['phase_plane'])
+        if track_type == 'cells':
+            seg_stack = mm3.load_stack(fov_id, peak_id, color=params['seg_img'])
+            img_stack = mm3.load_stack(fov_id, peak_id, color=params['phase_plane'])
+        elif track_type == 'foci':
+            seg_stack = mm3.load_stack(fov_id, peak_id, color=params['seg_img'])
+            img_stack = mm3.load_stack(fov_id, peak_id, color=params['foci']['foci_plane'])
 
     else:
-
         seg_stack = io.imread(seg_file_name)
-        phase_stack = io.imread(phase_file_name)
+        img_stack = io.imread(img_file_name)
 
     # run predictions for each tracking class
     # consider only the top six cells for a given trap when doing tracking
@@ -114,10 +159,14 @@ def track_loop(
     # sometimes a phase contrast image is missed and has no signal.
     # This is a workaround for that problem
     no_signal_frames = []
-    for k,img in enumerate(phase_stack):
-        # if the mean phase image signal is less than 200, add its index to list
-        if np.mean(img) < 200:
-            no_signal_frames.append(k)
+    for k,img in enumerate(img_stack):
+        if track_type == 'foci':
+            if np.max(img) < 200:
+                no_signal_frames.append(k)
+        elif track_type == 'cells':
+            # if the mean phase image signal is less than 200, add its index to list
+            if np.mean(img) < 200:
+                no_signal_frames.append(k)
 
     # loop through segmentation stack and replace frame from missed phase image
     #   with the prior frame.
@@ -125,10 +174,25 @@ def track_loop(
         if k in no_signal_frames:
             seg_stack[k,...] = seg_stack[k-1,...]
 
-    regions_by_time = [measure.regionprops(label_image=img) for img in seg_stack]
+    if track_type == 'cells':
+        regions_by_time = [measure.regionprops(label_image=img) for img in seg_stack]
+    elif track_type == 'foci':
+        with open(p['cell_dir'] + '/all_cells.pkl', 'rb') as cell_file:
+            Cells = pickle.load(cell_file)
+        regions_by_time = []
+        for i,seg_img in enumerate(seg_stack):
+            regions_by_time.append(
+                measure.regionprops(
+                    label_image = seg_img,
+                    intensity_image = img_stack[i,:,:],
+                )
+            )
 
-    # have generator yield info for top six cells in all frames
-    prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,9))
+    if track_type == 'cells':
+        # have generator yield info for top six cells in all frames
+        prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,data_number), track_type=track_type)
+    elif track_type == 'foci':
+        prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,data_number), track_type=track_type)
     cell_info = prediction_generator.__getitem__(0)
 
     predictions_dict = {}
@@ -142,15 +206,26 @@ def track_loop(
         mm3.information('Predicting probability of {} events in FOV {}, trap {}.'.format('_'.join(key.split('_')[:-1]), fov_id, peak_id))
         predictions_dict['{}_predictions'.format(key)] =  mod.predict(cell_info)
 
-    G,graph_df = mm3.initialize_track_graph(peak_id=peak_id,
-                                            fov_id=fov_id,
-                                            experiment_name=params['experiment_name'],
-                                            predictions_dict=predictions_dict,
-                                            regions_by_time = regions_by_time,
-                                            born_threshold=0.85,
-                                            appear_threshold=0.85)
+    if track_type == 'cells':
+        run_cells(
+            tracks,
+            peak_id,
+            fov_id,
+            params,
+            predictions_dict,
+            regions_by_time,
+        )
 
-    tracks.update(mm3.create_lineages_from_graph(G, graph_df, fov_id, peak_id))
+    elif track_type == 'foci':
+        run_foci(
+            tracks,
+            peak_id,
+            fov_id,
+            params,
+            predictions_dict,
+            regions_by_time,
+            Cells
+        )
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -158,8 +233,22 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(
         prog='python mm3_Track.py',
-        description='Track cells and create lineages.'
+        description='Track cells or fluroescent foci and create lineages.'
     )
+    subparsers = parser.add_subparsers(help='commands', dest='command')
+
+    # cells
+    cell_parser = subparsers.add_parser(
+        'cells',
+        help = "Track cells",
+    )
+
+    # foci
+    focus_parser = subparsers.add_parser(
+        'foci',
+        help = "Track fluorescent foci"
+    )
+
     parser.add_argument(
         '-f',
         '--paramfile',
@@ -175,12 +264,18 @@ if __name__ == "__main__":
         help='List of fields of view to analyze. Input "1", "1,2,3", or "1-10", etc.'
     )
     parser.add_argument(
-        '-j',
-        '--nproc',
-        type=int,
+        '--peak',
+        type=str,
         required=False,
-        help='Number of processors to use.'
+        help='List of peaks to analyze. Input "1", "1,2,3", or "1-10", etc.'
     )
+    # parser.add_argument(
+    #     '-j',
+    #     '--nproc',
+    #     type=int,
+    #     required=False,
+    #     help='Number of processors to use.'
+    # )
     parser.add_argument(
         '-r',
         '--chtc',
@@ -188,12 +283,19 @@ if __name__ == "__main__":
         required=False,
         help='Add this flag at the command line if the job will run at chtc.'
     )
-    parser.add_argument(
+    cell_parser.add_argument(
         '-p',
         '--phase_file_name',
         type=str,
         required=False,
         help='Name of file containing stack of images for a single fov/peak'
+    )
+    focus_parser.add_argument(
+        '-fl',
+        '--fluor_file_name',
+        type=str,
+        required=False,
+        help='Name of file containing stack of fluorescent images for a single fov/peak'
     )
     parser.add_argument(
         '-s',
@@ -208,7 +310,7 @@ if __name__ == "__main__":
         required=False,
         help='Path to trained migration model.'
     )
-    parser.add_argument(
+    cell_parser.add_argument(
         '--child_modelfile',
         type=str,
         required=False,
@@ -220,7 +322,7 @@ if __name__ == "__main__":
         required=False,
         help='Path to trained appear model.'
     )
-    parser.add_argument(
+    cell_parser.add_argument(
         '--die_modelfile',
         type=str,
         required=False,
@@ -232,7 +334,7 @@ if __name__ == "__main__":
         required=False,
         help='Path to trained disappear model.'
     )
-    parser.add_argument(
+    cell_parser.add_argument(
         '--born_modelfile',
         type=str,
         required=False,
@@ -271,13 +373,20 @@ if __name__ == "__main__":
     else:
         user_spec_fovs = []
 
-    # number of threads for multiprocessing
-    if namespace.nproc:
-        p['num_analyzers'] = namespace.nproc
-    mm3.information('Using {} threads for multiprocessing.'.format(p['num_analyzers']))
+    if namespace.peak:
+        if '-' in namespace.peak:
+            user_spec_peaks = range(int(namespace.peak.split("-")[0]),
+                                   int(namespace.peak.split("-")[1])+1)
+        else:
+            user_spec_peaks = [int(val) for val in namespace.peak.split(",")]
+    else:
+        user_spec_peaks = []
 
     # set segmentation image name for saving and loading segmented images
-    p['seg_img'] = 'seg_unet'
+    if namespace.command == 'cells':
+        p['seg_img'] = 'seg_unet'
+    elif namespace.command == 'foci':
+        p['seg_img'] = 'foci_seg_unet'
 
     # load specs file
     if namespace.chtc:
@@ -287,13 +396,14 @@ if __name__ == "__main__":
         specs = mm3.load_specs()
         mm3.load_time_table()
 
-    if namespace.phase_file_name:
-        track_single_file(
-            namespace.phase_file_name,
-            namespace.seg_file_name,
-            p,
-            namespace
-        )
+    if namespace.command == 'cells':
+        if namespace.phase_file_name:
+            track_single_file(
+                namespace.phase_file_name,
+                namespace.seg_file_name,
+                p,
+                namespace
+            )
 
     if not os.path.exists(p['cell_dir']):
         os.makedirs(p['cell_dir'])
@@ -313,7 +423,10 @@ if __name__ == "__main__":
     # read in models as dictionary
     # keys are 'migrate_model', 'child_model', 'appear_model', 'die_model', 'disappear_model', etc.
     # NOTE on 2019-07-15: For now, some of the models are ignored by the tracking algorithm, as they don't yet perform well
-    model_dict = mm3.get_tracking_model_dict()
+    if namespace.command == 'cells':
+        model_dict = mm3.get_tracking_model_dict()
+    elif namespace.command == 'foci':
+        model_dict = mm3.get_focus_tracking_model_dict()
 
     # do lineage creation per fov, per trap
     tracks = {}
@@ -322,36 +435,69 @@ if __name__ == "__main__":
         # update will add the output from make_lineages_function, which is a
         # dict of Cell entries, into Cells
         ana_peak_ids = [peak_id for peak_id in specs[fov_id].keys() if specs[fov_id][peak_id] == 1]
-        # ana_peak_ids = [9,13,15,19,25,33,36,37,38,39] # was used for debugging
+        if user_spec_peaks:
+            ana_peak_ids[:] = [peak for peak in ana_peak_ids if peak in user_spec_peaks]
+
         for j,peak_id in enumerate(ana_peak_ids):
 
-            track_loop(
-                fov_id,
-                peak_id,
-                p,
-                tracks,
-                model_dict
-            )
+            if namespace.command == 'cells':
+
+                track_loop(
+                    fov_id,
+                    peak_id,
+                    p,
+                    tracks,
+                    model_dict,
+                    track_type = namespace.command
+                )
+
+            elif namespace.command == 'foci':
+
+                track_loop(
+                    fov_id,
+                    peak_id,
+                    p,
+                    tracks,
+                    model_dict,
+                    data_number = 11,
+                    track_type = namespace.command
+                )
 
     mm3.information("Finished lineage creation.")
 
     ### Now prune and save the data.
-    mm3.information("Saving cell data.")
+    if namespace.command == 'cells':
+        mm3.information("Saving cell data.")
 
-    ### save the cell data. Use the script mm3_OutputData for additional outputs.
-    # All cell data (includes incomplete cells)
-    if not os.path.isdir(p['cell_dir']):
-        os.mkdir(p['cell_dir'])
+        ### save the cell data. Use the script mm3_OutputData for additional outputs.
+        # All cell data (includes incomplete cells)
+        if not os.path.isdir(p['cell_dir']):
+            os.mkdir(p['cell_dir'])
 
-    with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
-        pickle.dump(tracks, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(p['cell_dir'] + '/all_cells.pkl', 'wb') as cell_file:
+            pickle.dump(tracks, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    if os.path.isfile(os.path.join(p['cell_dir'], 'complete_cells.pkl')):
-        os.remove(os.path.join(p['cell_dir'], 'complete_cells.pkl'))
+        if os.path.isfile(os.path.join(p['cell_dir'], 'complete_cells.pkl')):
+            os.remove(os.path.join(p['cell_dir'], 'complete_cells.pkl'))
 
-    os.symlink(
-        os.path.join(p['cell_dir'], 'all_cells.pkl'),
-        os.path.join(p['cell_dir'], 'complete_cells.pkl')
-    )
+        os.symlink(
+            os.path.join(p['cell_dir'], 'all_cells.pkl'),
+            os.path.join(p['cell_dir'], 'complete_cells.pkl')
+        )
 
-    mm3.information("Finished curating and saving cell data.")
+        mm3.information("Finished curating and saving cell data.")
+
+    elif namespace.command == 'foci':
+        mm3.information("Saving focus track data.")
+
+        if not os.path.isdir(p['foci_track_dir']):
+            os.mkdir(p['foci_track_dir'])
+
+        with open(os.path.join(p['foci_track_dir'], 'all_foci.pkl'), 'wb') as foci_file:
+            pickle.dump(tracks, foci_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        with open(os.path.join(p['cell_dir'],'all_cells_with_foci.pkl'), 'wb') as cell_file:
+            pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+
+        mm3.information("Finished curating and saving focus data in {} and updated cell data in {}.".format(os.path.join(p['foci_track_dir'], 'all_foci.pkl'),
+                                                                                                            os.path.join(p['cell_dir'], 'all_cells_with_foci.pkl')))
