@@ -3519,6 +3519,25 @@ def get_tracking_model_dict():
 
     return(model_dict)
 
+def get_focus_tracking_model_dict():
+
+    model_dict = {}
+
+    if not 'migrate_model' in model_dict:
+        model_dict['migrate_model'] = models.load_model(params['foci']['migrate_model'],
+                                                                    custom_objects={'bce_dice_loss':bce_dice_loss,
+                                                                        'f2_m':f2_m})
+    if not 'appear_model' in model_dict:
+        model_dict['appear_model'] = models.load_model(params['foci']['appear_model'],
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
+                                                                    'f2_m':f2_m})
+    if not 'disappear_model' in model_dict:
+        model_dict['disappear_model'] = models.load_model(params['foci']['disappear_model'],
+                                        custom_objects={'bce_dice_loss':bce_dice_loss,
+                                                                    'f2_m':f2_m})
+
+    return(model_dict)
+
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id):
     '''
@@ -3751,9 +3770,11 @@ class Detection():
             self.area = region.area
 
             # calculating cell length and width by using Feret Diamter. These values are in pixels
-            length_tmp, width_tmp = feretdiameter(region)
-            if length_tmp == None:
-                mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
+            # length_tmp, width_tmp = feretdiameter(region)
+            length_tmp = region.major_axis_length
+            width_tmp = region.minor_axis_length
+            # if length_tmp == None:
+                # mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
             self.length = length_tmp
             self.width = width_tmp
 
@@ -4487,7 +4508,7 @@ class Focus():
         self.times = [t]
         self.abs_times = [params['time_table'][cell.fov][t]] # elapsed time in seconds
         self.labels = [region.label]
-        self.cell_labels = [region.cell_centric_label]
+        # self.cell_labels = [region.cell_centric_label]
         self.bboxes = [region.bbox]
         self.areas = [region.area]
 
@@ -4511,7 +4532,7 @@ class Focus():
         self.orientations = [region.orientation]
         self.centroids = [region.centroid]
 
-        # special information for focci
+        # special information for foci
         self.elong_rate = None
         self.disappear = None
         self.area_mean_fluorescence = []
@@ -4554,7 +4575,7 @@ class Focus():
         self.times.append(t)
         self.abs_times.append(params['time_table'][self.cells[-1].fov][t])
         self.labels.append(region.label)
-        self.cell_labels.append(region.cell_centric_label)
+        # self.cell_labels.append(region.cell_centric_label)
         self.bboxes.append(region.bbox)
         self.areas.append(region.area)
         self.regions.append(region)
@@ -4590,11 +4611,15 @@ class Focus():
         # get the focus' displacement from center of cell
         # find x and y position relative to the whole image (convert from small box)
 
-        # calculate distance of foci from middle of cell (scikit image)
+        # calculate distance of focus from middle of cell (scikit image)
         orientation = region.orientation
         if orientation < 0:
             orientation = np.pi+orientation
 
+        # print('focus labels: {}'.format(self.labels))
+        # print('cell labels: {}'.format(self.cells[-1].labels))
+        # print('cell times: {}'.format(self.cells[-1].times))
+        # print('focus times: {}'.format(self.times))
         cell_idx = self.cells[-1].times.index(self.times[-1]) # final time in self.times is current time
         cell_centroid = self.cells[-1].centroids[cell_idx]
         focus_centroid = region.centroid
@@ -4705,13 +4730,15 @@ class PredictTrackDataGenerator(utils.Sequence):
     def __init__(self,
                  data,
                  batch_size=32,
-                 dim=(4,5,9)):
+                 dim=(4,5,9),
+                 track_type = 'cells'):
 
         'Initialization'
         self.batch_size = batch_size
         self.data = data
         self.dim = dim
         self.on_epoch_end()
+        self.track_type = track_type
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -4773,7 +4800,12 @@ class PredictTrackDataGenerator(utils.Sequence):
                     length = region.major_axis_length
                     cell_label = region.label
                     cell_index = cell_label - 1
-                    cell_info = (min_x, max_x, x, min_y, max_y, y, orientation, area, length)
+                    if self.track_type == 'cells':
+                        cell_info = (min_x, max_x, x, min_y, max_y, y, orientation, area, length)
+                    elif self.track_type == 'foci':
+                        mean_fluor = region.mean_intensity
+                        max_fluor = region.max_intensity
+                        cell_info = (min_x, max_x, x, min_y, max_y, y, orientation, area, length, mean_fluor, max_fluor)
 
                     if region_idx + 1 > self.dim[0]:
                         continue
@@ -4848,9 +4880,9 @@ def create_lineages_from_graph(graph,
                                     experiment_name=params['experiment_name'])
 
         current_cell = CellFromGraph(cell_id,
-                                        prior_node_region,
-                                        prior_node_time,
-                                        parent=None)
+                                     prior_node_region,
+                                     prior_node_time,
+                                     parent=None)
 
         if not cell_id in tracks.keys():
             tracks[cell_id] = current_cell
@@ -5042,6 +5074,266 @@ def create_lineages_from_graph(graph,
                     disappear_time = graph.nodes[prior_node_id]['time']
                     disappear_region = graph.nodes[prior_node_id]['region']
                     current_cell.disappears(disappear_region, disappear_time)
+
+            # set the next node to 'visited'
+            graph.nodes[next_node_id]['visited'] = True
+            if next_node_id != 'B':
+                graph_df.iloc[np.where(graph_df.node_id==next_node_id)[0][0],3] = True
+
+            # reset prior_node_id to iterate to next frame and append node_id to current track
+            prior_node_id = next_node_id
+
+        if num_unvisited != count_unvisited(graph, params['experiment_name']):
+            same_iter_num = 0
+        else:
+            same_iter_num += 1
+
+        num_unvisited = count_unvisited(graph, params['experiment_name'])
+        print("{} detections remain unvisited.".format(num_unvisited))
+
+        if same_iter_num > 10:
+            print("WARNING: Ten iterations surpassed without decreasing the number of visited nodes.\n \
+                   Breaking tracking loop now.\n \
+                   You should not trust these results!")
+            break
+
+    return tracks
+
+def get_focus_cell_distance(focus_label_img, cell_label_img, focus_regions):
+
+    dist_arr = np.zeros((len(focus_regions),np.max(cell_label_img)))
+    cell_regions = measure.regionprops(cell_label_img)
+
+    for i,focus_region in enumerate(focus_regions):
+        
+        focus_y,focus_x = focus_region.centroid
+        focus_label = focus_region.label
+        
+        for j,cell_region in enumerate(cell_regions):
+            cell_y,cell_x = cell_region.centroid
+            cell_label = cell_region.label
+            bin_img = np.ones(focus_label_img.shape)
+            bin_img[focus_label_img == focus_label] = 0
+            bin_img[cell_label_img == cell_label] = 0
+            dist_img = ndi.morphology.distance_transform_edt(bin_img, sampling=None, return_distances=True, return_indices=False, distances=None, indices=None)
+            line_y, line_x = np.linspace(focus_x, cell_x, 100), np.linspace(focus_y, cell_y, 100)
+
+            # Extract the values along the line, using cubic interpolation
+            line_dists = ndi.map_coordinates(dist_img, np.vstack((line_x,line_y)), order=1)
+#             print(line_dists)
+#             fig,ax = plt.subplots(2)
+#             ax[0].imshow(dist_img)
+#             ax[0].plot([focus_x, cell_x], [focus_y, cell_y], 'ro-')
+#             ax[1].plot(line_dists)
+#             plt.show();
+            
+            dist_arr[i,j] = np.max(line_dists)
+        
+    # print(dist_arr.shape)
+    return(dist_arr)
+
+def create_focus_lineages_from_graph(graph,
+                                     graph_df,
+                                     fov_id,
+                                     peak_id,
+                                     Cells):
+    '''
+    This function iterates through nodes in a graph of detections
+    to link the nodes as "Focus" objects, eventually
+    leading to the ultimate goal of returning
+    a CellTree object with each cell's information for the experiment.
+    '''
+
+    # keep cells with this fov_id/peak_id
+    fov_cells = filter_cells(Cells, attr='fov', val=fov_id)
+    peak_cells = filter_cells(fov_cells, attr='peak', val=peak_id)
+
+    # read in focus label images and fluorescence intensity images
+    seg_cell_stack = load_stack(fov_id, peak_id, color='seg_unet')
+    seg_stack = load_stack(fov_id, peak_id, color='foci_seg_unet')
+    fluor_stack = load_stack(fov_id, peak_id, color=params['foci']['foci_plane'])
+
+    # iterate through all nodes in graph
+    tracks = {}
+
+    for node_id in graph.nodes:
+        graph.nodes[node_id]['visited'] = False
+    graph_df['visited'] = False
+    num_unvisited = count_unvisited(graph, params['experiment_name'])
+
+    while num_unvisited > 0:
+
+        # which detection nodes are not yet visited
+        unvisited_detection_nodes = graph_df[(~(graph_df.visited) & graph_df.node_id.str.startswith(params['experiment_name']))]
+        # grab the first unvisited node_id from the dataframe
+        prior_node_id = unvisited_detection_nodes.iloc[0,1]
+        prior_node_time = graph.nodes[prior_node_id]['time']
+        prior_node_region = graph.nodes[prior_node_id]['region']
+
+        focus_id = create_focus_id(
+            prior_node_region,
+            prior_node_time,
+            peak_id,
+            fov_id,
+            experiment_name=params['experiment_name']
+        )
+
+        frame_cells = filter_cells_containing_val_in_attr(
+            peak_cells,
+            attr='times',
+            val=prior_node_time, # putting here for now. check this. with logic below I'm note sure this is right
+        )
+
+        seg_cell_img = seg_cell_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
+        seg_foci_img = seg_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
+        fluor_img = fluor_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
+
+        cell = get_focus_cell(
+            frame_cells,
+            seg_cell_img,
+            seg_foci_img,
+            prior_node_region, # putting here for now. check this. with logic below I'm note sure this is right
+            prior_node_time
+        )
+
+        # print(cell)
+
+        current_focus = Focus(
+            cell,
+            prior_node_region,
+            seg_foci_img,
+            fluor_img,
+            prior_node_time,
+        )
+
+        if not focus_id in tracks.keys():
+            tracks[focus_id] = current_focus
+        else:
+            current_focus = tracks[focus_id]
+
+        # for use later in establishing predecessors
+        current_node_id = prior_node_id
+
+        # set this detection's "visited" status to True in the graph and in the dataframe
+        graph.nodes[prior_node_id]['visited'] = True
+        graph_df.iloc[np.where(graph_df.node_id==prior_node_id)[0][0],3] = True
+
+        # build current_track list to this detection's node
+        current_track = collections.deque()
+        current_track.append(current_node_id)
+        predecessors_list = [k for k in graph.predecessors(prior_node_id)]
+        unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
+
+        while len(unvisited_predecessors_list) != 0:
+
+            # initialize a scores array to select highest score from the available options
+            predecessor_scores = np.zeros(len(unvisited_predecessors_list))
+
+            # populate array with scores
+            for i in range(len(unvisited_predecessors_list)):
+                predecessor_node_id = unvisited_predecessors_list[i]
+                edge_type, edge_score = get_greatest_score_info(predecessor_node_id, current_node_id, graph)
+                predecessor_scores[i] = edge_score
+
+            # find highest score
+            max_index = np.argmax(predecessor_scores)
+            # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
+            current_node_id = unvisited_predecessors_list[max_index]
+            current_track.appendleft(current_node_id)
+
+            predecessors_list = [k for k in graph.predecessors(current_node_id)]
+            unvisited_predecessors_list = [k for k in predecessors_list if not graph.nodes[k]['visited']]
+
+        while prior_node_id is not 'B':
+
+            # which nodes succeed our current node?
+            successor_node_ids = [node_id for node_id in graph.successors(prior_node_id)]
+
+            # keep only the potential successor detections that have not yet been visited
+            unvisited_node_ids = []
+            for i,successor_node_id in enumerate(successor_node_ids):
+
+                # if it starts with params['experiment_name'], it is a detection node, and not born, appear, etc.
+                if successor_node_id.startswith(params['experiment_name']):
+
+                    # if it has been used in the focus track graph, i.e., if 'visited' is True,
+                    #   move on. Otherwise, append to our list
+                    if graph.nodes[successor_node_id]['visited']:
+                        continue
+                    if graph.nodes[successor_node_id]['has_input']:
+                        continue
+                    else:
+                        unvisited_node_ids.append(successor_node_id)
+
+                # if it doesn't start with params['experiment_name'], it is a born, appear, etc., and should always be appended
+                else:
+                    unvisited_node_ids.append(successor_node_id)
+
+            # initialize a scores array to select highest score from the available options
+            successor_scores = np.zeros(len(unvisited_node_ids))
+            successor_edge_types = []
+
+            # populate array with scores
+            for i in range(len(unvisited_node_ids)):
+                successor_node_id = unvisited_node_ids[i]
+                edge_type, edge_score = get_greatest_score_info(prior_node_id, successor_node_id, graph)
+                successor_scores[i] = edge_score
+                successor_edge_types.append(edge_type)
+
+            # find highest score
+            max_score = np.max(successor_scores)
+            max_index = np.argmax(successor_scores)
+            # grab the node_id corresponding to traversing the highest-scoring edge from the prior node
+            next_node_id = unvisited_node_ids[max_index]
+            max_edge_type = successor_edge_types[max_index]
+
+            # if the max_score in successor_scores isn't greater than log(0.1), just make the focus disappear for now.
+            if max_score < np.log(0.1):
+                max_edge_type = 'disappear'
+                next_node_id = [n_id for n_id in unvisited_node_ids if n_id.startswith('disappear')][0]
+
+            # if this is a migration, grow the current_focus.
+            elif max_edge_type == 'migrate':
+
+                focus_time = graph.nodes[next_node_id]['time']
+                focus_region = graph.nodes[next_node_id]['region']
+
+                frame_cells = filter_cells_containing_val_in_attr(
+                    peak_cells,
+                    attr='times',
+                    val=focus_time,
+                )
+
+                seg_cell_img = seg_cell_stack[focus_time - 1,:,:]
+                seg_foci_img = seg_stack[focus_time - 1,:,:]
+                fluor_img = fluor_stack[focus_time - 1,:,:]
+
+                cell = get_focus_cell(
+                    frame_cells,
+                    seg_cell_img,
+                    seg_foci_img,
+                    focus_region,
+                    focus_time
+                )
+
+                # if the cell is None, the focus didn't overlap well with any cells, so make it disappear for now
+                #  in the future, maybe I can calculate cell to which this focus is closest
+                # print(cell)
+                current_focus.grow(
+                    focus_region,
+                    focus_time,
+                    seg_foci_img,
+                    fluor_img,
+                    cell
+                )
+
+            # if the event represents disappearance, end the focus
+            elif max_edge_type == 'disappear':
+
+                if prior_node_id.startswith(params['experiment_name']):
+                    disappear_time = graph.nodes[prior_node_id]['time']
+                    disappear_region = graph.nodes[prior_node_id]['region']
+                    current_focus.disappears(disappear_region, disappear_time)
 
             # set the next node to 'visited'
             graph.nodes[next_node_id]['visited'] = True
@@ -5589,7 +5881,7 @@ def feretdiameter(region):
     cosorient = np.cos(region.orientation)
     sinorient = np.sin(region.orientation)
     # print(cosorient, sinorient)
-    amp_param = 1.2 #amplifying number to make sure the axis is longer than actual cell length
+    amp_param = 1.2 # amplifying number to make sure the axis is longer than actual cell length
 
     # coordinates relative to bounding box
     # r_coords = region.coords - [np.int16(region.bbox[0]), np.int16(region.bbox[1])]
@@ -5599,6 +5891,10 @@ def feretdiameter(region):
     distance_image = ndi.distance_transform_edt(region_binimg)
     r_coords = np.where(distance_image == 1)
     r_coords = list(zip(r_coords[0], r_coords[1]))
+    if params['foci']['debug']:
+        print(r_coords)
+        io.imshow(distance_image)
+        plt.show();
 
     # coordinates are already sorted by y. partion into top and bottom to search faster later
     # if orientation > 0, L1 is closer to top of image (lower Y coord)
@@ -5628,12 +5924,26 @@ def feretdiameter(region):
     # pt_L1 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in r_coords])]
     # pt_L2 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in r_coords])]
 
-    try:
-        pt_L1 = L1_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in L1_coords])]
-        pt_L2 = L2_coords[np.argmin([np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords])]
-        length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
-    except:
-        length = None
+    # try:
+    L1_euclids = [np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in L1_coords]
+    pt_L1 = L1_coords[np.argmin(L1_euclids)]
+    L2_euclids = [np.sqrt(np.power(Pt[0]-L2_pt[0],2) + np.power(Pt[1]-L2_pt[1],2)) for Pt in L2_coords]
+    if params['foci']['debug']:
+        print('orientation: {}'.format(region.orientation))
+        print(L2_coords)
+        print(L2_euclids)
+    pt_L2 = L2_coords[np.argmin(L2_euclids)]
+    if params['foci']['debug']:
+        print(pt_L1)
+        print(pt_L2)
+    length = np.sqrt(np.power(pt_L1[0]-pt_L2[0],2) + np.power(pt_L1[1]-pt_L2[1],2))
+    # except:
+        # length = None
+
+    # if params['foci']['debug']:
+    #     # if length is None:
+    #     io.imshow(region.image)
+    #     plt.show();
 
     #####################
     # calculate cell width
@@ -5649,6 +5959,8 @@ def feretdiameter(region):
         W_coords.append(r_coords[:int(np.round(len(r_coords)/2))])
 
     # starting points
+    # print(cosorient)
+    # print(length)
     x1 = x0 + cosorient * 0.5 * length*0.4
     y1 = y0 - sinorient * 0.5 * length*0.4
     x2 = x0 - cosorient * 0.5 * length*0.4
@@ -6018,48 +6330,33 @@ def initialize_focus_track_graph(peak_id,
         # for i in range(len(predictions_dict['general_model_predictions'])):
             # frame_general_prediction = predictions_dict['general_model_predictions'][]
 
-        # create the "will be born" and "will appear" nodes for this frame
-        prior_born_state = 'born_{:0=4}'.format(timepoint-1)
-        born_state = 'born_{:0=4}'.format(timepoint)
-        G.add_node(born_state, visited=False, time=timepoint)
-
+        # create the "will appear" nodes for this frame
         prior_appear_state = 'appear_{:0=4}'.format(timepoint-1)
         appear_state = 'appear_{:0=4}'.format(timepoint)
         G.add_node(appear_state, visited=False, time=timepoint)
 
         if frame_idx == 0:
             ebunch.append(('A', appear_state, 'start', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
-            ebunch.append(('A', born_state, 'start', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
 
-        # create the "Dies" and "Disappeared" nodes to link from prior frame
-        prior_dies_state = 'dies_{:0=4}'.format(timepoint-1)
-        dies_state = 'dies_{:0=4}'.format(timepoint)
-        next_dies_state = 'dies_{:0=4}'.format(timepoint+1)
-        G.add_node(dies_state, visited=False, time=timepoint)
-
+        # create the "Disappeared" nodes to link from prior frame
         prior_disappear_state = 'disappear_{:0=4}'.format(timepoint-1)
         disappear_state = 'disappear_{:0=4}'.format(timepoint)
         next_disappear_state = 'disappear_{:0=4}'.format(timepoint+1)
         G.add_node(disappear_state, visited=False, time=timepoint)
 
-        node_id_list.extend([born_state, dies_state, appear_state, disappear_state])
-        timepoint_list.extend([timepoint, timepoint, timepoint, timepoint])
-        region_label_list.extend([0,0,0,0])
+        node_id_list.extend([appear_state, disappear_state])
+        timepoint_list.extend([timepoint, timepoint])
+        region_label_list.extend([0,0])
 
         if frame_idx > 0:
-
-            ebunch.append((prior_dies_state, dies_state, 'die', {'weight':1.1, 'score':1*np.log(1.1)})) # impossible to move out of dies track
             ebunch.append((prior_disappear_state, disappear_state, 'disappear', {'weight':1.1, 'score':1*np.log(1.1)})) # impossible to move out of disappear track
-            ebunch.append((prior_born_state, born_state, 'born', {'weight':born_threshold, 'score':1*np.log(born_threshold)}))
             ebunch.append((prior_appear_state, appear_state, 'appear', {'weight':appear_threshold, 'score':1*np.log(appear_threshold)}))
 
         if last_frame:
             ebunch.append((appear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
             ebunch.append((disappear_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
-            ebunch.append((born_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
-            ebunch.append((dies_state, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
 
-        for region_idx in range(max_cell_number):
+        for region_idx in range(max_focus_number):
 
             # the tracking models assume there are 6 detections in each frame, regardless of how many
             #   are actually there. Therefore, this try/except logic will catch cases where there
@@ -6072,12 +6369,16 @@ def initialize_focus_track_graph(peak_id,
                 region_label = region_idx + 1
 
             # create the name for this detection
-            detection_id = create_detection_id(timepoint,
-                                                peak_id,
-                                                fov_id,
-                                                region_label,
-                                                experiment_name=experiment_name)
+            detection_id = create_detection_id(
+                timepoint,
+                peak_id,
+                fov_id,
+                region_label,
+                experiment_name=experiment_name
+            )
 
+            # print(region)
+############################################## start here on 2020-11-06 ############################################
             det = Detection(detection_id, region, timepoint)
             detection_dict[det.id] = det
 
@@ -6101,7 +6402,7 @@ def initialize_focus_track_graph(peak_id,
 
                         ebunch.append((detection_id, 'B', 'end', {'weight':1, 'score':1*np.log(1)}))
 
-                        if val.shape[0] == max_cell_number ** 2:
+                        if val.shape[0] == max_focus_number ** 2:
                             continue
 
                         else:
@@ -6113,31 +6414,14 @@ def initialize_focus_track_graph(peak_id,
                                     continue
                                 elem = (prior_appear_state, detection_id, 'appear', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
 
-                            elif 'born' in key:
-                                if frame_idx == 0:
-                                    continue
-                                elem = (prior_born_state, detection_id, 'born', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-
-                            elif 'zero_cell' in key:
-                                G.nodes[det.id]['zero_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-
-                            elif 'one_cell' in key:
-                                G.nodes[det.id]['one_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-
-                            elif 'two_cell' in key:
-                                G.nodes[det.id]['two_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-
                             ebunch.append(elem)
 
                     else:
                         # if the array is cell_number^2, reshape it to cell_number x cell_number
                         #  Then slice our detection's row and iterate over paired_cells
-                        if val.shape[0] == max_cell_number**2:
+                        if val.shape[0] == max_focus_number**2:
 
-                            frame_predictions = val.reshape((max_cell_number,max_cell_number))
+                            frame_predictions = val.reshape((max_focus_number,max_focus_number))
                             detection_predictions = frame_predictions[region_idx,:]
 
                             # loop through paired detection predictions, test whether paired detection exists
@@ -6151,30 +6435,23 @@ def initialize_focus_track_graph(peak_id,
                                     continue
 
                                 # create the paired detection's id for use in our ebunch
-                                paired_detection_id = create_detection_id(paired_detection_time,
-                                                                            peak_id,
-                                                                            fov_id,
-                                                                            paired_detection.label,
-                                                                            experiment_name=experiment_name)
+                                paired_detection_id = create_detection_id(
+                                    paired_detection_time,
+                                    peak_id,
+                                    fov_id,
+                                    paired_detection.label,
+                                    experiment_name=experiment_name
+                                )
 
                                 paired_prediction = detection_predictions[paired_cell_idx]
-                                if 'child_' in key:
-                                    child_weight = paired_prediction
-                                    elem = (detection_id, paired_detection_id, 'child', {'child_weight':child_weight, 'score':1*np.log(child_weight)})
-                                    ebunch.append(elem)
 
                                 if 'migrate_' in key:
                                     migrate_weight = paired_prediction
                                     elem = (detection_id, paired_detection_id, 'migrate', {'migrate_weight':migrate_weight, 'score':1*np.log(migrate_weight)})
                                     ebunch.append(elem)
 
-                                # if 'interaction_' in key:
-                                #     interaction_weight = paired_prediction
-                                #     elem = (detection_id, paired_detection_id, 'interaction', {'weight':interaction_weight, 'score':1*np.log(interaction_weight)})
-                                #     ebunch.append(elem)
-
                         # if the array is cell_number long, do similar stuff as above.
-                        elif val.shape[0] == max_cell_number:
+                        elif val.shape[0] == max_focus_number:
 
                             frame_predictions = val
                             detection_prediction = frame_predictions[region_idx]
@@ -6190,31 +6467,6 @@ def initialize_focus_track_graph(peak_id,
                                     continue
     #                             print("Linking {} to {}.".format(detection_id, next_disappear_state))
                                 elem = (detection_id, next_disappear_state, 'disappear', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-
-                            elif 'born_' in key:
-                                if frame_idx == 0:
-                                    continue
-    #                             print("Linking {} to {}.".format(prior_born_state, detection_id))
-                                elem = (prior_born_state, detection_id, 'born', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-
-                            elif 'die_model' in key:
-                                if last_frame:
-                                    continue
-    #                             print("Linking {} to {}.".format(detection_id, next_dies_state))
-                                elem = (detection_id, next_dies_state, 'die', {'weight':detection_prediction, 'score':1*np.log(detection_prediction)})
-
-                            # the following classes aren't yet implemented
-                            elif 'zero_cell' in key:
-                                G.nodes[det.id]['zero_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['zero_cell_score'] = 1*np.log(detection_prediction)
-
-                            elif 'one_cell' in key:
-                                G.nodes[det.id]['one_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['one_cell_score'] = 1*np.log(detection_prediction)
-
-                            elif 'two_cell' in key:
-                                G.nodes[det.id]['two_cell_weight'] = detection_prediction
-                                G.nodes[det.id]['two_cell_score'] = 1*np.log(detection_prediction)
 
                             ebunch.append(elem)
 
@@ -7194,6 +7446,59 @@ def foci_lap(img, img_foci, cell, t):
     #     img_overlay[y_temp+1,x_temp+1] = 12
 
     return disp_l, disp_w, foci_h
+
+# get this focus' cell
+def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t):
+
+    focus_regions = [tracked_focus]
+
+    cell_distances = get_focus_cell_distance(
+        seg_foci_img,
+        seg_cell_img,
+        focus_regions
+    )
+    # print(cell_distances)
+    if cell_distances.shape[1] == 0:
+        print(t)
+        plt.imshow(seg_cell_img)
+        plt.show()
+        plt.imshow(seg_foci_img)
+        plt.show()
+    this_label = np.argmin(cell_distances) + 1
+
+    # determine which cell this focus belongs to
+    for cell_id,cell in frame_cells.items():
+
+        cell_idx = cell.times.index(t)
+        cell_label = cell.labels[cell_idx]
+
+        if this_label == cell_label:
+            return(cell)
+
+        # # create binary image with only our query cell
+        # #  labelled as 1
+        # masked_cell_img = np.zeros(seg_cell_img.shape)
+        # masked_cell_img[seg_cell_img == cell_label] = 1
+
+        # # create binary image with only our query focus
+        # #   labelled as 1
+        # masked_focus_img = np.zeros(seg_foci_img.shape)
+        # masked_focus_img[seg_foci_img == tracked_label] = 1
+
+        # # add images together
+        # intersect_img = masked_cell_img + masked_focus_img
+
+        # # how many pixels are 2 in sum image?
+        # pixels_two = len(np.where(intersect_img == 2)[0])
+        # # how many pixels were 1 in focus binary image?
+        # pixels_one = len(np.where(masked_focus_img == 1)[0])
+
+        # # if over half the focus is within this cell, do the following
+        # if pixels_two/pixels_one > 0:
+
+        #     # focus belongs to this cell, so return the cell
+        #     return(cell)
+            
 
 # actual worker function for foci detection
 def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
