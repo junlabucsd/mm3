@@ -5121,7 +5121,7 @@ def get_focus_cell_distance(focus_label_img, cell_label_img, focus_regions):
             # Extract the values along the line, using cubic interpolation
             line_dists = ndi.map_coordinates(dist_img, np.vstack((line_x,line_y)), order=1)
             dist_arr[i,j] = np.max(line_dists)
-        
+            
     # print(dist_arr.shape)
     return(dist_arr)
 
@@ -5171,11 +5171,15 @@ def create_focus_lineages_from_graph(graph,
             experiment_name=params['experiment_name']
         )
 
+        print(focus_id)
+
         frame_cells = filter_cells_containing_val_in_attr(
             peak_cells,
             attr='times',
             val=prior_node_time, # putting here for now. check this. with logic below I'm note sure this is right
         )
+
+        print(frame_cells)
 
         seg_cell_img = seg_cell_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
         seg_foci_img = seg_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
