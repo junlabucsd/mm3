@@ -496,8 +496,8 @@ if __name__ == "__main__":
         with open(os.path.join(p['foci_track_dir'], 'all_foci.pkl'), 'wb') as foci_file:
             pickle.dump(tracks, foci_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        with open(os.path.join(p['cell_dir'],'all_cells_with_foci.pkl'), 'wb') as cell_file:
-            pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+        # with open(os.path.join(p['cell_dir'],'all_cells_with_foci.pkl'), 'wb') as cell_file:
+        #     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
         mm3.information("Finished curating and saving focus data in {} and updated cell data in {}.".format(os.path.join(p['foci_track_dir'], 'all_foci.pkl'),
                                                                                                             os.path.join(p['cell_dir'], 'all_cells_with_foci.pkl')))

@@ -5120,13 +5120,6 @@ def get_focus_cell_distance(focus_label_img, cell_label_img, focus_regions):
 
             # Extract the values along the line, using cubic interpolation
             line_dists = ndi.map_coordinates(dist_img, np.vstack((line_x,line_y)), order=1)
-#             print(line_dists)
-#             fig,ax = plt.subplots(2)
-#             ax[0].imshow(dist_img)
-#             ax[0].plot([focus_x, cell_x], [focus_y, cell_y], 'ro-')
-#             ax[1].plot(line_dists)
-#             plt.show();
-            
             dist_arr[i,j] = np.max(line_dists)
         
     # print(dist_arr.shape)
@@ -5195,8 +5188,6 @@ def create_focus_lineages_from_graph(graph,
             prior_node_region, # putting here for now. check this. with logic below I'm note sure this is right
             prior_node_time
         )
-
-        # print(cell)
 
         current_focus = Focus(
             cell,
@@ -7473,32 +7464,7 @@ def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t):
         cell_label = cell.labels[cell_idx]
 
         if this_label == cell_label:
-            return(cell)
-
-        # # create binary image with only our query cell
-        # #  labelled as 1
-        # masked_cell_img = np.zeros(seg_cell_img.shape)
-        # masked_cell_img[seg_cell_img == cell_label] = 1
-
-        # # create binary image with only our query focus
-        # #   labelled as 1
-        # masked_focus_img = np.zeros(seg_foci_img.shape)
-        # masked_focus_img[seg_foci_img == tracked_label] = 1
-
-        # # add images together
-        # intersect_img = masked_cell_img + masked_focus_img
-
-        # # how many pixels are 2 in sum image?
-        # pixels_two = len(np.where(intersect_img == 2)[0])
-        # # how many pixels were 1 in focus binary image?
-        # pixels_one = len(np.where(masked_focus_img == 1)[0])
-
-        # # if over half the focus is within this cell, do the following
-        # if pixels_two/pixels_one > 0:
-
-        #     # focus belongs to this cell, so return the cell
-        #     return(cell)
-            
+            return(cell)            
 
 # actual worker function for foci detection
 def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
