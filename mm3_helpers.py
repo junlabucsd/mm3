@@ -2418,6 +2418,43 @@ def cce_tversky_loss(y_true, y_pred):
     loss = losses.categorical_crossentropy(y_true, y_pred) + tversky_loss(y_true, y_pred)
     return loss
 
+def weighted_categorical_crossentropy(weights):
+    """
+    A weighted version of keras.objectives.categorical_crossentropy
+    
+    Variables:
+        weights: numpy array of shape (C,) where C is the number of classes
+    
+    Usage:
+        weights = np.array([0.5,2,10]) # Class one at 0.5, class 2 twice the normal weights, class 3 10x.
+        loss = weighted_categorical_crossentropy(weights)
+        model.compile(loss=loss,optimizer='adam')
+    """
+    
+    weights = K.variable(weights)
+        
+    def loss(y_true, y_pred):
+        # scale predictions so that the class probas of each sample sum to 1
+        y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+        # clip to prevent NaN's and Inf's
+        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+        # calc
+        loss = y_true * K.log(y_pred) * weights
+        loss = -K.sum(loss, -1)
+        return loss
+    
+    return loss
+
+def loss(y_true, y_pred):
+    # scale predictions so that the class probas of each sample sum to 1
+    y_pred /= K.sum(y_pred, axis=-1, keepdims=True)
+    # clip to prevent NaN's and Inf's
+    y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+    # calc
+    loss = y_true * K.log(y_pred) * weights
+    loss = -K.sum(loss, -1)
+    return loss
+
 def get_pad_distances(unet_shape, img_height, img_width):
     '''Finds padding and trimming sizes to make the input image the same as the size expected by the U-net model.
 
@@ -3523,18 +3560,26 @@ def get_focus_tracking_model_dict():
 
     model_dict = {}
 
-    if not 'migrate_model' in model_dict:
-        model_dict['migrate_model'] = models.load_model(params['foci']['migrate_model'],
+    if not 'all_model' in model_dict:
+        model_dict['all_model'] = models.load_model(params['foci']['all_model'],
                                                                     custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                        'f2_m':f2_m})
-    if not 'appear_model' in model_dict:
-        model_dict['appear_model'] = models.load_model(params['foci']['appear_model'],
-                                        custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                    'f2_m':f2_m})
-    if not 'disappear_model' in model_dict:
-        model_dict['disappear_model'] = models.load_model(params['foci']['disappear_model'],
-                                        custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                    'f2_m':f2_m})
+                                                                        'f2_m':f2_m,
+                                                                        'f1_m':f1_m,
+                                                                        'weighted_categorical_crossentropy':weighted_categorical_crossentropy,
+                                                                        'loss':loss})
+
+    # if not 'migrate_model' in model_dict:
+    #     model_dict['migrate_model'] = models.load_model(params['foci']['migrate_model'],
+    #                                                                 custom_objects={'bce_dice_loss':bce_dice_loss,
+    #                                                                     'f2_m':f2_m})
+    # if not 'appear_model' in model_dict:
+    #     model_dict['appear_model'] = models.load_model(params['foci']['appear_model'],
+    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
+    #                                                                 'f2_m':f2_m})
+    # if not 'disappear_model' in model_dict:
+    #     model_dict['disappear_model'] = models.load_model(params['foci']['disappear_model'],
+    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
+    #                                                                 'f2_m':f2_m})
 
     return(model_dict)
 
@@ -4082,6 +4127,7 @@ class OrphanFocusCell():
         # the following information is on a per timepoint basis
         self.times = [t]
         self.abs_times = [params['time_table'][self.fov][t]] # elapsed time in seconds
+        self.centroids = [(0,0)]
 
 
 # this is the object that holds all information for a cell
@@ -4724,6 +4770,19 @@ class Focus():
 
         return(df)
 
+def sort_regions_in_list(regions):
+
+    y_positions = []
+    for reg in regions:
+        y,_ = reg.centroid
+        y_positions.append(y)
+
+    order = np.argsort(y_positions)
+    # print(order)
+    sorted_regs = [regions[idx] for idx in order]
+    return(sorted_regs)
+
+
 class PredictTrackDataGenerator(utils.Sequence):
     '''Generates data for running tracking class preditions
     Input is a stack of labeled images'''
@@ -4731,7 +4790,10 @@ class PredictTrackDataGenerator(utils.Sequence):
                  data,
                  batch_size=32,
                  dim=(4,5,9),
-                 track_type = 'cells'):
+                 img_dim=(5,256,32),
+                 track_type = 'cells',
+                 images = False,
+                 img_stack = None):
 
         'Initialization'
         self.batch_size = batch_size
@@ -4739,6 +4801,30 @@ class PredictTrackDataGenerator(utils.Sequence):
         self.dim = dim
         self.on_epoch_end()
         self.track_type = track_type
+        self.images = images
+        self.img_dim = img_dim
+
+        if images:
+
+            unet_shape = (
+                params['segment']['trained_model_image_height'],
+                params['segment']['trained_model_image_width']
+            )
+                        
+            pad_dict = get_pad_distances(
+                self.img_dim[1:],
+                img_stack.shape[1],
+                img_stack.shape[2]
+            )
+
+            img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
+            self.img_stack = np.pad(
+                img_stack,
+                ((0,0), # add nothing to the time dimension
+                 (pad_dict['top_pad'],pad_dict['bottom_pad']),
+                 (pad_dict['left_pad'],pad_dict['right_pad'])),
+                mode='constant'
+            )
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -4763,6 +4849,8 @@ class PredictTrackDataGenerator(utils.Sequence):
         # Initialization
         # shape is (batch_size, max_cell_num, frame_num, cell_feature_num, 1)
         X = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.dim[2], 1))
+        if self.images:
+            img_X = np.zeros((self.batch_size, self.dim[1], self.img_dim[1], self.img_dim[2]))
 
         # Generate data
         for idx in batch_indices:
@@ -4788,7 +4876,11 @@ class PredictTrackDataGenerator(utils.Sequence):
                 if not frame_region_list:
                     continue
 
-                for region_idx, region, in enumerate(frame_region_list):
+                if self.images:
+                    img_X[idx, i, :, :] = self.img_stack[start_idx+i,...] # add i to start_idx to get correct img_stack frame
+
+                for region_idx,region in enumerate(frame_region_list):
+
                     y,x = region.centroid
                     bbox = region.bbox
                     orientation = region.orientation
@@ -4807,10 +4899,14 @@ class PredictTrackDataGenerator(utils.Sequence):
                         max_fluor = region.max_intensity
                         cell_info = (min_x, max_x, x, min_y, max_y, y, orientation, area, length, mean_fluor, max_fluor)
 
-                    if region_idx + 1 > self.dim[0]:
+                    # only take self.dim[0] number of regions
+                    if cell_label > self.dim[0]:
                         continue
 
                     X[idx, cell_index, i, :,0] = cell_info
+
+        if self.images:
+            return (X, img_X)
 
         return X
 
@@ -5121,7 +5217,7 @@ def get_focus_cell_distance(focus_label_img, cell_label_img, focus_regions):
             # Extract the values along the line, using cubic interpolation
             line_dists = ndi.map_coordinates(dist_img, np.vstack((line_x,line_y)), order=1)
             dist_arr[i,j] = np.max(line_dists)
-            
+
     # print(dist_arr.shape)
     return(dist_arr)
 
@@ -5129,7 +5225,8 @@ def create_focus_lineages_from_graph(graph,
                                      graph_df,
                                      fov_id,
                                      peak_id,
-                                     Cells):
+                                     Cells,
+                                     max_cell_number):
     '''
     This function iterates through nodes in a graph of detections
     to link the nodes as "Focus" objects, eventually
@@ -5163,6 +5260,10 @@ def create_focus_lineages_from_graph(graph,
         prior_node_time = graph.nodes[prior_node_id]['time']
         prior_node_region = graph.nodes[prior_node_id]['region']
 
+        # print('Prior node id: {}'.format(prior_node_id))
+        # print('Prior node time: {}'.format(prior_node_time))
+        # print('Prior node region: {}'.format(prior_node_region))
+
         focus_id = create_focus_id(
             prior_node_region,
             prior_node_time,
@@ -5171,7 +5272,7 @@ def create_focus_lineages_from_graph(graph,
             experiment_name=params['experiment_name']
         )
 
-        print(focus_id)
+        # print('focus id: {}'.format(focus_id))
 
         frame_cells = filter_cells_containing_val_in_attr(
             peak_cells,
@@ -5179,7 +5280,7 @@ def create_focus_lineages_from_graph(graph,
             val=prior_node_time, # putting here for now. check this. with logic below I'm note sure this is right
         )
 
-        print(frame_cells)
+        # print(frame_cells)
 
         seg_cell_img = seg_cell_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
         seg_foci_img = seg_stack[prior_node_time - 1,:,:] # putting here for now. check this. with logic below I'm note sure this is right
@@ -5190,8 +5291,13 @@ def create_focus_lineages_from_graph(graph,
             seg_cell_img,
             seg_foci_img,
             prior_node_region, # putting here for now. check this. with logic below I'm note sure this is right
-            prior_node_time
+            prior_node_time,
+            max_cell_number
         )
+
+        # print(cell)
+        if cell == 'too far down':
+            cell = OrphanFocusCell(fov_id, peak_id, prior_node_time)
 
         current_focus = Focus(
             cell,
@@ -5200,6 +5306,12 @@ def create_focus_lineages_from_graph(graph,
             fluor_img,
             prior_node_time,
         )
+
+        if cell == 'too far down':
+            disappear_time = graph.nodes[prior_node_id]['time']
+            disappear_region = graph.nodes[prior_node_id]['region']
+            current_focus.disappears(disappear_region, disappear_time)
+            continue
 
         if not focus_id in tracks.keys():
             tracks[focus_id] = current_focus
@@ -5308,19 +5420,27 @@ def create_focus_lineages_from_graph(graph,
                     seg_cell_img,
                     seg_foci_img,
                     focus_region,
-                    focus_time
+                    focus_time,
+                    max_cell_number
                 )
 
-                # if the cell is None, the focus didn't overlap well with any cells, so make it disappear for now
-                #  in the future, maybe I can calculate cell to which this focus is closest
                 # print(cell)
-                current_focus.grow(
-                    focus_region,
-                    focus_time,
-                    seg_foci_img,
-                    fluor_img,
-                    cell
-                )
+
+                # if the cell's label was greater than the max number of cells tracked, it won't exist,
+                #  so get_focus_cell returns 'too far down'. Here, we just have the focus disappear in this case.
+                if cell == 'too far down':
+                    disappear_time = graph.nodes[prior_node_id]['time']
+                    disappear_region = graph.nodes[prior_node_id]['region']
+                    current_focus.disappears(disappear_region, disappear_time)
+
+                else:
+                    current_focus.grow(
+                        focus_region,
+                        focus_time,
+                        seg_foci_img,
+                        fluor_img,
+                        cell
+                    )
 
             # if the event represents disappearance, end the focus
             elif max_edge_type == 'disappear':
@@ -6287,7 +6407,7 @@ def initialize_focus_track_graph(peak_id,
                                 predictions_dict,
                                 regions_by_time,
                                 max_focus_number=6,
-                                appear_threshold=0.75):
+                                appear_threshold=0.5):
 
     detection_dict = {}
     frame_num = predictions_dict['migrate_model_predictions'].shape[0]
@@ -6306,7 +6426,13 @@ def initialize_focus_track_graph(peak_id,
     timepoint_list = []
     region_label_list = []
 
+    # for k,vals in predictions_dict.items():
+    #     print(k)
+    #     print(vals.shape)
+    # pprint(predictions_dict)
+
     for frame_idx in range(frame_num):
+        # print(frame_idx)
 
         timepoint = frame_idx + 1
         paired_detection_time = timepoint+1
@@ -6322,8 +6448,6 @@ def initialize_focus_track_graph(peak_id,
 
         # get state change probabilities (class predictions) for this frame
         frame_prediction_dict = {key:val[frame_idx,...] for key,val in predictions_dict.items() if key != 'general_model_predictions'}
-        # for i in range(len(predictions_dict['general_model_predictions'])):
-            # frame_general_prediction = predictions_dict['general_model_predictions'][]
 
         # create the "will appear" nodes for this frame
         prior_appear_state = 'appear_{:0=4}'.format(timepoint-1)
@@ -6373,7 +6497,6 @@ def initialize_focus_track_graph(peak_id,
             )
 
             # print(region)
-############################################## start here on 2020-11-06 ############################################
             det = Detection(detection_id, region, timepoint)
             detection_dict[det.id] = det
 
@@ -7443,7 +7566,7 @@ def foci_lap(img, img_foci, cell, t):
     return disp_l, disp_w, foci_h
 
 # get this focus' cell
-def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t):
+def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t, max_cell_number):
 
     focus_regions = [tracked_focus]
 
@@ -7452,14 +7575,30 @@ def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t):
         seg_cell_img,
         focus_regions
     )
+
+    # print(t)
     # print(cell_distances)
-    if cell_distances.shape[1] == 0:
-        print(t)
-        plt.imshow(seg_cell_img)
-        plt.show()
-        plt.imshow(seg_foci_img)
-        plt.show()
+    # print(cell_distances.size)
+    # print(tracked_focus.label)
+
+    # sometimes focus is bad in phase, so all cells are gone,
+    #  but foci remain. Handle that here.
+    if cell_distances.size == 0:
+        bad = 'too far down'
+        return(bad)
+
     this_label = np.argmin(cell_distances) + 1
+
+    # print(this_label)
+    # print(max_cell_number)
+    # if the focus is too far from any cell, handle that here
+    if np.min(cell_distances) > 5:
+        bad = 'too far down'
+        return(bad)
+
+    if this_label > max_cell_number:
+        bad = 'too far down'
+        return(bad)
 
     # determine which cell this focus belongs to
     for cell_id,cell in frame_cells.items():
@@ -7468,7 +7607,7 @@ def get_focus_cell(frame_cells, seg_cell_img, seg_foci_img, tracked_focus, t):
         cell_label = cell.labels[cell_idx]
 
         if this_label == cell_label:
-            return(cell)            
+            return(cell)
 
 # actual worker function for foci detection
 def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):

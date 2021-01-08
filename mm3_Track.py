@@ -21,6 +21,8 @@ from scipy.io import savemat
 from skimage import measure, io
 from tensorflow.keras import models
 
+from matplotlib import pyplot as plt # for debugging
+
 # user modules
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
@@ -113,7 +115,8 @@ def run_foci(tracks,
              predictions_dict,
              regions_by_time,
              Cells,
-             appear_threshold = 0.85):
+             appear_threshold = 0.85,
+             max_cell_number = 6):
 
     G,graph_df = mm3.initialize_focus_track_graph(
         peak_id=peak_id,
@@ -124,7 +127,7 @@ def run_foci(tracks,
         appear_threshold=appear_threshold,
     )
 
-    tracks.update(mm3.create_focus_lineages_from_graph(G, graph_df, fov_id, peak_id, Cells))
+    tracks.update(mm3.create_focus_lineages_from_graph(G, graph_df, fov_id, peak_id, Cells, max_cell_number))
 
 
 def track_loop(
@@ -137,7 +140,8 @@ def track_loop(
     data_number = 9,
     img_file_name = None,
     seg_file_name = None,
-    track_type = 'cells'):
+    track_type = 'cells',
+    max_cell_number = 6):
 
     if img_file_name is None:
 
@@ -161,7 +165,7 @@ def track_loop(
     no_signal_frames = []
     for k,img in enumerate(img_stack):
         if track_type == 'foci':
-            if np.max(img) < 200:
+            if np.max(img) < 100:
                 no_signal_frames.append(k)
         elif track_type == 'cells':
             # if the mean phase image signal is less than 200, add its index to list
@@ -180,19 +184,24 @@ def track_loop(
         with open(p['cell_dir'] + '/all_cells.pkl', 'rb') as cell_file:
             Cells = pickle.load(cell_file)
         regions_by_time = []
-        for i,seg_img in enumerate(seg_stack):
-            regions_by_time.append(
-                measure.regionprops(
-                    label_image = seg_img,
-                    intensity_image = img_stack[i,:,:],
-                )
-            )
+        for i,img in enumerate(seg_stack):
+            regs = measure.regionprops(label_image=img, intensity_image=img_stack[i,:,:])
+            regs_sorted = mm3.sort_regions_in_list(regs)
+            regions_by_time.append(regs_sorted)
 
     if track_type == 'cells':
         # have generator yield info for top six cells in all frames
         prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,data_number), track_type=track_type)
     elif track_type == 'foci':
-        prediction_generator = mm3.PredictTrackDataGenerator(regions_by_time, batch_size=frame_number, dim=(cell_number,5,data_number), track_type=track_type)
+        prediction_generator = mm3.PredictTrackDataGenerator(
+            regions_by_time,
+            batch_size=frame_number,
+            dim=(cell_number,5,data_number),
+            track_type=track_type,
+            img_stack=img_stack,
+            images=True,
+            img_dim=(5,256,32)
+        )
     cell_info = prediction_generator.__getitem__(0)
 
     predictions_dict = {}
@@ -217,14 +226,50 @@ def track_loop(
         )
 
     elif track_type == 'foci':
+        pred_dict = {}
+        (
+            outbound1,
+            outbound2,
+            outbound3,
+            outbound4,
+            outbound5,
+            outbound6,
+            pred_dict['appear_model_predictions']
+        ) = predictions_dict['all_model_predictions']
+        # for this in predictions_dict['all_model_predictions']:
+        #     print(this.shape)
+        # pred_dict['appear_model_predictions'],pred_dict['disappear_model_predictions'],pred_dict['appear_model_predictions'] = predictions_dict['all_model_predictions']
+
+        # take the -2nd element of each outbound array. the -1st is for "no focus", -2nd is for 'disappear, 0:6 are for migrate.
+        pred_dict['disappear_model_predicitons'] = np.transpose(np.array(
+            [outbound1[:,-2],outbound2[:,-2],outbound3[:,-2],outbound4[:,-2],outbound5[:,-2],outbound6[:,-2]]
+        ))
+
+        # take the 0:6 elements of each outbound prediction result. 
+        pred_dict['migrate_model_predictions'] = np.concatenate(
+            [
+                outbound1[:,:6],
+                outbound2[:,:6],
+                outbound3[:,:6],
+                outbound4[:,:6],
+                outbound5[:,:6],
+                outbound6[:,:6],
+            ],
+            axis=1
+        )
+
+        # print(pred_dict['migrate_model_predictions'].shape)
+
         run_foci(
             tracks,
             peak_id,
             fov_id,
             params,
-            predictions_dict,
+            pred_dict,
             regions_by_time,
-            Cells
+            Cells,
+            max_cell_number=max_cell_number,
+            appear_threshold=0.85
         )
 
 # when using this script as a function and not as a library the following will execute
@@ -460,7 +505,8 @@ if __name__ == "__main__":
                     tracks,
                     model_dict,
                     data_number = 11,
-                    track_type = namespace.command
+                    track_type = namespace.command,
+                    max_cell_number = 6
                 )
 
     mm3.information("Finished lineage creation.")
