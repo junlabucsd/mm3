@@ -255,8 +255,8 @@ if __name__ == "__main__":
         # use first image to set size of frame
         image = tiff.imread(images[0]) # pull out an image
         size_x, size_y = image.shape[-1], image.shape[-2]
-        size_x = int((size_x / 2) * 2) # fixes bug if images don't have even dimensions with ffmpeg
-        size_y = int((size_y / 2) * 2)
+        size_x = int((size_x / 2)) * 2 # fixes bug if images don't have even dimensions with ffmpeg
+        size_y = int((size_y / 2)) * 2
 
         # set command to give to ffmpeg
         command = [FFMPEG_BIN,
@@ -286,6 +286,7 @@ if __name__ == "__main__":
 
         pipe = sp.Popen(command, stdin=sp.PIPE)
 
+        images = sorted(images,key=mm3.get_time)
         # display a frame and send it to write
         for img in images:
             # skip images not specified by param file.
@@ -301,6 +302,7 @@ if __name__ == "__main__":
                 image_data = image_data[:, :size_y, :size_x] # Adjust image_data dimension to have even numbers as size_y, size_x
             else:
                 image_data = image_data[:size_y, :size_x]
+
 
             # make phase stack
             if show_phase:
