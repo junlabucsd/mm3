@@ -26,7 +26,7 @@ import multiprocessing
 import pandas as pd
 
 sys.path.insert(0, '/home/wanglab/src/mm3/') # Jeremy's path to mm3 folder
-sys.path.insert(0, '/home/wanglab/src/mm3/aux/')
+sys.path.insert(0, '/home/wanglab/src/mm3/sup/')
 
 import mm3_helpers as mm3
 import mm3_plots

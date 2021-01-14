@@ -139,7 +139,7 @@ def julian_day_number():
     return jdn
 
 def get_plane(filepath):
-    pattern = r'(c\d+).tif'
+    pattern = r'(c\d+)\.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return res.group(1)
@@ -147,7 +147,7 @@ def get_plane(filepath):
         return None
 
 def get_fov(filepath):
-    pattern = r'xy(\d{2,4})\w*.tif'
+    pattern = r'xy(\d{2,4})\w*\.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return int(res.group(1))
@@ -155,7 +155,23 @@ def get_fov(filepath):
         return None
 
 def get_peak(filepath):
-    pattern = r'p(\d{3,4})\w*.tif'
+    pattern = r'p(\d{3,4})\w*\.tif'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return int(res.group(1))
+    else:
+        return None
+
+def get_pkl_fov(filepath):
+    pattern = r'xy(\d{2,4})\w*\.pkl'
+    res = re.search(pattern,filepath)
+    if (res != None):
+        return int(res.group(1))
+    else:
+        return None
+
+def get_pkl_peak(filepath):
+    pattern = r'p(\d{3,4})\w*\.pkl'
     res = re.search(pattern,filepath)
     if (res != None):
         return int(res.group(1))
@@ -163,7 +179,7 @@ def get_peak(filepath):
         return None
 
 def get_time(filepath):
-    pattern = r't(\d+)xy\w+.tif'
+    pattern = r't(\d+)xy\w+\.tif'
     res = re.search(pattern,filepath)
     if (res != None):
         return np.int_(res.group(1))
@@ -7985,7 +8001,7 @@ def foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
 
     return
 
-def dev_foci_info_unet(foci, Cells, specs, time_table, channel_name='sub_c2'):
+def foci_info_unet_curated(foci, Cells, specs, time_table, channel_name='sub_c2'):
 
     for Cell in Cells:
         pass
@@ -7996,11 +8012,14 @@ def update_cell_foci(cells, foci):
     in foci dictionary
     '''
     for focus_id, focus in foci.items():
+        # print(focus)
         if isinstance(focus, OrphanFocus):
             continue
         for cell in focus.cells:
 
             cell_id = cell.id
+            if cell_id == 'orphan':
+                continue
             cells[cell_id].foci[focus_id] = focus
 
 # finds best fit for 2d gaussian using function above

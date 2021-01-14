@@ -26,7 +26,7 @@ import multiprocessing
 import pandas as pd
 
 sys.path.insert(0, '/home/wanglab/src/mm3/') # Jeremy's path to mm3 folder
-sys.path.insert(0, '/home/wanglab/src/mm3/aux/')
+sys.path.insert(0, '/home/wanglab/src/mm3/sup/')
 
 import mm3_helpers as mm3
 import mm3_plots
@@ -310,7 +310,7 @@ class TrackItem(QGraphicsScene):
         # the below lookup table may need reworked to handle migration and child lines to/from a focus
         #   or the handling may be better done in the update_focus_info function
         self.event_type_index_lookup = {"MigrationLine":0,
-                                        "ChildLine":1,        
+                                        "ChildLine":1,
                                         "AppearSymbol":2,
                                         "DisappearSymbol":3,
                                         "JoinLine":4,
@@ -594,7 +594,7 @@ class TrackItem(QGraphicsScene):
         RGBLabelImg = (RGBLabelImg*255).astype('uint8')
         originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
         RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888)#.scaled(512, 512, aspectRatioMode=Qt.KeepAspectRatio)
-        
+
         time_info = self.track_info[time]
         time_info['time'] = time
 
@@ -650,7 +650,7 @@ class TrackItem(QGraphicsScene):
     #         foci_in_cell = cell.foci
 
     #         for t in cell.times:
-                
+
     #             cell_idx = cell.times.index(t)
     #             foci_in_cell = cell.foci
 
@@ -658,9 +658,9 @@ class TrackItem(QGraphicsScene):
 
 
     #         t_foci = mm3.filter_cells_containing_val_in_attr(self.these_Foci, attr='times', val=t)
-            
+
     #         if len(t_foci) > 0:
-                
+
     #             for focus_id,focus in t_foci.items():
 
     #                 focus_idx = focus.times.index(t)
@@ -673,10 +673,10 @@ class TrackItem(QGraphicsScene):
     #                         cell_idx = cell.times.index(t)
     #                         cell_id = cell.id
     #                         break
-                    
+
     #                 cell_y,cell_x = cell.centroids[cell_idx]
     #                 focus_y,focus_x = focus.regions[focus_idx].centroid
-                    
+
     #                 focus.regions[focus_idx].cell_y_pos = cell_y-focus_y
     #                 focus.regions[focus_idx].cell_x_pos = cell_x-focus_x
     #                 focus.daughter_cell_ids = []
@@ -691,7 +691,7 @@ class TrackItem(QGraphicsScene):
     def create_tracking_information(self, fov_id, peak_id, label_stack, img_stack):
 
         t_adj = 1
-        
+
         regions_by_time = {frame+t_adj: measure.regionprops(label_stack[frame,:,:], img_stack[frame,:,:]) for frame in range(label_stack.shape[0])}
         regions_and_events_by_time = {frame+t_adj: {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
         # iterate through all times, collecting focus information and adding
@@ -783,29 +783,29 @@ class TrackItem(QGraphicsScene):
                 if region_data['events'][5] == 1:
                     t_data['matrix'][region, 0] = 1
 
-        return(regions_and_events_by_time)                
+        return(regions_and_events_by_time)
 
         # pprint(regions_and_events_by_time)
 
             # if not cell_id in regions_and_events_by_cell_and_time:
             #     regions_and_events_by_cell_and_time[cell_id] = {}
-            
+
             # cell_data = regions_and_events_by_cell_and_time[cell_id]
-            
+
             # for t,t_region_list in this_cell_time_info.items():
 
             #     if not t in cell_data:
             #         cell_data[t] = {'regions' : {}, 'matrix' : None}
 
             #     for i,region in enumerate(t_region_list):
-                
+
             #         default_events = np.zeros(6, dtype=np.int)
             #         default_events[5] = 1 # set N to 1
             #         cell_data[t]['regions'][i+1] = {
             #             'props' : region,
             #             'events' : default_events,
             #         }
-                
+
         # create default interaction matrix
         # Now that we know how many regions there are per time point, we will create a default matrix which indicates how regions are connected to each between this time point, t, and the next one, t+1. The row index will be the region label of the region in t, and the column index will be the region label of the region in t+1.
         # If a region migrates from t to t+1, its row should have a sum of 1 corresponding from which region (row) to which region (column) it moved. If the region divided, then both of the daughter columns will get value 1.
@@ -820,7 +820,7 @@ class TrackItem(QGraphicsScene):
         #             n_regions_in_t_plus_1 = 0
 
         #         t_data['matrix'] = np.zeros((n_regions_in_t+1, n_regions_in_t_plus_1+1), dtype=np.int)
-        
+
 
         # regions_and_events_by_time = {frame+t_adj : {'regions' : {}, 'matrix' : None} for frame in range(label_stack.shape[0])}
 
@@ -848,7 +848,7 @@ class TrackItem(QGraphicsScene):
 
         # Loop over foci and edit event information
         # We will use the focus dictionary All_Foci.
-        # Each focus object has a number of attributes that are useful to us. 
+        # Each focus object has a number of attributes that are useful to us.
         # We will go through each focus by its time points and edit the events associated with that region.
         # We will also edit the matrix when appropriate.
         # pull out only the foci in of this FOV
@@ -1254,7 +1254,7 @@ class TrackItem(QGraphicsScene):
             #  # Fetch the focus's original information
             #    'matrix' is a 2D array, for which the row index is the region label at time t, and the column index is the region label at time t+1
             #     If a region disappears from t to t+1, it will receive a 1 in the column with index 0.
-            
+
             t_info = self.track_info[frame_time]
             # pprint(t_info)
             # all_t_cells = t_info['cells']
