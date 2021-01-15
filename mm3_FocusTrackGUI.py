@@ -25,8 +25,7 @@ import yaml
 import multiprocessing
 import pandas as pd
 
-sys.path.insert(0, '/home/wanglab/src/mm3/') # Jeremy's path to mm3 folder
-sys.path.insert(0, '/home/wanglab/src/mm3/sup/')
+sys.path.insert(0,os.path.dirname(os.path.realpath(__file__)))
 
 import mm3_helpers as mm3
 import mm3_plots
@@ -365,8 +364,9 @@ class TrackItem(QGraphicsScene):
             except Exception as e:
                 track_file.close()
                 print(str(e))
-
-        df_file_name = '/home/wanglab/src/mm3/focus_track_training_file_paths.csv'
+        
+        
+        df_file_name = os.path.dirname(os.path.realpath(__file__))+r'\focus_track_training_file_paths.csv'
         # df_file_name = '/Users/jt/code/mm3/focus_track_training_file_paths.csv'
 
         if os.path.isfile(df_file_name):
