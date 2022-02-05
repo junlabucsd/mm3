@@ -43,7 +43,7 @@ from skimage import morphology # many functions is segmentation used from this
 from skimage.measure import regionprops # used for creating lineages
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 from skimage import util, measure, transform, feature
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 from sklearn import metrics
 
 # deep learning
@@ -555,9 +555,14 @@ def get_tif_metadata_nd2ToTIFF(tif):
     '''
     # get the first page of the tiff and pull out image description
     # this dictionary should be in the above form
-    idata = tif[0].image_description
-    idata = json.loads(idata.decode('utf-8'))
 
+    for tag in tif.pages[0].tags:
+        if tag.name=="ImageDescription":
+            idata=tag.value
+            break
+
+    #print(idata)
+    idata = json.loads(idata) 
     return idata
 
 # Finds metadata from the filename
@@ -942,8 +947,16 @@ def tileImage(img, subImageNumber):
     divisor = int(np.sqrt(subImageNumber))
     M = img.shape[0]//divisor
     N = img.shape[0]//divisor
-    #print(img.shape, M, N, divisor, subImageNumber)
-    tiles = np.asarray([img[x:x+M,y:y+N] for x in range(0,img.shape[0],M) for y in range(0,img.shape[1],N)])
+    print(img.shape, M, N, divisor, subImageNumber)
+    ans = ([img[x:x+M,y:y+N] for x in range(0,img.shape[0],M) for y in range(0,img.shape[1],N)])
+
+    tiles=[]
+    for m in ans:
+        if m.shape[0]==512 and m.shape[1]==512:
+            tiles.append(m)
+
+    tiles=np.asarray(tiles)
+    #print(tiles)
     return(tiles)
 
 def get_weights(img, subImageNumber):
@@ -1119,6 +1132,7 @@ def predict_first_image_channels(img, model,
     #print(imgStackShiftUp.shape)
 
     crops = tileImage(imgStack, subImageNumber=subImageNumber)
+    print("Crops: ", crops.shape)
     crops = np.expand_dims(crops, -1)
 
     data_gen_args = {'batch_size':params['compile']['channel_prediction_batch_size'],
@@ -1980,19 +1994,19 @@ def subtract_fov_stack(fov_id, specs, color='c1', method='phase'):
         # list will length of image_data with tuples (image, empty)
         subtract_pairs = zip(image_data, avg_empty_stack)
 
-        # set up multiprocessing pool to do subtraction. Should wait until finished
-        pool = Pool(processes=params['num_analyzers'])
+        # # set up multiprocessing pool to do subtraction. Should wait until finished
+        # pool = Pool(processes=params['num_analyzers'])
 
-        if method == 'phase':
-            subtracted_imgs = pool.map(subtract_phase, subtract_pairs, chunksize=10)
-        elif method == 'fluor':
-            subtracted_imgs = pool.map(subtract_fluor, subtract_pairs, chunksize=10)
+        # if method == 'phase':
+        #     subtracted_imgs = pool.map(subtract_phase, subtract_pairs, chunksize=10)
+        # elif method == 'fluor':
+        #     subtracted_imgs = pool.map(subtract_fluor, subtract_pairs, chunksize=10)
 
-        pool.close() # tells the process nothing more will be added.
-        pool.join() # blocks script until everything has been processed and workers exit
+        # pool.close() # tells the process nothing more will be added.
+        # pool.join() # blocks script until everything has been processed and workers exit
 
         # linear loop for debug
-        # subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
+        subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
 
         # stack them up along a time axis
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
@@ -2142,18 +2156,18 @@ def segment_chnl_stack(fov_id, peak_id):
     sub_stack = load_stack(fov_id, peak_id, color='sub_{}'.format(params['phase_plane']))
 
     # set up multiprocessing pool to do segmentation. Will do everything before going on.
-    pool = Pool(processes=params['num_analyzers'])
+    #pool = Pool(processes=params['num_analyzers'])
 
     # send the 3d array to multiprocessing
-    segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
+    #segmented_imgs = pool.map(segment_image, sub_stack, chunksize=8)
 
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
+    #pool.close() # tells the process nothing more will be added.
+    #pool.join() # blocks script until everything has been processed and workers exit
 
-    # # image by image for debug
-    # segmented_imgs = []
-    # for sub_image in sub_stack:
-    #     segmented_imgs.append(segment_image(sub_image))
+    # image by image for debug
+    segmented_imgs = []
+    for sub_image in sub_stack:
+        segmented_imgs.append(segment_image(sub_image))
 
     # stack them up along a time axis
     segmented_imgs = np.stack(segmented_imgs, axis=0)
@@ -2200,11 +2214,11 @@ def segment_image(image):
     '''
 
     # load in segmentation parameters
-    OTSU_threshold = params['segment']['OTSU_threshold']
-    first_opening_size = params['segment']['first_opening_size']
-    distance_threshold = params['segment']['distance_threshold']
-    second_opening_size = params['segment']['second_opening_size']
-    min_object_size = params['segment']['min_object_size']
+    OTSU_threshold = params['segment']['otsu']['OTSU_threshold']
+    first_opening_size = params['segment']['otsu']['first_opening_size']
+    distance_threshold = params['segment']['otsu']['distance_threshold']
+    second_opening_size = params['segment']['otsu']['second_opening_size']
+    min_object_size = params['segment']['otsu']['min_object_size']
 
     # threshold image
     try:
@@ -3104,19 +3118,19 @@ def make_lineages_fov(fov_id, specs):
     fov_and_peak_ids_list = [(fov_id, peak_id) for peak_id in ana_peak_ids]
 
     # set up multiprocessing pool. will complete pool before going on
-    pool = Pool(processes=params['num_analyzers'])
+    #pool = Pool(processes=params['num_analyzers'])
 
     # create the lineages for each peak individually
     # the output is a list of dictionaries
-    lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
+    #lineages = pool.map(make_lineage_chnl_stack, fov_and_peak_ids_list, chunksize=8)
 
-    pool.close() # tells the process nothing more will be added.
-    pool.join() # blocks script until everything has been processed and workers exit
+    #pool.close() # tells the process nothing more will be added.
+    #pool.join() # blocks script until everything has been processed and workers exit
 
     # This is the non-parallelized version (useful for debug)
-    # lineages = []
-    # for fov_and_peak_ids in fov_and_peak_ids_list:
-    #     lineages.append(make_lineage_chnl_stack(fov_and_peak_ids))
+    lineages = []
+    for fov_and_peak_ids in fov_and_peak_ids_list:
+        lineages.append(make_lineage_chnl_stack(fov_and_peak_ids))
 
     # combine all dictionaries into one dictionary
     Cells = {} # create dictionary to hold all information

@@ -20,7 +20,7 @@ import multiprocessing
 from multiprocessing import Pool #, Lock
 import numpy as np
 import warnings
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 
 # user modules
 # realpath() will make your script run, even if you symlink it

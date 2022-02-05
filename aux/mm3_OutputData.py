@@ -59,6 +59,7 @@ if __name__ == "__main__":
             param_file_path = arg # parameter file path
         if opt in ['-o',"--fov"]:
             try:
+                user_spec_fovs=[]
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
