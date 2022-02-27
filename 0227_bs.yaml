@@ -1,0 +1,209 @@
+# Refer to the .yaml parameters file walkthrough in the git repository wiki
+# Name your experiment
+experiment_name: '20200227_bs51'
+
+# root directory for the experiment.
+experiment_directory: '/Users/ryan/Jun_Lab/20200227_bs51/'
+
+# subdirectory for the original TIFs. This should be in your experiment_directory
+image_directory: 'TIFF/'
+
+# subdirectory for storing analysis data. This should be in your experiment_directory
+analysis_directory: 'analysis/'
+
+# indicate where TIFFs came from. This changes which function is used to
+# retrieve metadata. Choices are 'elements', 'nd2ToTIFF', or 'other'
+TIFF_source: 'nd2ToTIFF'
+
+# indicate if you want to save out to TIFFs, or use HDF5 to save image data.
+# HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
+output: 'TIFF'
+
+# indicate if you are debugging
+debug: False
+
+# indicate which color channel (plane) has the phase images. Used by channel picker
+phase_plane: 'c1'
+
+# conversion factor from pixels to microns
+# use 0.065 for 100X, use 0.108 for 60X (Andor Neo)
+# use 0.11 for 100X (Photometrics Prime 95B)
+pxl2um: 0.11
+
+### process control ############################################################
+# Use these flags to control script specific processes and settings
+
+metamorphToTIFF:
+  file_name_filters: ["BF","mKO","HcRed"]
+  x_crop: [None, None]
+  y_crop: [None, None]
+  t_crop: [None, 131]
+  seconds_between_frames: 240
+  strain_name: 'JDW3416'
+
+nd2ToTIFF:
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end:
+  number_of_rows : 1
+  crop_ymin :
+  crop_ymax :
+  2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
+  tiff_compress : 5 # integer 1-9 for level of compression.
+  external_directory : # path to location of .nd2 if not in exp. dir.
+
+compile:
+  do_metadata: True
+  do_time_table : True
+  do_channel_masks : True
+  do_slicing : True
+
+  t_end : # only analyze images up until this t point. Leave blank otherwise
+  find_channels_method: 'peaks' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
+  model_file_traps: '/home/wanglab/src/mm3/weights/feature_weights_512x512.hdf5'
+  image_orientation : 'up' # direction of open end of channel. 'up', 'down', or 'auto'
+  channel_width : 10 # width of channels in pixels
+  channel_separation : 45 # peak-to-peak distance between channels in pixels
+  channel_detection_snr : 1 # signal to noise ratio for channel detection
+  channel_length_pad : 10 # pad for slicing out channels
+  channel_width_pad : 10 # pad for slicing out channels
+  trap_crop_height: 256 # how tall Unet-cropped trap image stacks should be
+  trap_crop_width: 27 # how wide Unet-cropped trap image stacks should be
+  trap_area_threshold: 2000 # minimum area in px^2 for traps to be kept
+  channel_prediction_batch_size: 15 # batch_size for how many (512,512) images to predict traps for at a time
+  merged_trap_region_area_threshold: 400000 # sets minimum area threshold for size of a rectangular region encompassing all traps on one side of a central trench. This number works for images at 600x mag, but should probably be adjusted for images at 1000x.
+
+channel_picker:
+  do_crosscorrs: True
+  do_CNN: False
+  interactive: True
+  do_seg: False
+
+  first_image: 1 # image index to show on top row
+  last_image: -1 # image index to show on middle row
+  channel_picking_threshold: 0.5 # threshold for calling empty/full channels
+  channel_picker_model_file: '/home/wanglab/src/mm3/weights/empties_weights.hdf5'
+
+subtract:
+  do_empties: True
+  do_subtraction: True
+
+  alignment_pad: 10 # for translational alignment
+
+segment:
+  do_segmentation: True
+  do_lineages: True
+
+  otsu:
+    OTSU_threshold: 1.0 # readjusting the OTSU method in fold change
+    first_opening_size: 2 # pixel size used in the first morphological opening
+    distance_threshold: 2 # pixel distance to be zeroed
+    second_opening_size: 1 # pixel size used in the second morphological opening
+  min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
+
+  model_file:
+  trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
+  trained_model_image_width: 32 #
+
+  batch_size: 210
+  cell_class_threshold: 0.60
+
+  unet:
+    save_predictions: True
+
+
+
+
+track:
+  lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
+  # regions only less than this value down the channel from the closed end will be considered
+  # to start potential new cells. Does not apply to daughters. unit is pixels
+  new_cell_y_cutoff: 150
+  # only regions with labels less than or equal to this value will be considered to start potential new cells. Does not apply to daughters
+  new_cell_region_cutoff: 4
+  # parameters for the minimum and maximum a region can when linking new regions to
+  # existing potential cell. Unit is ratio
+  max_growth_length: 1.3
+  min_growth_length: 0.8
+  max_growth_area: 1.3
+  min_growth_area: 0.8
+  seg_img: 'seg_otsu'
+
+
+### movie parameters ###########################################################
+# parameters for mm3_MovieMaker_alternative.py
+movie:
+  t0:
+  tN:
+  directory: 'movies'
+  background: 2
+  overlay: [0,1]
+  #overlay: leave empty if no overlay
+  channels:
+    2:
+      rgb: [255,255,255] # rgb color choose [255,255,255] for phase contrast
+      min: 100 # use min, max to define dynamic range of image
+      max: 4000
+      alpha: 0.7 # alpha (only relevant if channel is in overlay list)
+      #xlo: 100 # value from the original 16-bit grayscale image for masking in blending operation (alpha will be 0 for value below this threshold)
+    0:
+      rgb: [130,0,200]
+      min: 100
+      alpha: 0.30
+      xlo: 250 # value from the original 16-bit grayscale image for masking
+    1:
+      rgb: [0,247,255]
+      min: 100
+      alpha: 0.30
+      xlo: 250
+  fps: 20
+
+# parameters for mm3_MovieMaker
+moviemaker:
+  movie_directory: 'movies'   # subdirectory in exp folder
+  seconds_per_time_index: 240   # used for time stamp
+  fps: 12 # frames per second
+  image_start: 1 # 1 indexed (like how the TIFFs are named)
+  image_end: 410
+  show_time_stamp: True
+  show_label: True
+  label1_text: 'S750 1% mannose'
+  shift_time: 220
+  label2_text: 'S750 1% mannose + 5 uM CAM' # will show after shift time
+  show_scalebar: True
+  scalebar_length_um: 3
+  # color management
+  show_phase: True
+  auto_phase_levels: True # set to true to find automatically
+  ph_min: 100 # will be ignored if auto_phase_levels is True
+  ph_max: 10000
+  phase_plane_index: 0 # index of the phase plane
+  show_green: True
+  gr_min: 200
+  gr_max: 500
+  fl_green_index: 1 # index of green channel.
+  fl_green_interval: 1 # relative to phase. Avoids strobe
+  show_red: False
+  rd_min: 120
+  rd_max: 150
+  fl_red_index: 2 # index of red fluorsecent channel.
+  fl_red_interval: 1
+
+### foci_lap detection parameters ##############################################
+foci:
+  # indicate which color channel (plane) fluorescent foci images. Used by mm3_Foci.py
+  foci_plane: 'c2'
+  # toggle foci detection debug
+  debug_foci: False
+  # minimum and maximum sigma of laplacian to convolve in pixels.
+  # Scales with minimum foci width to detect as 2*sqrt(2)*minsig
+  foci_log_minsig: 2
+  foci_log_maxsig: 3
+  # absolute threshold in which laplacian well reaches to record potential foci
+  foci_log_thresh: 0.001 # default: 0.002;
+  # foci peaks must be this many times greater than median cell intensity.
+  # Think signal to noise ratio
+  foci_log_peak_med_ratio: 1.5 # default: 1.2;
+
+
+distributions:
+  attributes: ['elong_rate']
