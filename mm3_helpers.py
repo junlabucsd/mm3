@@ -562,7 +562,7 @@ def get_tif_metadata_nd2ToTIFF(tif):
             break
 
     #print(idata)
-    idata = json.loads(idata) 
+    idata = json.loads(idata)
     return idata
 
 # Finds metadata from the filename
@@ -1140,7 +1140,7 @@ def predict_first_image_channels(img, model,
                          'normalize_to_one':True,
                          'shuffle':False}
     predict_gen_args = {'verbose':1,
-                        'use_multiprocessing':True,
+                        'use_multiprocessing':False,
                         'workers':params['num_analyzers']}
 
     img_generator = TrapSegmentationDataGenerator(crops, **data_gen_args)
@@ -2382,7 +2382,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     #                  'normalize_to_one':False,
     #                  'shuffle':False}
     # arguments to predict_generator
-    predict_args = dict(use_multiprocessing=True,
+    predict_args = dict(use_multiprocessing=False,
                         workers=params['num_analyzers'],
                         verbose=1)
 
@@ -2420,8 +2420,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                              shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
-        predictions = model.predict_generator(image_generator, **predict_args)
-
+        predictions = model.predict(image_generator, **predict_args)
         # post processing
         # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],

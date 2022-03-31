@@ -7,6 +7,8 @@ from PyQt5.QtCore import Qt, QPoint, QRectF
 from skimage import io, img_as_ubyte, color, draw
 from matplotlib import pyplot as plt
 
+import cgitb
+cgitb.enable(format='text')
 # import modules
 import six
 import sys
@@ -109,7 +111,7 @@ if __name__ == "__main__":
             mask_filenames = None
         else:
             mask_filenames = [os.path.join(p['seg_dir'],fname) for fname in glob.glob(os.path.join(p['seg_dir'],'*xy{:0=3}*{}.tif'.format(fov_id, p['seg_img'])))]
-            
+
         image_filenames = [fname.replace(p['seg_dir'], p['chnl_dir']).replace(p['seg_img'], 'c{}'.format(namespace.channel)) for fname in mask_filenames]
 
         fov_filename_dict[fov_id] = []
@@ -121,7 +123,7 @@ if __name__ == "__main__":
 
     # print([names for names in fov_filename_dict[1]]) # for debugging
 
-    app = QApplication(sys.argv)
+    app = QApplication([])
     window = GUI.Window(imgPaths=fov_filename_dict, fov_id_list=fov_id_list, training_dir=training_dir)
     window.show()
     app.exec_() # exec is a reserved word in python2, so this is exec_
