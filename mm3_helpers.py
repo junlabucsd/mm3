@@ -3349,9 +3349,13 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     for t, regions in enumerate(regions_by_time, start=start_time_index):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
+        print('there are '+str(len(regions)) +' regions')
         for leaf_id in cell_leaves:
             if t - Cells[leaf_id].times[-1] > lost_cell_time:
                 cell_leaves.remove(leaf_id)
+                print('exceeded lost cell time')
+                print('current time = '+str(t))
+                print('last cell time = '+str(Cells[leaf_id].times[-1]))
 
         # make all the regions leaves if there are no current leaves
         if not cell_leaves:
@@ -3416,6 +3420,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
             ### iterate over the leaves, looking to see what regions connect to them.
             for leaf_id, region_links in six.iteritems(leaf_region_map):
+                print('num region links ='+str(len(region_links)))
 
                 # if there is just one suggested descendant,
                 # see if it checks out and append the data
@@ -3427,6 +3432,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     if check_growth_by_region(Cells[leaf_id], region):
                         # grow the cell by the region in this case
                         Cells[leaf_id].grow(region, t)
+                        print('growing cell')
 
                 # there may be two daughters, or maybe there is just one child and a new cell
                 elif len(region_links) == 2:
@@ -3481,6 +3487,278 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
     # return the dictionary with all the cells
     return Cells
+
+def extract_foci_array(fov_id_list, Cells_by_peak):
+    tracks = {}
+    for fov_id in fov_id_list:
+        tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
+        if not fov_id in Cells_by_peak:
+            continue
+
+        for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
+            if (len(Cells_of_peak) == 0):
+                continue
+            rep_dict = {}
+            ## load stack
+            foci_list = []
+            foci_list_id = []
+            for (cell_id, cell) in Cells_of_peak.items():
+                ## loop over cell times, foci positions, centroid positions
+                for n, [t, dw, dl, c] in enumerate(zip(cell.times,cell.disp_w,cell.disp_l,cell.centroids)):
+                    # for now try tracking relative to cell centroid (disp)
+                    # actually need absolute x, y to distinguish foci from different cells
+                    # need to check how times missing foci are stored
+                    # loop over x & y foci positions at this time point
+                    for (w,l) in zip(dw,dl):
+                        # append time and absolute foci positions
+                        foci_list.append([t,w+c[1], l+c[0]])
+                        # foci_list_id.append([t,w+c[1], l+c[0],cell_id])
+                        foci_list_id.append(cell_id)
+            foci_list = np.array(foci_list)
+            foci_list_id = np.array(foci_list_id)
+            tracks[fov_id][peak_id] = make_foci_lineage(foci_list,foci_list_id,(fov_id,peak_id),Cells_by_peak[fov_id][peak_id])
+
+    return(tracks)
+
+# Creates lineage for a single channel
+def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
+    '''
+    Create the lineage for a set of segmented images for one channel. Start by making the regions in the first time points potenial cells. Go forward in time and map regions in the timepoint to the potential cells in previous time points, building the life of a cell. Used basic checks such as the regions should overlap, and grow by a little and not shrink too much. If regions do not link back in time, discard them. If two regions map to one previous region, check if it is a sensible division event.
+
+    Parameters
+    ----------
+    fov_and_peak_ids : tuple.
+        (fov_id, peak_id)
+
+    Returns
+    -------
+    Cells : dict
+        A dictionary of all the cells from this lineage, divided and undivided
+
+    '''
+    time_table = params['time_table']
+    times_all = []
+    for fov in params['time_table']:
+        times_all = np.append(times_all, [int(x) for x in time_table[fov].keys()])
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+    # load in parameters
+    # if leaf regions see no action for longer than this, drop them
+    lost_trace_time = params['track_foci']['lost_trace_time']
+
+    # get the specific ids from the tuple
+    fov_id, peak_id = fov_and_peak_id
+
+    # start time is the first time point for this series of TIFFs.
+    information('Creating replication lineage for FOV %d, channel %d.' % (fov_id, peak_id))
+
+    # load foci detections
+    ## function to extract mm3_foci output as array of (time,position x, position y for all detections in channel)
+    # Set up data structures.
+    reps = {} # Dict that holds all replication cycles (terminated or ongoing)
+    rep_leaves = [] # ids of the current leaves of the growing lineage tree
+
+    # go through regions by timepoint and build lineages
+    # timepoints start with the index of the first image
+
+    ## make sure foci_list is sorted by time
+    # maybe should not use enumerate here
+    ## extract all times from foci_list
+    #right now foci_list is a 2D array with format [time, x position, y position]
+    for t in times_all:
+
+        ## get all foci from this peak at time t
+        ## foci_list is a 3 x (# time points) array of (time,x,y) for each focus detection
+        foci = foci_list[np.where(foci_list[:,0]==t)]
+        cell_ids = foci_list_id[np.where(foci_list[:,0]==t)]
+
+        ## now just a set of [t,x,y] x number detections at this time
+        # if no foci, move to next time point
+        if len(np.squeeze(foci)) == 0:
+            continue
+
+        # if there are cell leaves who are still waiting to be linked, but
+        # too much time has passed, remove them.
+        for leaf_id in rep_leaves:
+            if (t - reps[leaf_id].times[-1]) > lost_trace_time:
+                rep_leaves.remove(leaf_id)
+                print('too much time has passed, removing')
+                try:
+                    reps[leaf_id].terminate(reps[leaf_id].times[-1])
+                except:
+                    pass
+
+        # make all the regions leaves if there are no current leaves
+        if len(rep_leaves)==0:
+            for f,id in zip(foci,cell_ids):
+                # Create track and add it to dictionary
+                rep_id = create_rep_id(f[1],f[2],t, peak_id, fov_id)
+                ## need to define rep trace analogue to cell class
+                reps[rep_id] = ReplicationTrace(rep_id, f[1], f[2], t, id, parent_id=None)
+
+                # add the id to list of current leaves
+                rep_leaves.append(rep_id)
+
+        # Determine if the regions are children of current leaves
+        else:
+            ### create mapping between regions and leaves
+
+            # leaf_region_map is a dictionary of {leaf_id: (detection_id for which this is nearest leaf, y_distance between)}
+            # may have multiple detections matched to each leaf_id
+            leaf_region_map = {}
+            leaf_region_map = {leaf_id : [] for leaf_id in rep_leaves}
+
+            # get the last y position of current leaves and create tuple with the id
+            # current_leaf_positions = [(leaf_id, reps[leaf_id].positions[-1][1]) for leaf_id in rep_leaves]
+
+            ## need to sort foci by y position?
+            for f,focus in enumerate(foci):
+
+                ## pull out the leaves that have same cell_id as this detection
+                ## if there are none, look for leaves that are in the mother of current detection's cell
+                current_id = cell_ids[f]
+                mother_id = Cells[current_id].parent
+                cell_m = any([reps[leaf_id].cell_ids[-1] == current_id for leaf_id in rep_leaves])
+                mother_m = any([reps[leaf_id].cell_ids[-1] == mother_id for leaf_id in rep_leaves])
+                if cell_m:
+                    current_leaf_positions = [(leaf_id, reps[leaf_id].positions[-1][1]) for leaf_id in rep_leaves if reps[leaf_id].cell_ids[-1] == current_id]
+                elif mother_m:
+                    current_leaf_positions = [(leaf_id, reps[leaf_id].positions[-1][1]) for leaf_id in rep_leaves if reps[leaf_id].cell_ids[-1] == mother_id]
+                else:
+                    current_leaf_positions = [(leaf_id, reps[leaf_id].positions[-1][1]) for leaf_id in rep_leaves]
+
+                current_closest = (None, float('inf'))
+
+                # check this detection against all positions of all current leaf regions,
+                # find the closest one in y.
+                for leaf in current_leaf_positions:
+                    # calculate distance between region and leaf
+                    y_dist_region_to_leaf = abs(focus[2] - leaf[1])
+
+                    # if the distance is closer than before, update
+                    if y_dist_region_to_leaf < current_closest[1]:
+                        current_closest = (leaf[0], y_dist_region_to_leaf)
+
+                # update map with the closest region
+                leaf_region_map[current_closest[0]].append((f, y_dist_region_to_leaf))
+
+                ### leaf region map now has (nearest_focus_id, distance between)
+
+            # go through the current leaf regions.
+            # limit by the closest two current regions if there are three regions to the leaf
+            for leaf_id, foci_links in six.iteritems(leaf_region_map):
+                if len(foci_links) > 2:
+                    ## i.e. there are 3 or more detections for which this is the nearest leaf
+                    closest_two_foci = sorted(foci_links, key=lambda x: x[1])[:2]
+                    # but sort by region order so top region is first
+                    closest_two_foci = sorted(closest_two_foci, key=lambda x: x[0])
+                    # replace value in dictionary
+                    leaf_region_map[leaf_id] = closest_two_foci
+
+                    # for the discarded regions, put them as new leaves
+                    # if they are near the closed end of the channel
+                    discarded_foci = sorted(foci_links, key=lambda x: x[1])[2:]
+                    for discarded_focus in discarded_foci:
+                        focus = foci[discarded_focus[0]]
+                        cell_id = cell_ids[discarded_focus[0]]
+                        # if region.centroid[0] < new_cell_y_cutoff and region.label <= new_cell_region_cutoff:
+                        rep_id = create_rep_id(focus[1],focus[2], t, peak_id, fov_id)
+                        reps[rep_id] = ReplicationTrace(rep_id,focus[1],focus[2],t,cell_id, parent_id=None)
+                        rep_leaves.append(rep_id) # add to leaves
+                    #     # else:
+                        #     # since the regions are ordered, none of the remaining will pass
+                        #     break
+
+            ### iterate over the leaves, looking to see what regions connect to them.
+            for rep_id, foci_links in six.iteritems(leaf_region_map):
+                # print('foci links ' +str(foci_links[0][0]))
+                # if there is just one suggested descendant,
+                # see if it checks out and append the data
+                if len(foci_links) == 1:
+
+                    focus = foci[foci_links[0][0]] # grab the region from the list using its number
+                    # check if the pairing makes sense based on size and position
+                    # this function returns true if things are okay
+
+                    ## check if this detection is in the same cell as the mother
+                    ## if not - is it in a descendant?
+                    # should there be a distance check too?
+                    last_cell_id = reps[rep_id].cell_ids[-1]
+
+                    current_id = cell_ids[foci_links[0][0]]
+                    if last_cell_id == current_id:
+                        ## x, y, time, cell_id
+                        reps[rep_id].process(focus[1],focus[2],t,current_id)
+                        # print('still in same cell, extending')
+                    else:
+                        try:
+                            if Cells[last_cell_id].daughters[0] == current_id:
+                                reps[rep_id].process(focus[1],focus[2],t,current_id)
+
+                            if Cells[last_cell_id].daughters[1] == current_id:
+                                reps[rep_id].process(focus[1],focus[2],t,current_id)
+                        except:
+                            pass
+
+                elif len(foci_links) == 2:
+                    # grab these two daughters
+
+                    ## check if these two detections are in the same cell as the mother
+                    ## if not - are they in the daughters of the mother?
+                    ## if only one is in same cell as the mother (or in a descendant), extend the trace
+                    ## if neither are linked, drop both and terminate the trace
+                    focus1 = foci[foci_links[0][0]]
+                    f1_id = cell_ids[foci_links[0][0]]
+                    focus2 = foci[foci_links[1][0]]
+                    f2_id = cell_ids[foci_links[1][0]]
+                    last_cell_id = reps[rep_id].cell_ids[-1]
+
+                    if last_cell_id == f1_id and last_cell_id == f2_id:
+
+                        daughter1_id = create_rep_id(focus1[1],focus1[2],t,peak_id,fov_id)
+                        daughter2_id = create_rep_id(focus2[1],focus2[2],t,peak_id,fov_id)
+                        reps[daughter1_id]= ReplicationTrace(daughter1_id,focus1[1],focus1[2],t,f1_id,parent_id=rep_id)
+                        reps[daughter2_id]= ReplicationTrace(daughter2_id,focus2[1],focus2[2],t,f2_id,parent_id=rep_id)
+                        rep_leaves.remove(rep_id)
+                        reps[rep_id].terminate(reps[rep_id].times[-1])
+                        rep_leaves.append(daughter1_id)
+                        rep_leaves.append(daughter2_id)
+
+                    elif last_cell_id == f1_id:
+                        reps[rep_id].process(focus1[1],focus1[2],t,f1_id)
+
+                        rep_id_n = create_rep_id(focus2[1],focus2[2], t, peak_id, fov_id)
+                        reps[rep_id_n] = ReplicationTrace(rep_id_n,focus2[1],focus2[2],t,f2_id, parent_id=None)
+                        rep_leaves.append(rep_id_n)
+
+                    elif last_cell_id == f2_id:
+                        reps[rep_id].process(focus2[1],focus2[2],t,f2_id)
+
+                        rep_id_n = create_rep_id(focus1[1],focus1[2], t, peak_id, fov_id)
+                        reps[rep_id_n] = ReplicationTrace(rep_id_n,focus1[1],focus1[2],t,f1_id, parent_id=None)
+                        rep_leaves.append(rep_id_n)
+
+                    else:
+                        try:
+                            if Cells[last_cell_id].daughters == (f1_id, f2_id) or Cells[last_cell_id].daughters == (f2_id, f1_id):
+                                rep_id_n1 = create_rep_id(focus1[1],focus1[2], t, peak_id, fov_id)
+                                reps[rep_id_n1] = ReplicationTrace(rep_id_n1,focus1[1],focus1[2],t,f1_id, parent_id=rep_id)
+                                rep_leaves.append(rep_id_n1)
+
+                                rep_id_n2 = create_rep_id(focus2[1],focus2[2], t, peak_id, fov_id)
+                                reps[rep_id_n2] = ReplicationTrace(rep_id_n2,focus2[1],focus2[2],t,f2_id, parent_id=rep_id)
+                                rep_leaves.append(rep_id_n2)
+
+                                rep_leaves.remove(rep_id)
+                                reps[rep_id].terminate(reps[rep_id].times[-1])
+
+                        except:
+                            pass
+
+
+    # return the dictionary with all the traces
+    return reps
 
 ### Cell class and related functions
 
@@ -3560,6 +3838,44 @@ class Detection():
             self.orientation = None
             self.centroid = None
 
+class ReplicationTrace():
+    def __init__(self,rep_id,x,y,t,cell_id,parent_id=None):
+        self.id = rep_id
+        self.fov = int(rep_id.split('f')[1].split('p')[0])
+        self.peak = int(rep_id.split('p')[1].split('t')[0])
+        # parent id may be none
+        self.parent = parent_id
+
+        self.daughters = None
+
+        # birth and division time
+        self.initiation_time = t
+        self.termination_time = None # filled out if replication concludes
+
+        # the following information is on a per timepoint basis
+        self.times = [t]
+        self.abs_times = [params['time_table'][self.fov][t]] #
+        self.positions = [(x,y)]
+        self.cell_ids = [cell_id]
+
+    def process(self, x,y,t,cell_id):
+        '''Append data from a region to this cell.
+        use cell.times[-1] to get most current value'''
+
+        self.times.append(t)
+        self.abs_times.append(params['time_table'][self.fov][t])
+        self.positions.append((x,y))
+        self.cell_ids.append(cell_id)
+
+    def terminate(self,t):
+        # put the daugther ids into the cell
+        # self.daughters = [daughter1.id, daughter2.id]
+
+        # give this guy a division time
+        self.termination_time = t
+
+        # self.abs_times.append(params['time_table'][self.fov][self.division_time])
+
 # this is the object that holds all information for a cell
 class Cell():
     '''
@@ -3619,10 +3935,13 @@ class Cell():
         self.areas = [region.area]
 
         # calculating cell length and width by using Feret Diamter. These values are in pixels
-        length_tmp, width_tmp = feretdiameter(region)
+        # length_tmp, width_tmp = feretdiameter(region)
+        length_tmp, width_tmp = (region.axis_major_length,region.axis_minor_length)
         if length_tmp == None:
             mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths = [length_tmp]
+        print('newborn length '+str(length_tmp))
+        print('newborn width '+str(width_tmp))
         self.widths = [width_tmp]
 
         # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
@@ -3662,7 +3981,8 @@ class Cell():
         self.areas.append(region.area)
 
         #calculating cell length and width by using Feret Diamter
-        length_tmp, width_tmp = feretdiameter(region)
+        # length_tmp, width_tmp = feretdiameter(region)
+        length_tmp, width_tmp = (region.axis_major_length,region.axis_minor_length)
         if length_tmp == None:
             mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths.append(length_tmp)
@@ -3742,9 +4062,9 @@ class Cell():
         # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
         convert_to = 'float16' # numpy datatype to convert to
 
-        self.sb = self.sb.astype(convert_to)
-        self.sd = self.sd.astype(convert_to)
-        self.delta = self.delta.astype(convert_to)
+        # # self.sb = self.sb.astype(convert_to)
+        # self.sd = self.sd.astype(convert_to)
+        # self.delta = self.delta.astype(convert_to)
         self.elong_rate = self.elong_rate.astype(convert_to)
         self.tau = self.tau.astype(convert_to)
         self.septum_position = self.septum_position.astype(convert_to)
@@ -5284,6 +5604,7 @@ def feretdiameter(region):
     L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
     L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
 
+
     # calculate the minimal distance between the points at both ends of 3 lines
     # aka calcule the closest coordiante in the region to each of the above points.
     # pt_L1 = r_coords[np.argmin([np.sqrt(np.power(Pt[0]-L1_pt[0],2) + np.power(Pt[1]-L1_pt[1],2)) for Pt in r_coords])]
@@ -5361,6 +5682,11 @@ def create_focus_id(region, t, peak, fov, experiment_name=None):
         focus_id = 'f{:0=2}p{:0=4}t{:0=4}r{:0=2}'.format(fov, peak, t, region.label)
     else:
         focus_id = '{}f{:0=2}p{:0=4}t{:0=4}r{:0=2}'.format(experiment_name, fov, peak, t, region.label)
+    return focus_id
+
+def create_rep_id(x,y,t, peak, fov):
+    focus_id = ['f', '%02d' % fov, 'p', '%04d' % peak, 't', '%04d' % t,'x','%04d' % x,'y','%04d' %y]
+    focus_id = ''.join(focus_id)
     return focus_id
 
 # take info and make string for cell id
@@ -5659,12 +5985,24 @@ def check_growth_by_region(cell, region):
     max_growth_area = params['track']['max_growth_area']
     min_growth_area = params['track']['min_growth_area']
 
+    # length_c,width_c = feretdiameter(region)
+
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
+    # if cell.lengths[-1]*max_growth_length < length_c:
+        print('too long')
+        print(cell.lengths[-1])
+        print(region.major_axis_length)
+
+
         return False
 
     # check if it is not too short (cell should not shrink really)
     if cell.lengths[-1]*min_growth_length > region.major_axis_length:
+    # if cell.lengths[-1]*min_growth_length > length_c:
+        print('too short')
+        print(cell.lengths[-1])
+        print(region.major_axis_length)
         return False
 
     # check if area is not too great
@@ -5717,6 +6055,9 @@ def check_division(cell, region1, region2):
 
     # make sure combined size of daughters is not too big
     combined_size = region1.major_axis_length + region2.major_axis_length
+    # l1, w1 = feretdiameter(region1)
+    # l2, w2 = feretdiameter(region2)
+    # combined_size = l1 + l2
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < combined_size:
         return 0
