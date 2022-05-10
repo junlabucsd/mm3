@@ -1,10 +1,10 @@
 # Refer to the .yaml parameters file walkthrough in the git repository wiki
 # Name your experiment
-experiment_name: '20190121_JDW3416'
+experiment_name: '20200911_sj1536'
 
 # root directory for the experiment.
-experiment_directory: '/home/wanglab/Users_local/Jeremy/Imaging/20190121/'
-
+experiment_directory: '/Users/ryan/data/'
+# experiment_directory: '/Users/ryan/data/20200911_sj1536/'
 # subdirectory for the original TIFs. This should be in your experiment_directory
 image_directory: 'TIFF/'
 
@@ -13,7 +13,7 @@ analysis_directory: 'analysis/'
 
 # indicate where TIFFs came from. This changes which function is used to
 # retrieve metadata. Choices are 'elements', 'nd2ToTIFF', or 'other'
-TIFF_source: 'other'
+TIFF_source: 'nd2ToTIFF'
 
 # indicate if you want to save out to TIFFs, or use HDF5 to save image data.
 # HDF5 is required for any real time analysis. Choises are 'TIFF' or 'HDF5'
@@ -28,7 +28,8 @@ phase_plane: 'c1'
 # conversion factor from pixels to microns
 # use 0.065 for 100X, use 0.108 for 60X (Andor Neo)
 # use 0.11 for 100X (Photometrics Prime 95B)
-pxl2um: 0.105
+pxl2um: 0.11
+min_per_frame: 3.
 
 ### process control ############################################################
 # Use these flags to control script specific processes and settings
@@ -45,8 +46,8 @@ nd2ToTIFF:
   image_start: 1 # 1 indexed (like how the TIFFs are named)
   image_end: None
   number_of_rows : 1
-  crop_ymin : # 0.05
-  crop_ymax : # 0.95
+  crop_ymin :
+  crop_ymax :
   2row_crop : # [[y1_min, y1_max], [y2_min, y2_max]]
   tiff_compress : 5 # integer 1-9 for level of compression.
   external_directory : # path to location of .nd2 if not in exp. dir.
@@ -58,8 +59,8 @@ compile:
   do_slicing : True
 
   t_end : # only analyze images up until this t point. Leave blank otherwise
-  find_channels_method: 'Unet' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
-  model_file_traps: '/home/wanglab/src/mm3/weights/feature_weights_512x512.hdf5'
+  find_channels_method: 'peaks' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
+  model_file_traps: None
   image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
   channel_width : 10 # width of channels in pixels
   channel_separation : 45 # peak-to-peak distance between channels in pixels
@@ -73,15 +74,15 @@ compile:
   merged_trap_region_area_threshold: 400000 # sets minimum area threshold for size of a rectangular region encompassing all traps on one side of a central trench. This number works for images at 600x mag, but should probably be adjusted for images at 1000x.
 
 channel_picker:
-  do_crosscorrs: False
-  do_CNN: True
+  do_crosscorrs: True
+  do_CNN: False
   interactive: True
   do_seg: False
 
   first_image: 1 # image index to show on top row
   last_image: -1 # image index to show on middle row
-  channel_picking_threshold: 0.9 # threshold for calling empty/full channels
-  channel_picker_model_file: '/home/wanglab/src/mm3/weights/empties_weights.hdf5'
+  channel_picking_threshold: 0.99 # threshold for calling empty/full channels
+  channel_picker_model_file:
 
 subtract:
   do_empties: True
@@ -99,12 +100,16 @@ segment:
   second_opening_size: 1 # pixel size used in the second morphological opening
   min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
-  model_file: '/home/wanglab/src/mm3/weights/cropped_trap_weights.hdf5'
+
+  model_file: '/Users/ryan/models/20200921_MG1655_256x32.hdf5'
   trained_model_image_height: 256 # the number of rows for each training image the cell segmentation model was trained on
   trained_model_image_width: 32 #
 
-  batch_size: 210
+  batch_size: 20
   cell_class_threshold: 0.60
+
+  normalize_to_one: False
+  save_predictions: False
 
 track:
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
@@ -115,10 +120,15 @@ track:
   new_cell_region_cutoff: 4
   # parameters for the minimum and maximum a region can when linking new regions to
   # existing potential cell. Unit is ratio
-  max_growth_length: 1.3
-  min_growth_length: 0.8
-  max_growth_area: 1.3
-  min_growth_area: 0.8
+  max_growth_length: 1.5
+  min_growth_length: 0.7
+  max_growth_area: 1.5
+  min_growth_area: 0.7
+
+track_foci:
+  lost_trace_time: 3
+  max_distance: None
+  n_oc: 2
 
 ### movie parameters ###########################################################
 # parameters for mm3_MovieMaker_alternative.py
@@ -151,26 +161,26 @@ movie:
 # parameters for mm3_MovieMaker
 moviemaker:
   movie_directory: 'movies'   # subdirectory in exp folder
-  seconds_per_time_index: 300   # used for time stamp
+  seconds_per_time_index: 210   # used for time stamp
   fps: 12 # frames per second
-  image_start: 1 # 1 indexed (like how the TIFFs are named)
-  image_end: None
+  image_start: 60 # 1 indexed (like how the TIFFs are named)
+  image_end: 300
   show_time_stamp: True
-  show_label: False
-  label1_text: 'Label 1'
-  shift_time: None
-  label2_text: '' # will show after shift time
+  show_label: True
+  label1_text: 'MG1655 DnaN-yPet MOPS 0.4% gluconate'
+  shift_time: 94
+  label2_text: 'MG1655 DnaN-yPet MOPS 0.4% gluconate + 200 ug/mL rifampicin' # will show after shift time
   show_scalebar: True
   scalebar_length_um: 3
   # color management
   show_phase: True
-  auto_phase_levels: False # set to true to find automatically
-  ph_min: 500 # will be ignored if auto_phase_levels is True
-  ph_max: 5000
+  auto_phase_levels: True # set to true to find automatically
+  ph_min: 7000 # will be ignored if auto_phase_levels is True
+  ph_max: 30000
   phase_plane_index: 0 # index of the phase plane
-  show_green: False
-  gr_min: 450
-  gr_max: 1000
+  show_green: True
+  gr_min: 120
+  gr_max: 500
   fl_green_index: 1 # index of green channel.
   fl_green_interval: 1 # relative to phase. Avoids strobe
   show_red: False
