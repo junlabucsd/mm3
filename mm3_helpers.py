@@ -3349,13 +3349,9 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     for t, regions in enumerate(regions_by_time, start=start_time_index):
         # if there are cell leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
-        print('there are '+str(len(regions)) +' regions')
         for leaf_id in cell_leaves:
             if t - Cells[leaf_id].times[-1] > lost_cell_time:
                 cell_leaves.remove(leaf_id)
-                print('exceeded lost cell time')
-                print('current time = '+str(t))
-                print('last cell time = '+str(Cells[leaf_id].times[-1]))
 
         # make all the regions leaves if there are no current leaves
         if not cell_leaves:
@@ -3420,7 +3416,6 @@ def make_lineage_chnl_stack(fov_and_peak_id):
 
             ### iterate over the leaves, looking to see what regions connect to them.
             for leaf_id, region_links in six.iteritems(leaf_region_map):
-                print('num region links ='+str(len(region_links)))
 
                 # if there is just one suggested descendant,
                 # see if it checks out and append the data
@@ -3432,7 +3427,6 @@ def make_lineage_chnl_stack(fov_and_peak_id):
                     if check_growth_by_region(Cells[leaf_id], region):
                         # grow the cell by the region in this case
                         Cells[leaf_id].grow(region, t)
-                        print('growing cell')
 
                 # there may be two daughters, or maybe there is just one child and a new cell
                 elif len(region_links) == 2:
@@ -3940,8 +3934,6 @@ class Cell():
         if length_tmp == None:
             mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths = [length_tmp]
-        print('newborn length '+str(length_tmp))
-        print('newborn width '+str(width_tmp))
         self.widths = [width_tmp]
 
         # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
@@ -4062,23 +4054,31 @@ class Cell():
         # see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
         convert_to = 'float16' # numpy datatype to convert to
 
-        # # self.sb = self.sb.astype(convert_to)
+        # self.sb = self.sb.astype(convert_to)
         # self.sd = self.sd.astype(convert_to)
         # self.delta = self.delta.astype(convert_to)
-        self.elong_rate = self.elong_rate.astype(convert_to)
-        self.tau = self.tau.astype(convert_to)
-        self.septum_position = self.septum_position.astype(convert_to)
-        self.width = self.width.astype(convert_to)
+        # self.elong_rate = self.elong_rate.astype(convert_to)
+        # self.tau = self.tau.astype(convert_to)
+        # self.septum_position = self.septum_position.astype(convert_to)
+        # self.width = self.width.astype(convert_to)
 
-        self.lengths = [length.astype(convert_to) for length in self.lengths]
-        self.lengths_w_div = [length.astype(convert_to) for length in self.lengths_w_div]
-        self.widths = [width.astype(convert_to) for width in self.widths]
-        self.widths_w_div = [width.astype(convert_to) for width in self.widths_w_div]
-        self.volumes = [vol.astype(convert_to) for vol in self.volumes]
-        self.volumes_w_div = [vol.astype(convert_to) for vol in self.volumes_w_div]
+        self.sb = np.float16(self.sb)
+        self.sd = np.float16(self.sd)
+        self.delta = np.float16(self.delta)
+        self.elong_rate = np.float16(self.elong_rate)
+        self.tau = np.float16(self.tau)
+        self.septum_position = np.float16(self.septum_position)
+        self.width = np.float16(self.width)
+
+        self.lengths = [np.float16(length) for length in self.lengths]
+        self.lengths_w_div = [np.float16(length) for length in self.lengths_w_div]
+        self.widths = [np.float16(width) for width in self.widths]
+        self.widths_w_div = [np.float16(width) for width in self.widths_w_div]
+        self.volumes = [np.float16(vol) for vol in self.volumes]
+        self.volumes_w_div = [np.float16(vol) for vol in self.volumes_w_div]
         # note the float16 is hardcoded here
         self.orientations = [np.float16(orientation) for orientation in self.orientations]
-        self.centroids = [(y.astype(convert_to), x.astype(convert_to)) for y, x in self.centroids]
+        self.centroids = [(np.float16(y), np.float16(y)) for y, x in self.centroids]
 
     def print_info(self):
         '''prints information about the cell'''
@@ -4585,20 +4585,12 @@ def check_growth_by_region(cell, region):
 
     # check if length is not too much longer
     if cell.lengths[-1]*max_growth_length < region.major_axis_length:
-    # if cell.lengths[-1]*max_growth_length < length_c:
-        print('too long')
-        print(cell.lengths[-1])
-        print(region.major_axis_length)
-
 
         return False
 
     # check if it is not too short (cell should not shrink really)
     if cell.lengths[-1]*min_growth_length > region.major_axis_length:
     # if cell.lengths[-1]*min_growth_length > length_c:
-        print('too short')
-        print(cell.lengths[-1])
-        print(region.major_axis_length)
         return False
 
     # check if area is not too great
