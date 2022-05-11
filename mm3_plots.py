@@ -12,6 +12,8 @@ from scipy.optimize import least_squares, curve_fit
 import pandas as pd
 from random import sample
 
+import math
+
 # image analysis modules
 from skimage.measure import regionprops # used for creating lineages
 
@@ -30,9 +32,9 @@ mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams['font.family'] = 'sans-serif'
 
-SMALL_SIZE = 6
-MEDIUM_SIZE = 8
-BIGGER_SIZE = 10
+SMALL_SIZE = 12
+MEDIUM_SIZE = 14
+BIGGER_SIZE = 16
 
 plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
 plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
@@ -89,26 +91,31 @@ def cells2df(Cells, rescale=False):
 
     return Cells_df
 
-def cells2_ccdf(Cells, add_volume=True):
+def cells2_ccdf(Cells, add_volume=True, rescale=False):
     '''
     Take cell data (a dicionary of Cell objects) and return a dataframe. Looks for cell cycle info as well.
     '''
 
     # columns to include
+    # columns_w_seg = ['fov', 'peak', 'birth_label',
+    #                'birth_time', 'division_time',
+    #                'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position',
+    #                'initiation_time', 'termination_time', 'n_oc',
+    #                'true_initiation_length', 'initiation_length',
+    #                'true_initiation_volume', 'initiation_volume',
+    #                'unit_cell', 'initiation_delta',
+    #                'B', 'C', 'D', 'tau_cyc',
+    #                'segregation_time', 'segregation_length', 'segregation_volume',
+    #                'termination_length', 'termination_volume',
+    #                'S', 'IS', 'TS',
+    #                'segregation_delta', 'termination_delta',
+    #                'segregation_delta_mother', 'segregation_length_mother']
     columns_w_seg = ['fov', 'peak', 'birth_label',
                    'birth_time', 'division_time',
                    'sb', 'sd', 'width', 'delta', 'tau', 'elong_rate', 'septum_position',
-                   'initiation_time', 'termination_time', 'n_oc',
-                   'true_initiation_length', 'initiation_length',
-                   'true_initiation_volume', 'initiation_volume',
-                   'unit_cell', 'initiation_delta',
-                   'B', 'C', 'D', 'tau_cyc',
-                   'segregation_time', 'segregation_length', 'segregation_volume',
-                   'termination_length', 'termination_volume',
-                   'S', 'IS', 'TS',
-                   'segregation_delta', 'termination_delta',
-                   'segregation_delta_mother', 'segregation_length_mother']
-    columns_no_seg = columns_w_seg[:25]
+                   'initiation_time', 'initiation_time_n','termination_time','termination_time_n',
+                    'C_min', 'D_min', 'initiation_size','initiation_size_n']
+    # columns_no_seg = columns_w_seg[:25]
 
     # should not need this as of unet
     # for cell_tmp in Cells:
@@ -119,11 +126,11 @@ def cells2_ccdf(Cells, add_volume=True):
     Cells_df = pd.DataFrame(Cells_dict).transpose() # must be transposed so data is in columns
     Cells_df = Cells_df.sort_values(by=['fov', 'peak', 'birth_time', 'birth_label'])
 
-    try:
-        Cells_df = Cells_df[columns_w_seg].apply(pd.to_numeric)
-    except:
-        print('No nucleoid segregation or termination size data.')
-        Cells_df = Cells_df[columns_no_seg].apply(pd.to_numeric)
+    # try:
+    Cells_df = Cells_df[columns_w_seg].apply(pd.to_numeric, errors='ignore')
+    # except:
+    #     print('No nucleoid segregation or termination size data.')
+    #     Cells_df = Cells_df[columns_no_seg].apply(pd.to_numeric)
 
     # add birth and division volume
     if add_volume:
@@ -133,6 +140,9 @@ def cells2_ccdf(Cells, add_volume=True):
         Cells_df['division_volume'] = ((Cells_df['sd'] - Cells_df['width']) * np.pi *
                                        (Cells_df['width']/2)**2 +
                                        (4/3) * np.pi * (Cells_df['width']/2)**3)
+    if rescale:
+        for column in columns_w_seg:
+            Cells_df[column] = Cells_df[column] / Cells_df[column].mean()
 
     return Cells_df
 
@@ -317,7 +327,7 @@ def find_continuous_lineages(Cells, specs, t1=0, t2=1000):
             else:
                 cells_sorted = cells_sorted[i:]
 
-            # get the first cell and it's last contiguous daughter
+            # get the first cell and its last contiguous daughter
             first_cell = cells_sorted[0][1]
             last_daughter = find_last_daughter(first_cell, Cells)
 
@@ -405,7 +415,7 @@ def organize_cells_by_channel(Cells, specs):
     '''
     Returns a nested dictionary where the keys are first
     the fov_id and then the peak_id (similar to specs),
-    and the final value is a dictiary of cell objects that go in that
+    and the final value is a dictionary of cell objects that go in that
     specific channel, in the same format as normal {cell_id : Cell, ...}
     '''
 
@@ -1181,7 +1191,8 @@ def plotmulti_dist(data, exps, plot_params=None, df_key='df', disttype='line', n
                    ncol=figlabelcols, loc=1, fontsize=figlabelfontsize, frameon=False)
         plt.subplots_adjust(bottom=bottom_pad[no_p], hspace=h_pad[no_p])
     else:
-        plt.subplots_adjust(hspace=h_pad[no_p])
+        pass
+        # plt.subplots_adjust(hspace=h_pad[no_p])
 
     return fig, ax
 
@@ -1271,6 +1282,610 @@ def plotmulti_phase_dist(data, exps, figlabelcols=None):
 
     return fig, ax
 
+def plot_dist_rt(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=0, norm=True,df_key='df', media = None,color=None,disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
+    '''
+    Plot distributions of on parameter on an axis with multpile experiments
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+    exps : list
+        List of strings of experimental ids to plot
+    plot_param : str
+        Parameter to plot. Must be a column in data DataFrame.
+    fig : matplotlib Figure
+        Figure in which to plot. If None, a figure with one plot will be created.
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects.
+    ax_i : int
+        Index of the axis to plot on.
+    df_key : str
+        The key of DataFrame within the data dicionary. Defaults to 'df', but somtimes 'cc_df' is used.
+    disttype : 'line' or 'step'
+        'line' plots a continuous line which moves from the center of the bins of the histogram.
+        'step' plots a stepwise histogram.
+    nbins : int or str
+        Number of bins to use for histograms. If 'tau' param is being plotted, bins are calculated based on the time interval, if str uses np.histogram_bin_edges. Can also be sequence defining the bin edges.
+    rescale_data : bool
+        If True, normalize all data by the mean
+    individual_legends : bool
+        Plot median/mean and CV for each individual plot
+    legend_stat : 'mean' or 'median' or 'CV'
+        Whether to plot the mean or median in the stat. CV is always plotted.
+    legendfontsize : int
+        Font size for plot legends
+    orientation : 'vertical' or 'horizontal'
+        'veritical' produces a "normal" distribution, while 'horizontal' has the axis switched
+    '''
+
+    if fig == None:
+        fig, axes = plt.subplots(nrows=1, ncols=1,
+                                 figsize=(6,6))
+        ax = [axes]
+
+    xlimmax = 0
+
+    if color==None:
+        color='C3'
+
+    line_style = '-'
+
+    # get just this data
+    data_temp = data
+    # remove rows where value is none or NaN
+    data_temp = data_temp.dropna()
+
+    # get stats for legend and limits
+    data_mean = data_temp.mean()
+    data_std = data_temp.std()
+    data_cv = data_std / data_mean
+    data_max = data_temp.max() # used for setting tau bins
+    data_med = data_temp.median()
+
+    if legend_stat == 'mean':
+        # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+        leg_stat = '$\mu$={:0.2f} \nCV={:0.2f}'.format(data_mean, data_cv)
+    elif legend_stat == 'median':
+        leg_stat = 'Md={:0.2f} \nCV={:0.2f}'.format(data_med, data_cv)
+    elif legend_stat == 'CV':
+        leg_stat = 'CV={:0.2f}'.format(data_cv)
+
+    if rescale_data:
+        # rescale data to be centered at mean.
+        data_temp = data_temp / np.float(data_mean)
+
+    # set x lim by the highest mean
+    if data_mean > xlimmax:
+        xlimmax = data_mean
+
+    # determine bin bin_edge
+    if type(nbins) == str: # one of the numpy supported strings
+        # only use 3 std of mean for bins
+        if not rescale_data:
+            bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        else:
+            bin_range = (0, 2)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+    elif type(nbins) == int: # just even number
+        # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
+        if plot_param == 'tau': # make good bin sizes for the not float data
+            time_int = data[key]['t_int']
+            bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
+            if rescale_data:
+                bin_edges /= data_mean
+    else: # if bins is a sequence then use it directly.
+        bin_edges = nbins
+
+    if disttype == 'line':
+        # use this for line histogram
+        bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=norm)
+        # print(plot_param, bin_edges)
+        bin_steps = np.diff(bin_edges)/2.0
+        bin_centers = bin_edges[:-1] + bin_steps
+        # add zeros to the next points outside this so plot line always goes down
+        bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+        bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+        bin_vals = np.insert(bin_vals, 0, 0)
+        bin_vals = np.append(bin_vals, 0)
+
+        if orientation == 'vertical':
+            ax[ax_i].plot(bin_centers, bin_vals,lw=6,
+                       color=color, ls=line_style, alpha=1,
+                       label=label)
+        elif orientation == 'horizontal':
+            ax[ax_i].plot(bin_vals, bin_centers, lw=1,
+                       color=color, ls=line_style, alpha=0.75,
+                       label=leg_stat)
+
+    elif disttype == 'step':
+    # produce stepwise histogram
+        if orientation == 'vertical':
+            ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       lw=4, color=color, ls=line_style, alpha=1,
+                       label=leg_stat, orientation='vertical')
+        elif orientation == 'horizontal':
+            ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       lw=0.5, color=color, ls=line_style, alpha=0.75,
+                       label=leg_stat, orientation='horizontal')
+
+    # figure formatting
+    #ax_title = data[plot_param]['label'] + ', ' + data[plot_param]['symbol']
+    # ax[ax_i].set_title(label[ax_i], fontsize=figlabelfontsize)
+
+    if orientation == 'vertical':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_xlabel(data[plot_param]['unit'])
+        ax[ax_i].get_yaxis().set_ticks([])
+        if rescale_data:
+            ax[ax_i].set_xlim(0, 2)
+        else:
+            ax[ax_i].set_xlim(0, 2*xlimmax)
+        ax[ax_i].set_ylim(0, None)
+
+        sns.despine(ax=ax[ax_i], left=True)
+
+    elif orientation == 'horizontal':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_ylabel(data[plot_param]['unit'])
+        ax[ax_i].get_xaxis().set_ticks([])
+        if rescale_data:
+            ax[ax_i].set_ylim(0, 2)
+        else:
+            ax[ax_i].set_ylim(0, 2*xlimmax)
+        ax[ax_i].set_xlim(0, None)
+
+        sns.despine(ax=ax[ax_i], bottom=True)
+
+    if individual_legends:
+        ax[ax_i].legend(loc='upper left', fontsize=12, frameon=False)
+    ax[ax_i].set_xlabel(labelx,fontsize=18)
+
+    if media:
+        teststring = (media+'\nMG1655 DnaN-yPet')
+        plt.text(0,1.05, s=teststring, transform = ax[ax_i].transAxes, fontsize=10)
+    # ax[ax_i].set_xlim(0.6,1.8)
+    # ax[ax_i].set_ylim(0,8)
+
+    # ax[0].set_xlim((0,300))
+    # ax[0].set_ylim((0,10))
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
+
+def plot_dist_rt_overlay(data_set, label,labels, colors, media=None,vline=None, fig=None, ax=None, ls=None,df_key='df', disttype='line', nbins='sturges', norm=True,rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
+    '''
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+    exps : list
+        List of strings of experimental ids to plot
+    plot_param : str
+        Parameter to plot. Must be a column in data DataFrame.
+    fig : matplotlib Figure
+        Figure in which to plot. If None, a figure with one plot will be created.
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects.
+    ax_i : int
+        Index of the axis to plot on.
+    df_key : str
+        The key of DataFrame within the data dicionary. Defaults to 'df', but somtimes 'cc_df' is used.
+    disttype : 'line' or 'step'
+        'line' plots a continuous line which moves from the center of the bins of the histogram.
+        'step' plots a stepwise histogram.
+    nbins : int or str
+        Number of bins to use for histograms. If 'tau' param is being plotted, bins are calculated based on the time interval, if str uses np.histogram_bin_edges. Can also be sequence defining the bin edges.
+    rescale_data : bool
+        If True, normalize all data by the mean
+    individual_legends : bool
+        Plot median/mean and CV for each individual plot
+    legend_stat : 'mean' or 'median' or 'CV'
+        Whether to plot the mean or median in the stat. CV is always plotted.
+    legendfontsize : int
+        Font size for plot legends
+    orientation : 'vertical' or 'horizontal'
+        'veritical' produces a "normal" distribution, while 'horizontal' has the axis switched
+    '''
+
+    if fig == None:
+        fig, ax = plt.subplots(nrows=1, ncols=1,
+                                 figsize=(6,6))
+
+
+    xlimmax = 0
+
+
+    if ls == None:
+        line_style = '-'*len(data_set)
+    else:
+        line_style = ls
+    # d1 = data.where(data['init_label']==(0 or 1))
+    # d2 = data.where(data['init_label']==2)
+    # d3 = data.where(data['init_label']==3)
+    # d1 = data.loc[data['init_label']==(0 or 1)]
+    # d2 = data.loc[data['init_label']==2]
+    # d3 = data.loc[data['init_label']==3]
+
+
+    for (i,data) in enumerate(data_set):
+        # get just this data
+        data_temp = data
+        # print(data_temp.std())
+        # print(data['C_min'].std())
+
+        # remove rows where value is none or NaN
+        data_temp = data_temp.dropna()
+        #print(data_temp)
+
+        # get stats for legend and limits
+        data_mean = data_temp.mean()
+        data_std = data_temp.std()
+        data_cv = data_std / data_mean
+        data_max = data_temp.max() # used for setting tau bins
+        data_med = data_temp.median()
+
+        data_n = len(data_temp)
+
+        if math.isnan(data_std):
+            print('nan')
+            continue
+
+        legend_stat = None
+        leg_stat = None
+
+        if legend_stat == 'mean':
+            # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+            leg_stat = '$\mu$={:0.2f}\n n = {:d}'.format(data_mean,data_n)
+        elif legend_stat == 'median':
+            leg_stat = 'Md={:0.2f} \nCV={:0.2f}'.format(data_med, data_cv)
+        elif legend_stat == 'CV':
+            leg_stat = 'CV={:0.2f}'.format(data_cv)
+
+        if rescale_data:
+            # rescale data to be centered at mean.
+            data_temp = data_temp / np.float(data_mean)
+
+        # set x lim by the highest mean
+        if data_mean > xlimmax:
+            xlimmax = data_mean
+
+        # determine bin_edge
+        if type(nbins) == str: # one of the numpy supported strings
+            # only use 3 std of mean for bins
+            if not rescale_data:
+                bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+            else:
+                bin_range = (0, 2)
+            bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+        elif type(nbins) == int: # just even number
+            # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+            bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
+            # if plot_param == 'tau': # make good bin sizes for the not float data
+            #     time_int = data[key]['t_int']
+            #     bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
+            #     if rescale_data:
+            #         bin_edges /= data_mean
+        else: # if bins is a sequence then use it directly.
+            bin_edges = nbins
+
+        if disttype == 'line':
+            # use this for line histogram
+            bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=norm)
+            # print(plot_param, bin_edges)
+            bin_steps = np.diff(bin_edges)/2.0
+            bin_centers = bin_edges[:-1] + bin_steps
+            # add zeros to the next points outside this so plot line always goes down
+            bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+            bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+            bin_vals = np.insert(bin_vals, 0, 0)
+            bin_vals = np.append(bin_vals, 0)
+
+            if orientation == 'vertical':
+                if leg_stat:
+                    ax.plot(bin_centers, bin_vals, lw=6,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i]+'\n'+leg_stat)
+                else:
+                    ax.plot(bin_centers, bin_vals, lw=6,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i])
+            elif orientation == 'horizontal':
+                ax.plot(bin_vals, bin_centers, lw=2,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i]+'\n'+leg_stat)
+
+        elif disttype == 'step':
+        # produce stepwise histogram
+            if orientation == 'vertical':
+                data_temp = [x for x in data_temp]
+                ax.hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                           lw=1, color=colors[i], ls=line_style, alpha=0.75,
+                           label=labels[i]+'\n'+leg_stat, orientation='vertical')
+            elif orientation == 'horizontal':
+                ax.hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                           lw=1, color=colors[i], ls=line_style, alpha=0.75,
+                           label=labels[i]+'\n'+leg_stat, orientation='horizontal')
+    if vline:
+        for line in vline:
+            ax.axvline(line, color='gray',ls='--',label='<Init. length / ori>')
+
+
+    # figure formatting
+    #ax_title = data[plot_param]['label'] + ', ' + data[plot_param]['symbol']
+    #ax.set_title(plot_param, fontsize=figlabelfontsize)
+
+    if orientation == 'vertical':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_xlabel(data[plot_param]['unit'])
+        ax.get_yaxis().set_ticks([])
+        if rescale_data:
+            ax.set_xlim(0, 2)
+        else:
+            ax.set_xlim(0, 2*xlimmax)
+        ax.set_ylim(0, None)
+
+        sns.despine(ax=ax, left=True)
+
+    elif orientation == 'horizontal':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_ylabel(data[plot_param]['unit'])
+        ax.get_xaxis().set_ticks([])
+        if rescale_data:
+            ax.set_ylim(0, 2)
+        else:
+            ax.set_ylim(0, 2*xlimmax)
+        ax.set_xlim(0, None)
+
+        sns.despine(ax=ax, bottom=True)
+
+    if individual_legends:
+        ax.legend(loc=1, fontsize=legendfontsize, frameon=False)
+
+    ax.set_xlabel(label,fontsize=18)
+    # ax.set_xlim(-10,80)
+    plt.legend(frameon=False,fontsize=18)
+    if media:
+        teststring = (media+'\nMG1655 DnaN-yPet')
+        plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=10)
+    plt.tight_layout()
+    # plt.show()
+    return fig, ax
+
+def plot_prob_from_hist(data_set,use_bins = None, fig=None,ax=None,color='C0',label=None):
+    bins_all = []
+    bins_each = use_bins
+    for data_temp in data_set:
+        bin_vals, bin_edges = np.histogram(data_temp, bins=bins_each, density=False)
+        bins_all.append(bin_vals)
+        # bin_steps = np.diff(bin_edges)/2.0
+        # bin_centers = bin_edges[:-1] + bin_steps
+        # # add zeros to the next points outside this so plot line always goes down
+        # bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+        # bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+        # bin_vals = np.insert(bin_vals, 0, 0)
+        # bin_vals = np.append(bin_vals, 0)
+        #
+        # if orientation == 'vertical':
+        #     ax.plot(bin_centers, bin_vals, lw=2,
+        #                color=colors[i], ls=line_style, alpha=0.9,
+        #                label=labels[i]+'\n'+leg_stat)
+        # elif orientation == 'horizontal':
+        #     ax.plot(bin_vals, bin_centers, lw=2,
+        #                color=colors[i], ls=line_style, alpha=0.9,
+        #                label=labels[i]+'\n'+leg_stat)
+    bins = np.array(bins_all)
+
+    p_div = bins[0]/(bins[0]+bins[1])
+    print(bins[0])
+    print(bins[1])
+    if fig == None and ax == None:
+        fig = plt.figure()
+        ax=plt.axes()
+    ax.plot(bins_each[:-1]+np.diff(bins_each)/2.,p_div,marker='o',ms=2, lw=2,color=color,label=label)
+
+    plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    plt.tick_params(axis='y', which='both', left=True, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.set_xlabel('Length at rifampicin treatment ($\mu$m)',fontsize=16)
+    ax.set_ylabel('P(divide after rifampicin)',fontsize=16)
+    # plt.show()
+    return fig, ax
+
+def histogram(X,density=True):
+    valmax = np.max(X)
+    valmin = np.min(X)
+    iqrval = iqr(X)
+    nbins_fd = (valmax-valmin)*np.float_(len(X))**(1./3)/(2.*iqrval)
+    return np.histogram(X,bins = 10, density=density)
+    # if (nbins_fd < 1.0e4):
+    #     return np.histogram(X,bins='auto',density=density)
+    # else:
+    #     return np.histogram(X,bins='sturges',density=density)
+
+def make_binning(x,y,bincount_min, method=np.mean, emethod=np.std):
+    """
+    Given a graph (x,y), return a graph (x_binned, y_binned) which is a binned version
+    of the input graph, along x. Standard deviations per bin for the y direction are also returned.
+    """
+    idx = np.argsort(x)
+    x = x[idx]
+    y = y[idx]
+
+    histx, bins = histogram(x)
+    digitized = np.digitize(x,bins)
+    x_binned=[]
+    y_binned=[]
+    error_binned=[]
+    for i in range(1,len(bins)):
+        ypts = y[digitized == i]
+
+        if (len(ypts) < bincount_min):
+            continue
+
+        x_binned.append(float(0.5*(bins[i-1] + bins[i])))
+        y_binned.append(float(method(ypts)))
+        error_binned.append(float(emethod(ypts)))
+
+    res = {}
+    res['x'] = np.array(x_binned)
+    res['y'] = np.array(y_binned)
+    res['err'] = np.array(error_binned)
+    return res
+
+def plotmulti_dist_rt(data, plot_params=None, df_key='df', disttype='line', nbins='sturges', rescale_data=False, fig_legend=True, figlabelcols=None, figlabelfontsize=BIGGER_SIZE, individual_legends=True, legend_stat='mean', legendfontsize=BIGGER_SIZE*0.75):
+    '''
+    Plot distributions of specified parameters.
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+    exps : list
+        List of strings of experimental ids to plot
+    plot_params : list of parameters
+
+    Rest of the parameters are passed to plot_dist()
+    '''
+
+    if plot_params == None:
+        plot_params = ['sb', 'sd', 'delta', 'septum_position','tau','elong_rate', 'taucyc_min','C_min','D_min','unit_size']
+        labels = ['$L_b$ ($\mu$m)', '$L_d$ ($\mu$m)', '$\Delta$ ($\mu$m)', '$L_\\frac{1}{2}$',
+                   '$\\tau$ [min]', '$\lambda$ [1/hours]','$\\tau_{C}$ [min]','C [min]','D [min]','s$_{i}$ ($\mu$m)']
+        if rescale_data:
+            labels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>','$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>',
+                       '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
+                       '$\\tau_{C}$/<$\\tau_{C}$>','C/ <C>','D / <D>','s$_{i}$ / <s$_{i}$>']
+
+
+    no_p = len(plot_params)
+
+    # holds number of rows, columns, and fig height. All figs are 7.5 in width
+    fig_dims = ((0,0,0), (1,1,8), (1,2,4), (1,3,3), (1,4,3), (2,3,6), (2,3,6),
+                (3,3,8), (3,3,8), (3,3,8),
+                (4,3,9), (4,3,9), (4,3,9), # 10, 11, 12
+                (4,4,8), (4,4,8), (4,4,8), (4,4,8), # 13, 14, 15, 16
+                (None), (None), (None), (None), # 17, 18, 19, 20
+                (None), (None), (None), (6, 4, 10)) # 21, 22, 23, 24
+    bottom_pad = (0, 0.125, 0.25, 0.35, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125,
+                  0.075, 0.075, 0.075,
+                  0.1, 0.1, 0.1, 0.1,
+                  0.1, 0.1, 0.1, 0.1,
+                  0.1, 0.1, 0.1, 0.1)
+    h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.5,
+             0.5, 0.5, 0.5,
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 1)
+
+    fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
+                             figsize=(7.5, fig_dims[no_p][2]), squeeze=False)
+    ax = axes.flat
+
+    for ax_i, plot_param in enumerate(plot_params):
+
+        fig, ax = plot_dist_rt(data, label = labels, plot_param=plot_param,
+                            fig=fig, ax=ax, ax_i=ax_i, df_key=df_key,
+                            disttype=disttype, nbins=nbins, rescale_data=rescale_data, individual_legends=individual_legends, legend_stat=legend_stat, figlabelfontsize = figlabelfontsize, legendfontsize=legendfontsize)
+
+    # remove axis for plots that are not there
+    for ax_i in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
+        if ax_i >= no_p:
+            sns.despine(ax=ax[ax_i], left=True, bottom=True)
+            ax[ax_i].set_xticklabels([])
+            ax[ax_i].set_xticks([])
+            ax[ax_i].set_yticklabels([])
+            ax[ax_i].set_yticks([])
+
+    plt.tight_layout()
+    #plt.show()
+
+    return fig, ax
+
+def plotmulti_phase_dist_rt(data, figlabelcols=None):
+    '''
+    Plot distributions of the 6 major parameters.
+    This is an easy to use function with less customization. Use plotmulti_dist for more options.
+
+    Need to fix to use the pnames dictionary
+
+    Usage
+    -----
+    dataset_ids = ['exp_key_1', 'exp_key_2']
+    fig, ax = mm3_plots.plotmulti_phase_dist(data, dataset_ids)
+    fig.show()
+    '''
+
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
+    titles = ['birth length', 'elongation rate', 'length at division',
+              'generation time', 'added length', 'septum position']
+
+    titles = ['elongation rate', '[rplL-GFP]']
+    columns = ['elong_rate','fl_area_avg']
+    xlabels = ['$\lambda$','[rplL-GFP]']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=[4,2])
+    ax = np.ravel(axes)
+
+    xlimmaxs = [0 for col in columns]
+
+
+    time_int = 4
+    color = 'C0'
+
+    # Plot each distribution
+    for i, column in enumerate(columns):
+        data_temp = data[column]
+
+        # get stats for legend
+        data_mean = data_temp.mean()
+        data_std = data_temp.std()
+        data_cv = data_std / data_mean
+
+        # set x lim to the highest mean
+        if data_mean > xlimmaxs[i]:
+            xlimmaxs[i] = data_mean
+
+        # set tau bins to be in appropriate interval
+        if column == 'tau':
+            bin_edges = np.arange(0, data_temp.max(), step=time_int) + time_int/2
+            ax[i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       color=color, lw=2,
+                       label='$\mu$=%.3f \n CV=%.2f' % (data_mean, data_cv))
+
+        else:
+            ax[i].hist(data_temp, bins=20, histtype='stepfilled', density=True,
+                       color=color, lw=2, alpha=1,
+                       label='$\mu$=%.2f \n CV=%.2f \n N = %.0f' % (data_mean, data_cv, len(data_temp)))
+
+    # plot formatting
+    for i, column in enumerate(columns):
+        ax[i].set_title(titles[i])
+        ax[i].set_xlabel(xlabels[i])
+        ax[i].get_yaxis().set_ticks([])
+        ax[i].legend(loc=1, frameon=False)
+        ax[i].set_xlim(0, 2*xlimmaxs[i])
+
+    # legend for whole figure
+    # handles, _ = ax[-1].get_legend_handles_labels()
+    #
+    # fig.legend(handles, labels,
+    #            ncol=figlabelcols, loc=8, fontsize=SMALL_SIZE, frameon=False)
+
+    sns.despine(left=True)
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.925, bottom=0.09, hspace=0.35)
+    plt.show()
+    #fig.suptitle('Distributions')
+
+    return fig, ax
+
 def plot_violin_fovs(Cells_df):
     '''
     Create violin plots of cell stats across FOVs
@@ -1352,7 +1967,7 @@ def plot_violin_birth_label(Cells_df):
     return fig, ax
 
 ### Time series ------------------------------------------------------------------------------------
-def plot_time(data, exps, plot_param=None, x_param='birth_time', fig=None, ax=None, ax_i=0, df_key='df', alt_time='birth', plot_scatter=True, plot_moving_average=False, plot_moving_error=True, window=10, binmin=10):
+def plot_time(data, plot_param=None, media=None, t1=None, t2=None, color='C0',label = None, x_param='birth_time', time_int=1, fig=None, ax=None, ax_i=0, df_key='df', alt_time=None, plot_scatter=True, plot_moving_average=False, plot_moving_error=True, window=10, binmin=10):
     '''Plot parameter over time for muliple experiments on one axis
 
     x_param : 'birth_time'
@@ -1371,7 +1986,7 @@ def plot_time(data, exps, plot_param=None, x_param='birth_time', fig=None, ax=No
 
     if fig == None:
         fig, axes = plt.subplots(nrows=1, ncols=1,
-                                 figsize=(4,4))
+                                 figsize=(10,5))
         ax = [axes]
         standalone=True
     else:
@@ -1389,113 +2004,142 @@ def plot_time(data, exps, plot_param=None, x_param='birth_time', fig=None, ax=No
         adjust_time = False
 
     # if just one experimental id was passed instead of a list, fix that.
-    if isinstance(exps, str) :
-        exps = [exps]
+    # if isinstance(exps, str) :
+    #     exps = [exps]
 
-    for exp in exps:
-        # Cells = data[key]['Cells']
-        df = data[exp]['df']
-        time_int = data[exp]['t_int']
-        lc = data[exp]['color']
-        try:
-            ls = data[exp]['line_style']
-        except:
-            ls = '-'
-        try:
-            scat_c = data[exp]['color_light']
-        except:
-            scat_c = lc
+    #for exp in exps:
+    # Cells = data[key]['Cells']
+    #df = data[exp]['df']
+    df = data
+    # time_int = params['min_per_frame']
+    #lc = data[exp]['color']
+    lc = color
+    # try:
+    #     ls = data[exp]['line_style']
+    # except:
+    ls = '-'
+    # try:
+    #     scat_c = data[exp]['color_light']
+    # except:
+    scat_c = lc
 
-        # if using 'birth' adjust times indiviually for all experiments.
-        if adjust_time:
-            alt_time = df['birth_time'].min()
-            alt_time = alt_time * time_int / 60.0
+    # if using 'birth' adjust times indiviually for all experiments.
+    if adjust_time:
+        alt_time = df['birth_time'].min()
+        alt_time = alt_time * time_int / 60.0
 
-        # get out just the data to be plot for one subplot
-        time_df = df[[x_param, plot_param]].dropna(how='any')
-        if len(time_df) == 0:
-            continue # skip if there is no data
+    # get out just the data to be plot for one subplot
+    time_df = df[[x_param, plot_param]].dropna(how='any')
+    # time_df = df[[x_param, plot_param]]
 
-        # time average window
-        xlims = (time_df[x_param].min() * time_int / 60.0 - alt_time,
-                 time_df[x_param].max() * time_int / 60.0 - alt_time)
+    # if len(time_df) == 0:
+    #     continue # skip if there is no data
 
-        # set overall xlims:
-        if xlims[0] < xlimmin:
-            xlimmin = xlims[0]
-        if xlims[1] > xlimmax:
-            xlimmax = xlims[1]
+    # time average window
+    xlims = (time_df[x_param].min() * time_int / 60.0 - alt_time,
+             time_df[x_param].max() * time_int / 60.0 - alt_time)
 
-        time_df.sort_values(by=x_param, inplace=True)
+    # set overall xlims:
+    if xlims[0] < xlimmin:
+        xlimmin = xlims[0]
+    if xlims[1] > xlimmax:
+        xlimmax = xlims[1]
 
-        # change times to the plotting units
-        times = time_df[x_param] * time_int / 60.0 - alt_time
 
-        # plot the scatter plot
-        if plot_scatter:
-            if isinstance(plot_scatter, float):
-                scatter_alpha = plot_scatter
-            else:
-                scatter_alpha = 0.25
-            ax[ax_i].scatter(times, time_df[plot_param],
-                          s=5, alpha=scatter_alpha, color=scat_c, linewidths=0,
-                          rasterized=True, zorder=1,
-                          label=None)
+    time_df.sort_values(by=x_param, inplace=True)
 
-        if plot_moving_average or plot_moving_error:
-            # graph moving average
-            bin_edges = np.arange(xlims[0], xlims[1], window * time_int / 60.0)
-            bin_centers, bin_means, bin_errors = binned_stat(times, time_df[plot_param],
-                                                             statistic='mean',
-                                                             bin_edges=bin_edges, binmin=binmin)
+    # change times to the plotting units
+    times = time_df[x_param] * time_int / 60.0 - alt_time
 
-        if plot_moving_average:
-            ax[ax_i].plot(bin_centers, bin_means,
-                          lw=0.5, alpha=0.75, color=lc, ls=ls,
-                          zorder=2,
-                          label=None)
+    # plot the scatter plot
+    if plot_scatter:
+        if isinstance(plot_scatter, float):
+            scatter_alpha = plot_scatter
+        else:
+            scatter_alpha = 0.25
+        ax[ax_i].scatter(times, time_df[plot_param],
+                      s=5, alpha=scatter_alpha, color=scat_c, linewidths=0,
+                      rasterized=True, zorder=1,
+                      label=None)
 
-        if plot_moving_error:
-            ax[ax_i].errorbar(bin_centers, bin_means, yerr=bin_errors, xerr=None,
-                      lw=0, alpha=0.75, color=lc, ls=ls,
-                      elinewidth=0.5, capsize=1, capthick=0.5,
-                      label=None, zorder=2)
+    if plot_moving_average or plot_moving_error:
+        # graph moving average
+        bin_edges = np.arange(xlims[0], xlims[1], window * time_int / 60.0)
+        bin_centers, bin_means, bin_errors = binned_stat(times, time_df[plot_param],
+                                                         statistic='mean',
+                                                         bin_edges=bin_edges, binmin=binmin)
 
-        # set y lim to the highest mean. There may be nans if no items in bin
-        if np.nanmean(bin_means) > ylimmax:
-            ylimmax = np.nanmean(bin_means)
-            ylimstd = np.nanstd(time_df[plot_param]) # added to y max
+    if plot_moving_average:
+        ax[ax_i].plot(bin_centers, bin_means,
+                      lw=2, alpha=1, color='C3', ls=ls,
+                      zorder=2,
+                      label=None)
+
+    if plot_moving_error:
+        ax[ax_i].errorbar(bin_centers, bin_means, yerr=bin_errors, xerr=None,
+                  lw=0, alpha=1, color='C3', ls=ls,
+                  elinewidth=0.5, capsize=1, capthick=0.5,
+                  label=None, zorder=2)
+
+    # set y lim to the highest mean. There may be nans if no items in bin
+    if np.nanmean(bin_means) > ylimmax:
+        ylimmax = np.nanmean(bin_means)
+        ylimstd = np.nanstd(time_df[plot_param]) # added to y max
+
+    ax[ax_i].axvline(x=t1*time_int/60., linewidth=1, color='C3', ls='--', alpha=0.75, label='+rifampicin (200 ug/mL)')
+    ax[ax_i].axvline(x=t2*time_int/60., linewidth=1, color='C4', ls='--', alpha=0.75, label='growth stops')
 
     # formatting
     if x_param == 'birth_time':
         xl = 'birth time (hours)'
-    elif x_param == 'division_time':
+    elif x_param == 'division_time' or x_param == 'last_time':
         xl = 'division time (hours)'
-    elif x_param == 'initiation_time':
+    elif x_param == 'initiation_time' or x_param == 'initiation_time_n':
         xl = 'initiation time (hours)'
     ax[ax_i].set_xlabel(xl)
-    yl = pnames[plot_param]['label'] + '\n'+pnames[plot_param]['unit']
+    # yl = pnames[plot_param]['label'] + '\n'+pnames[plot_param]['unit']
+    yl = label
     ax[ax_i].set_ylabel(yl)
 
-    ax[ax_i].set_xlim(xlimmin, xlimmax)
-    ax[ax_i].set_ylim(0, ylimmax + 3 * ylimstd)
+    # xlims=[0,6]
+
+    ax[ax_i].set_xlim(xlims)
+    # ax[ax_i].set_ylim(0, max(time_df[plot_param])*1.2)
+    ax[ax_i].set_ylim(0, ylimmax+3*ylimstd)
+
+    plt.legend(frameon=False)
+
 
     sns.despine(ax=ax[ax_i])
 
+    teststring = media+'\nMG1655 DnaN-yPet \nn = %i cells' % int(len(time_df))
+    plt.text(0,1.05, s=teststring, transform = ax[ax_i].transAxes, fontsize=10)
+
     # do tight layout if this is a standalone
-    # if standalone:
-    #     plt.tight_layout()
+    plt.tight_layout()
 
     return fig, ax
 
-def plotmulti_time(data, exps, plot_params=None, x_param='birth_time', alt_time='birth', plot_scatter=True, plot_moving_average=True, plot_moving_error=False, window=10, fig_legend=True, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
+def plotmulti_time(data, plot_params=None, x_param='birth_time', alt_time='birth', plot_scatter=True, plot_moving_average=True, plot_moving_error=False, window=10, fig_legend=True, figlabelcols=None, figlabelfontsize=SMALL_SIZE):
     '''
     Plots cell parameters over time using a scatter plot and a moving average.
     '''
 
     # lists for plotting and formatting
+    # if plot_params == None:
+    #     plot_params = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+
     if plot_params == None:
-        plot_params = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+        # plot_params = ['sb', 'sd', 'delta', 'septum_position','tau','elong_rate', 'C_min','D_min','initiation_size']
+        plot_params = ['elong_rate', 'C_min','D_min','initiation_size']
+
+        # labels = ['$L_b$ ($\mu$m)', '$L_d$ ($\mu$m)', '$\Delta$ ($\mu$m)', '$L_\\frac{1}{2}$',
+        #            '$\\tau$ [min]', '$\lambda$ [1/hours]','$\\tau_{C}$ [min]','C [min]','D [min]','s$_{i}$ ($\mu$m)']
+        labels = ['$\lambda$ [1/hours]','C [min]','D [min]','s$_{i}$ ($\mu$m)']
+        # if rescale_data:
+        #     labels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>','$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>',
+        #                '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
+        #                '$\\tau_{C}$/<$\\tau_{C}$>','C/ <C>','D / <D>','s$_{i}$ / <s$_{i}$>']
 
     no_p = len(plot_params)
     # holds number of rows, columns, and fig height. All figs are 7.5 in width
@@ -1519,8 +2163,9 @@ def plotmulti_time(data, exps, plot_params=None, x_param='birth_time', alt_time=
     # Now plot the filtered data
     for ax_i, plot_param in enumerate(plot_params):
 
-        fig, ax = plot_time(data=data, exps=exps,
+        fig, ax = plot_time(data=data,
                             plot_param=plot_param,
+                            labels = labels[ax_i],
                             x_param=x_param,
                             fig=fig, ax=ax, ax_i=ax_i,
                             df_key='df',
@@ -1548,13 +2193,13 @@ def plotmulti_time(data, exps, plot_params=None, x_param='birth_time', alt_time=
             sns.despine(ax=ax[ax_i])
 
     # legend for whole figure
-    if fig_legend:
-        fig_legend_labels = [data[exp]['name'] for exp in exps]
-        handles, _ = ax[0].get_legend_handles_labels()
-        if figlabelcols == None:
-            figlabelcols = int(len(exps)/2)
-        fig.legend(handles, fig_legend_labels,
-                   ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
+    # if fig_legend:
+    #     #fig_legend_labels = [data[exp]['name'] for exp in exps]
+    #     handles, _ = ax[0].get_legend_handles_labels()
+    #     if figlabelcols == None:
+    #         figlabelcols = int(len(exps)/2)
+    #     fig.legend(handles, fig_legend_labels,
+    #                ncol=figlabelcols, loc=8, fontsize=figlabelfontsize, frameon=False)
 
     plt.tight_layout()
     fig.align_labels()
@@ -1704,6 +2349,720 @@ def plotmulti_phase_paramtime(data, exps, window=30, figlabelcols=None, figlabel
 
     return fig, ax
 
+def plot_cc_by_init(Cells_df, t_int, media, shift1=None, shift2 = None, align = False):
+    fig, ax = plt.subplots(1,1, figsize=(8,8))
+    df1 = Cells_df.sort_values(by=['initiation_time']).dropna(how='any',subset=['initiation_time', 'C_min'])
+    # df2 = Cells_df.sort_values(by=['initiation_time_n']).dropna(how='any',subset=['initiation_time_n'])
+    df2 = Cells_df.dropna(how='any',subset=['initiation_time_n'])
+
+    c_min = df1['C_min']/60.
+    init_time = df1['initiation_time']*t_int/60.
+
+    init_n = df2['initiation_time_n']
+    term_n = df2['termination_time_n']
+    divs_n = df2['division_time']*t_int/60.
+
+    divs = []
+    divs = df1['division_time']*t_int/60.
+    # if align:
+    #     vals = [[0, c, d-i] for i, c, d in zip(init_time, c_min, divs)]
+    # else:
+    vals = [[i, i+c, d] for i, c, d in zip(init_time, c_min, divs)]
+
+    inits = []
+    for (i, t, d) in zip(init_n,term_n, divs_n):
+        if math.isnan(d):
+            if isinstance(i,list):
+                for x in range(len(i)):
+                    if t[x] != None:
+                        t[x] = t[x]*t_int/60.
+
+                    inits.append([i[x]*t_int/60.,t[x],None])
+            else:
+                if t !=None:
+                    t = t * t_int/60.
+                inits.append([i*t_int/60.,t, None])
+    inits = np.array(inits)
+    # filter = np.argsort(inits[:,0])
+    #inits = inits[filter]
+
+    all_events = np.concatenate((inits,vals), axis=0)
+    filter = np.argsort(all_events[:,0])
+    all_events = all_events[filter]
+
+    if align:
+
+        for x in range(len(all_events[:,0])):
+            try:
+                all_events[x,1] = all_events[x,1]-all_events[x,0]
+            except:
+                all_events[x,1] = np.nan
+            try:
+                all_events[x,2] = all_events[x,2]-all_events[x,0]
+            except:
+                all_events[x,2] = np.nan
+        all_events[:,0] = 0
+
+
+    #inits = np.sort(np.array(inits),axis= 0)
+    count = 0
+    count1 = False
+    count2 = False
+    maxval = np.max(all_events[all_events!=None])
+
+    for y_ind, y in enumerate(np.linspace(1,0, len(all_events))):
+
+        print('plotting '+str(count))
+        count+=1
+        #ax.plot(vals[y_ind], y)
+        if y_ind == 0:
+            lab1 = "Initiation"
+            lab2 = "Termination"
+        else:
+            lab1 = None
+            lab2 = None
+
+        try:
+            ax.plot(all_events[y_ind][:2],[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+            if all_events[y_ind][2] != np.nan:
+                ax.plot(all_events[y_ind][1:],[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+            print(all_events[y_ind][1])
+
+            if math.isnan(all_events[y_ind][1]):
+                print('no term')
+                initc = 'black'
+                alpha1 = 1
+                ax.plot(all_events[y_ind][0], y, marker='o',ms=1, mfc='white',mec='black',label=lab1, alpha=1)
+
+            else:
+                initc = 'green'
+                print('green term')
+                alpha1 = .1
+                ax.plot(all_events[y_ind][0], y, color=initc, marker='o',ms=1, label=lab1, alpha=alpha1)
+            if align:
+                if not count1:
+                    if all_events[y_ind][0]> shift1*t_int/60.:
+                        print('count 1 eval')
+                        ax.plot(np.linspace(0,maxval,100),np.linspace(y,y,100),ls='-',color='orange',alpha=.5,label='Growth slows')
+                        count1 = True
+                if count1 and not count2 and all_events[y_ind][0]> shift2*t_int/60.:
+                    print('count 2 eval')
+                    ax.plot(np.linspace(0,maxval,100),np.linspace(y,y,100),ls='-',color='black',alpha=.5,label='Growth stops')
+                    count2 = True
+            ax.plot(all_events[y_ind][1], y, color='darkred', marker='o', ms=1, label = lab2)
+            ax.plot(all_events[y_ind][2], y, color='blue',marker='o',ms=1)
+        except:
+            pass
+
+
+    # for y_ind, y in enumerate(np.linspace(0, -1, len(inits))):
+    #     try:
+    #         ax.plot(inits[y_ind]*t_int/60.,[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+    #     except TypeError:
+    #         pass
+    #     try:
+    #         ax.plot(inits[y_ind][0]*t_int/60., y, color='C2', marker='o',ms=1)
+    #     except TypeError:
+    #         pass
+    #     try:
+    #         ax.plot(inits[y_ind][1]*t_int/60., y, color='C3', marker='o', ms=1)
+    #     except TypeError:
+    #         pass
+
+        # try:
+        #     ax.plot(vals[y_ind][2], y, color='yellow',marker='o',ms=1)
+        #     print('plotting division')
+        # except:
+        #     pass
+
+    if not align:
+        ax.axvline(shift1*t_int/60., color='orange', label='+ rifampicin 200 ug/mL (growth slows)', ls='--',alpha=.5)
+        ax.axvline(shift2*t_int/60., color='black', label='growth stops', ls = '--', alpha=.5)
+    teststring = media+'\nMG1655 DnaN-yPet \nn = %i cells' % int(len(all_events))
+    plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=10)
+
+    plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    plt.tick_params(axis='y', which='both', left=False, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    ax.get_yaxis().set_visible(False)
+
+    plt.legend(frameon = False, fontsize=8)
+
+    ax.set_xlabel("Time (hrs)", fontsize = 14)
+
+    #plt.show()
+
+    return fig, ax
+
+def plot_cc_by_init_align(Cells_df, t_int, media):
+    fig, ax = plt.subplots(1,1, figsize=(8,8))
+    df1 = Cells_df.sort_values(by=['initiation_time']).dropna(how='any',subset=['initiation_time', 'C_min'])
+    # df2 = Cells_df.sort_values(by=['initiation_time_n']).dropna(how='any',subset=['initiation_time_n'])
+    c_min = df1['C_min']/60.
+    d_min = df1['D_min']/60.
+    init_n = Cells_df['initiation_time_n']*t_int/60.
+    term_n = Cells_df['termination_time_n']*t_int/60.
+    divs_n = Cells_df['division_time']*t_int / 60.
+
+
+    # marker = np.where(df1['initiation_time'] = 65)
+    init_time = df1['initiation_time']*t_int/60.
+    # divs = []
+    divs = df1['division_time']*t_int/60.
+
+    inits = []
+    for (i, t, d) in zip(init_n,term_n, divs_n):
+        if d == None:
+            try:
+                for x in len(i):
+                    inits.append([i[x],t[x]-i[x]])
+            except:
+                inits.append([i,t-i])
+    inits = np.sort(np.array(inits),axis = 0)
+
+    vals = [[0, c, c+d] for c, d in zip(c_min, d_min)]
+    for y_ind, y in enumerate(np.arange(0,-len(c_min))):
+        if y_ind == 0:
+            lab1 = "Initiation"
+            lab2 = "Termination"
+        else:
+            lab1 = None
+            lab2 = None
+
+        ax.plot(vals[y_ind][:2],[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+        if vals[y_ind][2] != np.nan:
+            ax.plot(vals[y_ind][1:],[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+
+        ax.plot(vals[y_ind][0], y, color='C2', marker='o',ms=1, label=lab1)
+        ax.plot(vals[y_ind][1], y, color='darkred', marker='o', ms=1, label = lab2)
+        ax.plot(vals[y_ind][2], y, color='blue',marker='o',ms=1)
+
+    for y_ind, y in enumerate(np.linspace(-len(c_min), -len(c_min)-len(inits))):
+        ax.plot(vals[y_ind],[y,y], ls='-', color='gray', lw=0.1, alpha=1)
+
+        ax.plot(vals[y_ind][0], y, color='C2', marker='o',ms=1, label=lab1)
+        ax.plot(vals[y_ind][1], y, color='darkred', marker='o', ms=1, label = lab2)
+
+
+        # try:
+        #     ax.plot(vals[y_ind][2], y, color='yellow',marker='o',ms=1)
+        #     print('plotting division')
+        # except:
+        #     pass
+
+    teststring = media+ '\nMG1655 DnaN-yPet \nn = %i cells' % int(len(c_min))
+    plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=10)
+
+    plt.tick_params(axis='x', which='both', bottom=False, top=False)
+    plt.tick_params(axis='y', which='both', left=False, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+
+
+    ax.get_yaxis().set_visible(False)
+
+    plt.legend(frameon = False, fontsize=8)
+
+    ax.set_xlabel("Time (hrs)", fontsize = 14)
+
+    #plt.show()
+
+    return fig, ax
+
+def plot_cc_by_init_mothers(Lineages, t_int, ub, media, shift1, shift2,FOVs = None, peaks = None, sortby = 'initiation'):
+    fig, ax = plt.subplots(1,1, figsize=(8,8))
+
+
+    if FOVs == None:
+        FOVs = Lineages.keys()
+        print(FOVs)
+
+    #sort lineages across all FOVs by initiation time of last cell
+    # make list of [lineage number, fov, last initiation time] for each lineage
+    # then sort by last initiation time
+    lins_sorted = []
+
+    for i, fov in enumerate(FOVs):
+        peaks = Lineages[fov].keys()
+        npeaks = len(peaks)
+
+        #sort peaks by initiation time of last cell
+
+        if (npeaks == 0):
+            continue
+
+        for r, (peak, lin) in enumerate(Lineages[fov].items()):
+
+            # continue if peaks is not selected
+            if not (peak in peaks):
+                print ("passing peak {:d}".format(peak))
+                continue
+            print ("Processing peak {:d}".format(peak))
+
+            # turn it into a list so it retains time order
+            lin = [(cell_id, cell) for cell_id, cell in lin.items()]
+            # sort cells by birth time for the hell of it.
+            lin = sorted(lin, key=lambda x: x[1].birth_time)
+            if sortby == 'initiation':
+                # try:
+                #     last_init = lin[-1][1].initiation_time
+                # except:
+                #     last_init = None
+                try:
+                    last_init = max(lin[-1][1].initiation_time_n)
+                except:
+                    try:
+                        last_init = lin[-1][1].initiation_time_n
+                    except:
+                        last_init = None
+                # if last_init == None:
+                #     last_init = lin[-1][1].initiation_time_n
+                x = 1
+                while last_init == None and x < len(lin)+1:
+                    # try:
+                    #     last_init = lin[-1][1].initiation_time
+                    # except:
+                    #     pass
+                    try:
+                        last_init = max(lin[-x][1].initiation_time_n)
+                    except:
+                        try:
+                            last_init = lin[-x][1].initiation_time_n
+                        except:
+                            pass
+                    x+=1
+                if last_init == None:
+                    last_init = np.nan
+
+                lins_sorted.append([fov,peak,last_init])
+            elif sortby == 'division':
+                last_div = lin[-1][1].division_time
+                x = 1
+                while last_div == None and x < len(lin)+1:
+                    last_div = lin[-x][1].division_time
+                    x+=1
+                if last_div == None:
+                    last_div = np.nan
+
+                lins_sorted.append([fov,peak,last_div])
+
+            #if last_term > 65: lins_sorted.append([fov,peak,last_init])
+    lins_sorted = np.array(lins_sorted)
+    lins_sorted = lins_sorted[np.argsort(lins_sorted[:,2])][:,:2]
+    lins_sorted = lins_sorted[::-1,:]
+
+    lab1 = "Initiation"
+    lab2 = "Termination"
+    lab3 = "Division"
+
+    for i, l in enumerate(lins_sorted):
+        lin = l[1]
+        fov = l[0]
+        try:
+            cells = Lineages[int(fov)][int(lin)].items()
+        except KeyError:
+            #print('skipping lineage')
+            continue
+        for (cell_id, cell) in cells:
+
+            bl = cell.birth_label
+            dl = cell.labels[-1]
+            init = None
+            init_n = None
+            term_n = None
+            term = None
+            div = None
+            birth = cell.birth_time*t_int/60.
+
+            y_pos1 = i
+            y_pos2 = i
+            try:
+                init = cell.initiation_time*t_int/60.
+                if init < 0.2: print('low init')
+            except:
+                pass
+            try:
+                init_n = cell.initiation_time_n
+                term_n = cell.termination_time_n
+            except:
+                pass
+            try:
+                if isinstance(init_n,list):
+                    for (j, k) in zip(init_n,term_n):
+                        ax.plot(j*t_int/60., y_pos1, color= 'C2', marker='o', ms=.8)
+                        if k!= None:
+                            ax.plot(k*t_int/60., y_pos1, color= 'darkred', marker='o', ms=.8)
+                            ax.plot([j*t_int/60.,k*t_int/60.],[y_pos1, y_pos1], ls='-', color='gray', lw=0.2, alpha=1)
+                else:
+                    ax.plot(init_n*t_int/60., y_pos1, color= 'C2', marker='o', ms=.8)
+                    if t!= None:
+                        ax.plot(term_n*t_int/60., y_pos1, color= 'darkred', marker='o', ms=.8)
+                        ax.plot([init_n*t_int/60.,term_n*t_int/60.],[y_pos1, y_pos1], ls='-', color='gray', lw=0.2, alpha=1)
+            except:
+                pass
+
+            try:
+                term = cell.termination_time*t_int/60.
+                if term < 0.2: print('low term')
+            except:
+                pass
+            try:
+                if cell.division_time < ub:
+                    div = cell.division_time*t_int/60.
+                # if cell.division_time > 72:
+                #     print((cell.fov, cell.peak, cell.division_time))
+            except TypeError:
+                pass
+
+            #have a counter for y position
+            if init and term:
+                ax.plot([init,term],[y_pos1, y_pos1], ls='-', color='gray', lw=0.2, alpha=1)
+                ax.plot(term,y_pos1, color='darkred', marker='o', ms=.8, label= lab2)
+                lab2 = None
+
+            if init:
+                ax.plot(init,y_pos1, color='C2', marker='o',ms=.8, label = lab1)
+                lab1 = None
+            # if term:
+            #     ax.plot(term,y_pos1, color='darkred', marker='o', ms=.8, label= lab2)
+            #     lab2 = None
+            if term and div:
+                ax.plot([term, div],[y_pos1, y_pos1], ls='-', color='gray', lw=0.2, alpha=1)
+            if div and (init or init_n):
+                ax.plot(div, y_pos1, color='blue',marker='o',ms=.8, label= lab3)
+                lab3 = None
+            # if init_n:
+            #     ax.plot(init_n, y_pos1, color= 'C2', marker='o', ms=.8)
+            #     print('plotting init_n')
+
+            # if cell.parent:
+            #     try:
+            #         cell_m = Lineages[int(fov)][int(lin)][cell.parent]
+            #         # print('found mother')
+            #     except KeyError:
+            #         #print('failed to find mother')
+            #         continue
+            #
+            #     blm = cell_m.birth_label
+            #     dlm = cell_m.labels[-1]
+            #     y_m1 = i + (blm-1)
+            #     y_m2 = i + (dlm-1)
+            #
+            #     try:
+            #         termm = cell_m.termination_time*t_int/60.
+            #     except:
+            #         continue
+            #
+            #     divm = cell_m.division_time
+            #     ax.plot([termm,init],[y_m2,y_pos1], color='gray',lw=.1)
+                #print('plotting mother line')
+
+    ax.axvline(shift1*t_int/60., color='orange', label='+ rifampicin 200 ug/mL (growth slows)', ls='--',alpha=1)
+    ax.axvline(shift2*t_int/60., color='black', label='growth stops', ls = '--', alpha=.75)
+
+
+    teststring = media+' \nMG1655 DnaN-yPet \nn = %i cells' % int(len(lins_sorted))
+    plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=10)
+
+    plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    plt.tick_params(axis='y', which='both', left=False, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    ax.get_yaxis().set_visible(False)
+
+    plt.legend(frameon = False, fontsize=8)
+
+    ax.set_xlabel("Time (hrs)", fontsize = 14)
+
+    plt.show()
+
+    return fig, ax
+
+def plot_cc_by_init_from_csv(df,t_int, ub, media, shift1, shift2, title=None,show_birth=False, xlim = (0,10),ylim=(0,1000)):
+
+    df = df.sort_values(by=['lin_init_rank']).dropna(how='any',subset=['lin_init_rank'])
+    fig = plt.figure()
+    ax=plt.axes()
+    ax.scatter(df['initiation_time']*t_int/60.,df['lin_init_rank'],color='C2',marker='o',s=2,label='initiation')
+    ax.scatter(df['termination_time']*t_int/60.,df['lin_init_rank'],color='C3',marker='o',s=2, label='termination')
+    ax.scatter(df['division_time']*t_int/60.,df['lin_init_rank'],color='blue',marker='o',s=2,label='division')
+    if show_birth:
+        ax.scatter(df['birth_time']*t_int/60.,df['lin_init_rank'],color='purple',marker='o',s=2,label='birth')
+
+
+    ax.scatter(df['initiation_time_n']*t_int/60.,df['lin_init_rank'],color='C2',marker='o',s=2, label=None)
+    ax.scatter(df['termination_time_n']*t_int/60.,df['lin_init_rank'],color='C3',marker='o',s=2,label=None)
+    ax.plot([df['initiation_time']*t_int/60.,df['termination_time']*t_int/60.],[df['lin_init_rank'],df['lin_init_rank']],color='gray',lw=.2, alpha=.5, label=None)
+    ax.plot([df['initiation_time_n']*t_int/60.,df['termination_time_n']*t_int/60.],[df['lin_init_rank'],df['lin_init_rank']],color='gray', lw=.2, alpha=.5, label=None)
+    # for i,row in df.iterrows():
+    #     for str1,str2 in zip(['initiation_time','initiation_time_n','initiation_time_n_2','initiation_time_n_3'],['termination_time','termination_time_n','termination_time_n_2','termination_time_n_3']):
+    #         try:
+    #             ax.plot(row[str1]*t_int/60., i, color='C2',marker='o',ms=.8)
+    #         except:
+    #             pass
+    #         try:
+    #             ax.plot(row[str2]*t_int/60., i, color='C3',marker='o',ms=.8)
+    #         except:
+    #             pass
+    #         try:
+    #             ax.plot([row[str1]*t_int/60.,row[str2]*t_int/60.], [i,i], ls='-', color='gray', lw=0.2, alpha=.5)
+    #         except:
+    #             pass
+    #     try:
+    #         ax.plot(row['division_time']*t_int/60.,i, color='blue')
+    #     except:
+    #         pass
+    #     try:
+    #         ax.plot([row['termination_time']*t_int/60.,row['division_time']*t_int/60.], [i,i], ls='-', color='gray', lw=0.2, alpha=1)
+    #     except:
+    #         pass
+
+
+    ax.axvline(shift1*t_int/60., color='orange', label='+ rifampicin 200 ug/mL (growth slows)', ls='--',alpha=1)
+    ax.axvline(shift2*t_int/60., color='black', label='growth stops', ls = '--', alpha=.75)
+
+
+    teststring = media+' \nMG1655 DnaN-yPet \nn = %i cells' % int(len(df['initiation_time']))
+    plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=6)
+
+    plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    plt.tick_params(axis='y', which='both', left=False, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    ax.get_yaxis().set_visible(False)
+
+    plt.legend(frameon = False, fontsize=8)
+    plt.title(title, fontsize=10)
+
+    ax.set_xlabel("Time (hrs)", fontsize = 14)
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+
+    return fig, ax
+
+def plot_cc_by_init_from_csv_all(df,t_int, ub, media, shift1, shift2, title=None,show_birth=False, xlim = (0,10),ylim=(0,3000)):
+
+    df = df.sort_values(by=['initiation_time']).dropna(how='any',subset=['initiation_time'])
+    fig = plt.figure()
+    ax=plt.axes()
+    len_all = len(df['initiation_time'])
+    pltr = np.arange(len_all,0,-1)
+    line1 = len(df.loc[df['initiation_time']>shift1])
+    line2 = len(df.loc[df['initiation_time']>shift2])
+    line3 = len(df.loc[df['termination_time']>shift1])
+    times = [0,2*shift2]
+    ax.plot(times,[line1,line1],ls='-',alpha=.5,lw=1,color='cornflowerblue')
+    # ax.plot(times,[line2,line2],ls='--',alpha=.5,lw=2,color='orange')
+    ax.plot(times,[line3,line3],ls='-',alpha=.5,lw=1,color='cornflowerblue')
+
+
+    ax.plot([df['initiation_time']*t_int/60.,df['termination_time']*t_int/60.],[pltr,pltr],color='gray',ls='-',lw=.5, alpha=.1, label=None)
+
+    # ax.scatter(df['initiation_time']*t_int/60.,pltr,color='C2',marker='o',s=2,label='initiation')
+    # ax.scatter(df['termination_time']*t_int/60.,pltr,color='C3',marker='o',s=2, label='termination')
+    if show_birth:
+        ax.scatter(df['birth_time']*t_int/60.,pltr,color='purple',marker='o',s=3,label='birth')
+
+
+    ax.scatter(df['initiation_time']*t_int/60.,pltr,color='C2',marker='o',s=3, label='initiation')
+    ax.scatter(df['termination_time']*t_int/60.,pltr,color='C3',marker='o',s=3,label='termination')
+    # divs = df.loc[df['division_time']<ub]
+    # pltr_d = np.where(df['division_time']<ub)
+    print(np.where(df['division_time']<ub))
+    ax.scatter(df.loc[df['division_time']<ub]['division_time']*t_int/60.,pltr[np.where(df['division_time']<ub)],color='C4',marker='o',s=3,label='division')
+
+    # ax.plot([df['initiation_time']*t_int/60.,df['termination_time']*t_int/60.],[pltr,pltr],color='gray',lw=.2, alpha=.5, label=None)
+
+    ax.axvline(shift1*t_int/60., lw=1,color='orange', label='+ rifampicin 200 ug/mL (growth slows)', ls='-',alpha=.5)
+    ax.axvline(shift2*t_int/60., lw=1,color='black', label='growth stops', ls = '-', alpha=.5)
+
+
+    teststring = media+' \nMG1655 DnaN-yPet \nn = %i cells' % int(len(df['initiation_time']))
+    plt.text(.5,.9, s=teststring, transform = ax.transAxes, fontsize=14)
+
+    plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    plt.tick_params(axis='y', which='both', left=False, right=False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    ax.get_yaxis().set_visible(False)
+
+    # plt.legend(frameon = False, fontsize=14)
+    plt.title(title, fontsize=10)
+
+    ax.set_xlabel("Time (hrs)", fontsize = 20)
+
+    ax.set_xlim(xlim)
+    # ax.set_ylim(ylim)
+
+    return fig, ax
+
+def sort_cells_by_last_init(Lineages, Cells, t1):
+
+    FOVs = Lineages.keys()
+
+    #sort lineages across all FOVs by initiation time of last cell
+    # make list of [lineage number, fov, last initiation time] for each lineage
+    # then sort by last initiation time
+    lins_sorted = []
+
+    for i, fov in enumerate(FOVs):
+        peaks = Lineages[fov].keys()
+        npeaks = len(peaks)
+
+        #sort peaks by initiation time of last cell
+
+        if (npeaks == 0):
+            continue
+
+        for r, (peak, lin) in enumerate(Lineages[fov].items()):
+
+            # continue if peaks is not selected
+            if not (peak in peaks):
+                print ("passing peak {:d}".format(peak))
+                continue
+            print ("Processing peak {:d}".format(peak))
+            print(r)
+
+            # turn it into a list so it retains time order
+            lin = [(cell_id, cell) for cell_id, cell in lin.items()]
+            # sort cells by birth time for the hell of it.
+            lin = sorted(lin, key=lambda x: x[1].birth_time)
+            count = 0
+            rif_point = 0
+            for (cell_id,cell) in sorted(lin, key=lambda x: x[1].birth_time):
+                cell.birth_rank = count
+                if cell.birth_time < t1 < cell.times[-1]:
+                    rif_point = count
+                count+=1
+
+            for (cell_id,cell) in lin:
+                cell.birth_rank = cell.birth_rank - rif_point
+                if rif_point == 0:
+                    cell.birth_rank = None
+            try:
+                last_init = max(lin[-1][1].initiation_time_n)
+            except:
+                try:
+                    last_init = lin[-1][1].initiation_time_n
+                except:
+                    last_init = None
+
+                x = 1
+                while last_init == None and x < len(lin)+1:
+                    try:
+                        last_init = max(lin[-x][1].initiation_time_n)
+                    except:
+                        try:
+                            last_init = lin[-x][1].initiation_time_n
+                        except:
+                            pass
+                    x+=1
+                if last_init == None:
+                    last_init = np.nan
+
+                lins_sorted.append([fov,peak,last_init])
+
+    lins_sorted = np.array(lins_sorted)
+    lins_sorted = lins_sorted[np.argsort(lins_sorted[:,2])][:,:2]
+    lins_sorted = lins_sorted[::-1,:]
+
+    for i, l in enumerate(lins_sorted):
+        for (cell_id, cell) in Lineages[l[0]][l[1]].items():
+            Cells[cell_id].lin_init_rank = i
+
+    return Lineages, Cells
+
+
+
+def plot_hex_time(Cells_df, t_int, time_mark='birth_time', x_extents=None, bin_extents=None):
+    '''
+    Plots cell parameters over time using a hex scatter plot and a moving average
+    '''
+
+    # lists for plotting and formatting
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position','C_min','D_min','unit_size']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position','C', 'D','Initiation size']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother', 'min','min','S$_{i}$']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=3, ncols=3,
+                             figsize=[15,10], squeeze=False)
+
+    ax = np.ravel(axes)
+    # binning parameters, should be arguments
+    binmin = 3 # minimum bin size to display
+    bingrid = (20, 10) # how many bins to have in the x and y directions
+    moving_window = 10 # window to calculate moving stat
+
+    # bining parameters for each data type
+    # bin_extent in within which bounds should bins go. (left, right, bottom, top)
+    if x_extents == None:
+        x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
+
+    if bin_extents == None:
+        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1.5),
+                      (x_extents[0], x_extents[1], 0, 8),
+                      (x_extents[0], x_extents[1], 0, 140),
+                      (x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1),
+                      (x_extents[0], x_extents[1], 0, 100),
+                      (x_extents[0], x_extents[1], 0, 80),
+                      (x_extents[0], x_extents[1], 0, 2)]
+
+    # Now plot the filtered data
+    for i, column in enumerate(columns):
+        # get out just the data to be plot for one subplot
+        time_df = Cells_df[[time_mark, column]].apply(pd.to_numeric)
+        time_df.sort_values(by=time_mark, inplace=True)
+
+        # plot the hex scatter plot
+        p = ax[i].hexbin(time_df[time_mark], time_df[column],
+                         mincnt=binmin, gridsize=bingrid, extent=bin_extents[i])
+
+        # graph moving average
+        # xlims = (time_df['birth_time'].min(), time_df['birth_time'].max()) # x lims for bins
+        xlims = x_extents
+        try:
+            bin_mean, bin_edges, bin_n = sps.binned_statistic(time_df[time_mark], time_df[column],
+                        statistic='mean', bins=np.arange(xlims[0]-1, xlims[1]+1, moving_window))
+            bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+            ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color='yellow')
+
+        except:
+            pass
+
+        # formatting
+        ax[i].set_title(titles[i])
+        ax[i].set_ylabel(ylabels[i])
+
+        p.set_cmap(cmap=plt.cm.Blues) # set color and style
+
+    #ax[8].legend(['%s frame binned average' % moving_window], loc='lower right')
+    ax[7].set_xlabel('%s [frame]' % time_mark)
+    ax[8].set_xlabel('%s [frame]' % time_mark)
+    ax[6].set_xlabel('%s [frame]' % time_mark)
+
+
+
+    plt.tight_layout()
+
+    return fig, ax
+
 def plot_derivative(Cells_df, time_mark='birth_time', x_extents=None, time_window=10):
     '''
     Plots the derivtive of the moving average of the cell parameters.
@@ -1765,7 +3124,169 @@ def plot_derivative(Cells_df, time_mark='birth_time', x_extents=None, time_windo
 
     return fig, ax
 
-def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
+def plot_average_derivative_fit(Cells, n_diff=1, t_int=1, shift=False, plot_fl = False, shift1 = None, shift2 = None, media=None,plot_phase=True):
+
+    stats_by_time = {'diffs_by_time' : {},
+                     'all_diff_times' : [],
+                     'diff_means' : [],
+                     'diff_stds' : [],
+                     'diff_SE' : [],
+                     'diff_n' : []}
+
+    if plot_fl:
+        stats_fl = {'diffs_by_time' : {},
+                         'all_diff_times' : [],
+                         'diff_means' : [],
+                         'diff_stds' : [],
+                         'diff_SE' : [],
+                         'diff_n' : []}
+
+
+    # we loop through each cell to find the rate of length change
+    for cell_id, Cell in Cells.items():
+
+            # convert lengths to um from pixels and take log
+            log_lengths = np.log(np.array(Cell.lengths))
+
+            # take numerical n-step derivative
+            lengths_diff = np.diff(log_lengths[::n_diff])
+
+            # convert units to lambda [hours^-1] = ln(2) / tau (hours)
+            lengths_diff *= 60 / n_diff / t_int
+
+            # get corresponding times (will be length-1)
+            diff_times = Cell.times[n_diff::n_diff]
+
+            # convert from time frame to minutes
+            diff_times = np.array(diff_times) * t_int
+
+
+            # and change to relative shift if flagged
+            # if shift:
+            #     diff_times -= t_shift * t_int
+
+            # add data to time point centric dictionary
+            for i, t in enumerate(diff_times):
+                if t in stats_by_time['diffs_by_time']:
+                    stats_by_time['diffs_by_time'][t].append(lengths_diff[i])
+                else:
+                    stats_by_time['diffs_by_time'][t] = [lengths_diff[i]]
+
+            if plot_fl:
+                log_fl = np.log(np.array(Cell.fl_tots))
+                fl_diff = np.diff(log_fl[::n_diff])
+                fl_diff *= 60 / n_diff / t_int
+                for i, t in enumerate(diff_times):
+                    if t in stats_fl['diffs_by_time']:
+                        stats_fl['diffs_by_time'][t].append(fl_diff[i])
+                    else:
+                        stats_fl['diffs_by_time'][t] = [fl_diff[i]]
+
+
+    # calculate timepoint by timepoint stats
+    # note, you want to go over the dictionary in time order
+    for t in sorted(stats_by_time['diffs_by_time']):
+        values = stats_by_time['diffs_by_time'][t]
+
+        stats_by_time['all_diff_times'].append(t)
+        stats_by_time['diff_means'].append(np.mean(values))
+        stats_by_time['diff_stds'].append(np.std(values))
+        stats_by_time['diff_SE'].append(np.std(values) / np.sqrt(len(values)))
+        stats_by_time['diff_n'].append(len(values))
+
+    if plot_fl:
+        for t in sorted(stats_fl['diffs_by_time']):
+            values = stats_fl['diffs_by_time'][t]
+
+            stats_fl['all_diff_times'].append(t)
+            stats_fl['diff_means'].append(np.mean(values))
+            stats_fl['diff_stds'].append(np.std(values))
+            stats_fl['diff_SE'].append(np.std(values) / np.sqrt(len(values)))
+            stats_fl['diff_n'].append(len(values))
+        norm = np.mean(np.array(stats_fl['diff_means']))
+
+    ### Plot the graph
+
+    # sns.set(style="ticks", palette="hls", color_codes=True, font_scale=1.25)
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
+
+    # plot average and standard deviation of the rate of change.
+    # ax.plot(np.array(stats_by_time['all_diff_times']), stats_by_time['diff_means'], c='r', lw=2, alpha=1,label='growth rate')
+    # ax.fill_between(np.array(stats_by_time['all_diff_times']),
+    #                 np.array(stats_by_time['diff_means']) - np.array(stats_by_time['diff_SE']),
+    #                 np.array(stats_by_time['diff_means']) + np.array(stats_by_time['diff_SE']),
+    #                 facecolor='r', alpha=0.5)
+    #
+
+
+    #
+    if plot_phase:
+        times1 = np.array(stats_by_time['all_diff_times'])[87:100]
+        diffs1 =  np.array(stats_by_time['diff_means'])[87:100]
+        times3 = np.array(stats_by_time['all_diff_times'])[81:86]
+        diffs3 =  np.array(stats_by_time['diff_means'])[81:86]
+        times2 = np.arange(200,300)
+        fit1 = np.polyfit(times1,np.log(diffs1),1)
+        print(fit1)
+        fit2 = np.polyfit(times3,np.log(diffs3),1)
+        print(fit2)
+        ax.plot(stats_by_time['all_diff_times'],stats_by_time['diff_means'], mec='black',mfc='white',lw=2,alpha=.8,marker='o',markersize=12,ls='')
+        ax.plot(times2,np.exp(fit2[1]+fit2[0]*times2),color='C0',label='$\\tau_{1/2}$ = '+str(np.round(-np.log(2)/fit2[0],1))+' minutes',lw=3)
+        ax.plot(times2,np.exp(fit1[1]+fit1[0]*times2),color='C2',label='$\\tau_{1/2}$ = '+str(np.round(-np.log(2)/fit1[0],1))+' minutes', lw=3)
+
+        ax.set_ylabel('Growth rate [hours$^{-1}$]', size=18)
+        ax.set_title('Growth rate', size=24)
+
+
+    # ax.errorbar(stats_by_time['all_diff_times'], stats_by_time['diff_means'], stats_by_time['diff_SE'],
+    #                c='r', lw=2, alpha=1, elinewidth=1, capsize=1, barsabove=True, ecolor='r', capthick=1,
+    #                label='Average inst. rate of change with SE')
+
+    if plot_fl:
+        stats_fl['diff_means'] = stats_fl['diff_means']/(2*norm)
+        ax.plot(np.array(stats_fl['all_diff_times'])-12, stats_fl['diff_means'], mec='orange', mfc='white',marker='o',markersize=14,mew=2,ls='',alpha=1)
+        # ax.fill_between(np.array(stats_fl['all_diff_times'])-10,
+        #                 np.array(stats_fl['diff_means']) - np.array(stats_fl['diff_SE']),
+        #                 np.array(stats_fl['diff_means']) + np.array(stats_fl['diff_SE']),
+        #                 facecolor='orange', alpha=0.5)
+        times1 = np.array(stats_by_time['all_diff_times'])[87:100]
+        diffs1 =  np.array(stats_fl['diff_means'])[87:100]
+        times3 = np.array(stats_by_time['all_diff_times'])[88:94]
+        diffs3 =  np.array(stats_fl['diff_means'])[88:94]
+        times2 = np.arange(220,272)
+        fit1 = np.polyfit(times1,np.log(diffs1),1)
+        print(fit1)
+        fit2 = np.polyfit(times3,np.log(diffs3),1)
+        print(fit2)
+
+        # ax.plot(times2-10,np.exp(fit1[1]+fit1[0]*times2),color='blue',label='$\\tau_{1/2}$ = '+str(np.round(-np.log(2)/fit1[0],1))+' minutes')
+        ax.plot(times2-12,np.exp(fit2[1]+fit2[0]*times2),color='C0',label='$\\tau_{1/2}$ = '+str(np.round(-np.log(2)/fit2[0],1))+' minutes',lw=2)
+        ax.set_ylabel('YPet synthesis rate [hours$^{-1}$]', size=20)
+        ax.set_title('YPet synthesis rate ', size=24)
+    # vertical lines for shift up time
+    if shift:
+        ax.axvline(x=shift1*t_int, linewidth=2, color='orange', ls='--', alpha=0.75)
+        ax.axvline(x=shift2*t_int, linewidth=2, color='black', ls='--', alpha=0.75)
+
+    # format plot
+    sns.despine()
+    # ax.set_ylim(bottom = 0)
+    #ax.set_xlim([0,400])
+    # plt.text(.8,.7,s='{} cells \nMG1655 DnaN-yPet \n'.format(len(Cells)) +str(media),transform=ax.transAxes,fontsize=10)
+    # ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=16)
+    # ax.set_title('Average instantaneous growth rate', size=16)
+
+    ax.set_xlabel('Time [min]', size=20)
+    ax.legend(fontsize=14, frameon=False)
+    ax.set_yscale('log')
+    ax.set_ylim((.01,None))
+
+    # plt.show()
+
+    return fig, ax
+
+
+def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, plot_fl = False, shift1 = None, shift2 = None, media=None,fit=False):
     '''
     Plot the average numerical derivative (instantaneous elongation rate in 1/hours) against
     time in minutes. If shift is set to True, then the x axis is renumbered to be relative to
@@ -1799,6 +3320,15 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
                      'diff_SE' : [],
                      'diff_n' : []}
 
+    if plot_fl:
+        stats_fl = {'diffs_by_time' : {},
+                         'all_diff_times' : [],
+                         'diff_means' : [],
+                         'diff_stds' : [],
+                         'diff_SE' : [],
+                         'diff_n' : []}
+
+
     # we loop through each cell to find the rate of length change
     for cell_id, Cell in Cells.items():
 
@@ -1817,9 +3347,10 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
             # convert from time frame to minutes
             diff_times = np.array(diff_times) * t_int
 
+
             # and change to relative shift if flagged
-            if shift:
-                diff_times -= t_shift * t_int
+            # if shift:
+            #     diff_times -= t_shift * t_int
 
             # add data to time point centric dictionary
             for i, t in enumerate(diff_times):
@@ -1827,6 +3358,17 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
                     stats_by_time['diffs_by_time'][t].append(lengths_diff[i])
                 else:
                     stats_by_time['diffs_by_time'][t] = [lengths_diff[i]]
+
+            if plot_fl:
+                log_fl = np.log(np.array(Cell.fl_tots))
+                fl_diff = np.diff(log_fl[::n_diff])
+                fl_diff *= 60 / n_diff / t_int
+                for i, t in enumerate(diff_times):
+                    if t in stats_fl['diffs_by_time']:
+                        stats_fl['diffs_by_time'][t].append(fl_diff[i])
+                    else:
+                        stats_fl['diffs_by_time'][t] = [fl_diff[i]]
+
 
     # calculate timepoint by timepoint stats
     # note, you want to go over the dictionary in time order
@@ -1839,30 +3381,179 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
         stats_by_time['diff_SE'].append(np.std(values) / np.sqrt(len(values)))
         stats_by_time['diff_n'].append(len(values))
 
+    if plot_fl:
+        for t in sorted(stats_fl['diffs_by_time']):
+            values = stats_fl['diffs_by_time'][t]
+
+            stats_fl['all_diff_times'].append(t)
+            stats_fl['diff_means'].append(np.mean(values))
+            stats_fl['diff_stds'].append(np.std(values))
+            stats_fl['diff_SE'].append(np.std(values) / np.sqrt(len(values)))
+            stats_fl['diff_n'].append(len(values))
+        norm = np.mean(np.array(stats_fl['diff_means']))
+
     ### Plot the graph
 
-    sns.set(style="ticks", palette="pastel", color_codes=True, font_scale=1.25)
+    sns.set(style="ticks", palette="hls", color_codes=True, font_scale=1.25)
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
 
     # plot average and standard deviation of the rate of change.
-    ax.plot(stats_by_time['all_diff_times'], stats_by_time['diff_means'], c='r', lw=2, alpha=1)
-    ax.fill_between(stats_by_time['all_diff_times'],
+    ax.plot(np.array(stats_by_time['all_diff_times']), stats_by_time['diff_means'], c='r', lw=2, alpha=1,label='growth rate')
+    ax.fill_between(np.array(stats_by_time['all_diff_times']),
                     np.array(stats_by_time['diff_means']) - np.array(stats_by_time['diff_SE']),
                     np.array(stats_by_time['diff_means']) + np.array(stats_by_time['diff_SE']),
                     facecolor='r', alpha=0.5)
+
+    if fit:
+        times1 = np.array(stats_by_time['all_diff_times'])[80:90]
+        diffs1 =  np.array(stats_by_time['diff_means'])[80:90]
+        times2 = np.arange(205,270)
+        fit1 = np.polyfit(times1,np.log(diffs1),1)
+        ax.plot(times2,np.exp(fit1[1]+fit1[0]*times2),color='orange',label='fit')
     # ax.errorbar(stats_by_time['all_diff_times'], stats_by_time['diff_means'], stats_by_time['diff_SE'],
     #                c='r', lw=2, alpha=1, elinewidth=1, capsize=1, barsabove=True, ecolor='r', capthick=1,
     #                label='Average inst. rate of change with SE')
 
+    if plot_fl:
+        stats_fl['diff_means'] = stats_fl['diff_means']/(2*norm)
+        ax.plot(np.array(stats_fl['all_diff_times'])-10, stats_fl['diff_means'], c='orange', lw=2, alpha=1,label='DnaN-yPet synthesis rate')
+        ax.fill_between(np.array(stats_fl['all_diff_times'])-10,
+                        np.array(stats_fl['diff_means']) - np.array(stats_fl['diff_SE']),
+                        np.array(stats_fl['diff_means']) + np.array(stats_fl['diff_SE']),
+                        facecolor='orange', alpha=0.5)
     # vertical lines for shift up time
     if shift:
-        ax.axvline(x=t_shift*t_int - t_shift*t_int, linewidth=2, color='g', ls='--', alpha=0.75, label='Shift-up time')
+        ax.axvline(x=shift1*t_int, linewidth=2, color='teal', ls='--', alpha=0.75, label='+rifampicin (200 ug/mL)')
+        ax.axvline(x=shift2*t_int, linewidth=2, color='g', ls='--', alpha=0.75, label='growth stops')
 
     # format plot
-    ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=22)
-    ax.set_ylabel('Growth rate [hours$^{-1}$]', size=20)
-    ax.set_xlabel('Time [min]', size=20)
-    ax.legend(loc='lower right', fontsize=16, frameon=False)
+    sns.despine()
+    ax.set_ylim(bottom = 0)
+    #ax.set_xlim([0,400])
+    plt.text(.8,.6,s='{} cells \nMG1655 DnaN-yPet \n'.format(len(Cells)) +str(media),transform=ax.transAxes,fontsize=10)
+    # ax.set_title('Average instantaneous growth rate with SE, Time Step = {}'.format(n_diff*t_int), size=16)
+    # ax.set_title('Average instantaneous growth rate', size=16)
+    ax.set_ylabel('Growth rate [hours$^{-1}$]', size=14)
+    ax.set_xlabel('Time [min]', size=14)
+    ax.legend(loc='upper left', fontsize=14, frameon=False)
+    # plt.show()
+
+    return fig, ax
+
+def plot_log_shift(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=0, t_int=None,shift1=None,shift2=None,norm=True,df_key='df', media = None,
+        color=None,disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean',
+        figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical', fit=False,fitstart=None,fitend=None,ylabel=None,title=None):
+
+    if fig == None:
+            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
+
+    xlimmax = 0
+
+    if color==None:
+        color='C3'
+
+    line_style = '-'
+
+    # get just this data
+    data_temp = data
+    # remove rows where value is none or NaN
+    data_temp = data_temp.dropna()
+
+    # get stats for legend and limits
+    data_mean = data_temp.mean()
+    data_std = data_temp.std()
+    data_cv = data_std / data_mean
+    data_max = data_temp.max() # used for setting tau bins
+    data_med = data_temp.median()
+
+    if rescale_data:
+        # rescale data to be centered at mean.
+        data_temp = data_temp / np.float(data_mean)
+
+    # set x lim by the highest mean
+    if data_mean > xlimmax:
+        xlimmax = data_mean
+
+    # determine bin bin_edge
+    if type(nbins) == str: # one of the numpy supported strings
+        # only use 3 std of mean for bins
+        if not rescale_data:
+            bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        else:
+            bin_range = (0, 2)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+    elif type(nbins) == int: # just even number
+        # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
+        if plot_param == 'tau': # make good bin sizes for the not float data
+            time_int = data[key]['t_int']
+            bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
+            if rescale_data:
+                bin_edges /= data_mean
+    else: # if bins is a sequence then use it directly.
+        bin_edges = nbins
+
+    bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=norm)
+    # print(plot_param, bin_edges)
+    bin_steps = np.diff(bin_edges)/2.0
+    bin_centers = bin_edges[:-1] + bin_steps
+    # add zeros to the next points outside this so plot line always goes down
+    bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+    bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+    bin_vals = np.insert(bin_vals, 0, 0)
+    bin_vals = np.append(bin_vals, 0)
+
+    ax.plot(bin_centers, bin_vals,lw=4,
+               color=color, ls='',marker='o', mfc='white',mec=color,markersize=14,mew=2,alpha=1,
+               label=None)
+
+    times1 = np.array(bin_centers)[fitstart:fitend]
+    diffs1 =  np.array(bin_vals)[fitstart:fitend]
+    times2 = np.arange(bin_centers[fitstart],bin_centers[fitend]*1.5,.2)
+
+    fit1 = np.polyfit(times1,np.log(diffs1),1)
+
+    print(fit1)
+    print(times1)
+    print(diffs1)
+
+    ax.plot(times2,np.exp(fit1[1]+fit1[0]*times2),color='C0',lw=3,label='$\\tau_{1/2}$ = '+str(np.round(-np.log(2)/fit1[0],1))+' minutes')
+
+    ax.get_yaxis().set_ticks([])
+    # if rescale_data:
+    #     ax.set_xlim(0, 2)
+    # else:
+    #     ax.set_xlim(0, 2*xlimmax)
+
+    sns.despine()
+    # plt.tick_params(axis='x', which='both', bottom=True, top=False)
+    # plt.tick_params(axis='y', which='both', left=False, right=False)
+    # ax.spines['right'].set_visible(False)
+    # ax.spines['top'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
+    #
+    # ax.get_yaxis().set_visible(False)
+
+    if individual_legends:
+        ax.legend(fontsize=legendfontsize, frameon=False)
+    ax.set_xlabel(labelx,fontsize=20)
+
+    if media:
+        teststring = (media+'\nMG1655 DnaN-yPet')
+        plt.text(0,1.05, s=teststring, transform = ax[ax_i].transAxes, fontsize=10)
+
+    ax.axvline(shift1*t_int,color='orange',ls='--',lw=2)
+    ax.axvline(shift2*t_int,color='black',ls='--',lw=2)
+
+    # ax[ax_i].set_xlim(0.6,1.8)
+    # ax[ax_i].set_ylim(0,8)
+
+    ax.set_ylabel(ylabel,fontsize=20)
+    ax.set_yscale('log')
+    ax.set_title(title,fontsize=24)
+    # ax[0].set_ylim((0,10))
+
+    # plt.show()
 
     return fig, ax
 
@@ -2485,19 +4176,19 @@ def plot_correlations_sns(Cells_df, rescale=False):
         If rescale is set to True, then axis labeling reflects rescaled data.
     '''
 
-    columns = ['sb', 'sd', 'delta', 'tau', 'elong_rate', 'septum_position']
-    labels = ['$L_b$ ($\mu$m)', '$L_d$ ($\mu$m)', '$\Delta$ ($\mu$m)',
-               '$\\tau$ [min]', '$\lambda$ [1/hours]',
-               '$L_\\frac{1}{2}$']
-    rlabels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>',
-               '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
-               '$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>']
+    columns = ['sb', 'sd', 'delta', 'septum_position','tau', 'elong_rate']
+    labels = ['$L_b$ ($\mu$m)', '$L_d$ ($\mu$m)', '$\Delta$ ($\mu$m)', '$L_\\frac{1}{2}$',
+               '$\\tau$ [min]', '$\lambda$ [1/hours]']
+
+    rlabels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>','$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>',
+               '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>']
+
 
     # It's just one function from seaborn
-    g = sns.pairplot(Cells_df[columns], kind="reg", diag_kind="kde",
+    g = sns.pairplot(Cells_df[columns[:-1]], markers='o',kind="reg", diag_kind="kde",
                      plot_kws={'scatter':True,
                                'x_bins':10,
-                               'scatter_kws':{'alpha':0.25}})
+                               'scatter_kws':{'alpha':0.25,'s':10}})
     g.fig.set_size_inches([8,8])
 
     # Make title, need a little extra space
@@ -2510,22 +4201,22 @@ def plot_correlations_sns(Cells_df, rescale=False):
             if i % 6 == 0:
                 ax.set_ylabel(labels[int(i / 6)])
             if i >= 30:
-                ax.set_xlabel(labels[i - 30])
+                ax.set_xlabel(labels[i%30])
 
         if rescale:
-            ax.set_ylim([0.4, 1.6])
-            ax.set_xlim([0.4, 1.6])
+            ax.set_ylim([0, 2])
+            ax.set_xlim([0, 2])
 
-            if i % 6 == 0:
+            if i % 9 == 0:
                 ax.set_ylabel(rlabels[int(i / 6)])
             if i >= 30:
-                ax.set_xlabel(rlabels[i - 30])
+                ax.set_xlabel(rlabels[i%30])
 
 
         for t in ax.get_xticklabels():
             t.set(rotation=45)
 
-    plt.subplots_adjust(top=0.95)
+    plt.subplots_adjust(top=0.95,wspace=.25,hspace=.25)
 
     return g
 
@@ -2675,7 +4366,7 @@ def plot_saw_tooth(Lineages, FOVs=None, peaks=None, tif_width=2000, mothers=True
     sns.despine()
     # plt.subplots_adjust(hspace=0.5)
 
-    return figs
+    return fig, ax
 
 def plot_saw_tooth_fov(Lineages, FOVs=None, tif_width=2000, mothers=True):
     '''
