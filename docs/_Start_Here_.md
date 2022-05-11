@@ -1,7 +1,7 @@
 # mm3
 
 # mm3 Overview
-# Updated October 2017
+# Updated May 2022
 
 This is an overview of how to use mm3. Refer to the individual guides referenced in this document for more specific information about usage and function of each script.
 
@@ -177,9 +177,9 @@ The working directory is now:
 │   ├── specs.txt
 │   └── subtracted
 └── params.yaml
+```
 
-
-## Other scripts
+### Other scripts
 
 There are some optional and additional processes that you may want to perform based on you experiment.
 
