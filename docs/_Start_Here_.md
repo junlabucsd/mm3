@@ -121,9 +121,38 @@ The working directory is now:
 └── params.yaml
 ```
 
-### 6. Segment images and create cell lineages (mm3_Segment.py).
+### 6. Segment images (mm3_Segment-OTSU.py or mm3_Segment-Unet.py).
 
-mm3 relies on Otsu thresholding, morphological operations and watershedding to locate cells from the subtracted images. After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages. See **mm3_Segment guide** for usage and details.
+mm3 can use either deep learning or a traditional machine vision approach (Otsu thresholding, morphological operations and watershedding) to locate cells from the subtracted images.
+
+The working directory is now:
+```
+.
+├── 20170720_SJ388_mopsgluc12aa.nd2
+├── TIFF
+├── analysis
+│   ├── time_table.pkl
+│   ├── time_table.txt
+│   ├── TIFF_metadata.pkl
+│   ├── TIFF_metadata.txt
+│   ├── channel_masks.pkl
+│   ├── channel_masks.txt
+│   ├── channels
+│   ├── crosscorrs.pkl
+│   ├── crosscorrs.txt
+│   ├── empties
+│   ├── segmented
+│   ├── specs.pkl
+│   ├── specs.txt
+│   └── subtracted
+└── params.yaml
+```
+
+
+### 7. Create cell lineages (mm3_Track-Standard.py).
+After cells are found for each channel in each time point, these labeled cells are connected across time to create complete cells and lineages.
+
+The flag -s = "seg_unet" or "seg_otsu" can be used to specify whether to construct lineages from otsu or unet segmented cells.
 
 The working directory is now:
 ```
@@ -148,7 +177,7 @@ The working directory is now:
 │   ├── specs.txt
 │   └── subtracted
 └── params.yaml
-```
+
 
 ## Other scripts
 
