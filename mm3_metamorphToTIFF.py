@@ -8,7 +8,7 @@ import numpy as np
 # import json
 import warnings
 from skimage import io
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 import argparse
 import inspect
 

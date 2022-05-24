@@ -12,7 +12,7 @@ import yaml
 import glob
 import re
 from skimage import io, measure, morphology
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 from scipy import stats
 from pprint import pprint # for human readable file output
 try:
@@ -180,10 +180,10 @@ if __name__ == "__main__":
                 # for each file name. True means look for channels
 
                 # This is the non-parallelized version (useful for debug)
-                # analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
+                analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
 
                 # Parallelized
-                analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
+                #analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
 
             mm3.information('Waiting for image analysis pool to be finished.')
 
@@ -192,13 +192,13 @@ if __name__ == "__main__":
 
             mm3.information('Image analysis pool finished, getting results.')
 
-            # get results from the pool and put them in a dictionary
-            for fn in analyzed_imgs.keys():
-                result = analyzed_imgs[fn]
-                if result.successful():
-                    analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
-                else:
-                    analyzed_imgs[fn] = False # put a false there if it's bad
+            # # get results from the pool and put them in a dictionary
+            # for fn in analyzed_imgs.keys():
+            #     result = analyzed_imgs[fn]
+            #     if result.successful():
+            #         analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
+            #     else:
+            #         analyzed_imgs[fn] = False # put a false there if it's bad
 
         elif p['compile']['find_channels_method'] == 'Unet':
             # Use Unet trained on trap and central channel locations to locate, crop, and align traps
@@ -226,10 +226,10 @@ if __name__ == "__main__":
                 # for each file name. Won't look for channels, just gets the metadata for later use by Unet
 
                 # This is the non-parallelized version (useful for debug)
-                # analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
+                analyzed_imgs[fn] = mm3.get_initial_tif_params(fn)
 
                 # Parallelized
-                analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn,))
+                #analyzed_imgs[fn] = pool.apply_async(mm3.get_initial_tif_params, args=(fn,))
 
             mm3.information('Waiting for image metadata pool to be finished.')
             pool.close() # tells the process nothing more will be added.
@@ -238,12 +238,12 @@ if __name__ == "__main__":
             mm3.information('Image metadata pool finished, getting results.')
 
             # get results from the pool and put them in a dictionary
-            for fn in analyzed_imgs.keys():
-               result = analyzed_imgs[fn]
-               if result.successful():
-                   analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
-               else:
-                   analyzed_imgs[fn] = False # put a false there if it's bad
+            # for fn in analyzed_imgs.keys():
+            #    result = analyzed_imgs[fn]
+            #    if result.successful():
+            #        analyzed_imgs[fn] = result.get() # put the metadata in the dict if it's good
+            #    else:
+            #        analyzed_imgs[fn] = False # put a false there if it's bad
 
             # print(analyzed_imgs)
 
@@ -289,9 +289,9 @@ if __name__ == "__main__":
                 # detect if there are multiple imaging channels, and rearrange image if necessary, keeping only the phase image
                 img = mm3.permute_image(img, trap_align_metadata)
                 if p['debug']:
-                    io.imshow(img/np.max(img));
-                    plt.title("Initial phase image");
-                    plt.show();
+                    io.imshow(img/np.max(img))
+                    plt.title("Initial phase image")
+                    plt.show()
 
                 # produces predition stack with 3 "pages", index 0 is for traps, index 1 is for central tough, index 2 is for background
                 mm3.information("Predicting trap locations for first frame.")
@@ -305,10 +305,10 @@ if __name__ == "__main__":
 
                 if p['debug']:
                     fig,ax = plt.subplots(nrows=1, ncols=4, figsize=(12,12))
-                    ax[0].imshow(img);
+                    ax[0].imshow(img)
                     for i in range(first_frame_trap_prediction.shape[-1]):
-                        ax[i+1].imshow(first_frame_trap_prediction[:,:,i]);
-                    plt.show();
+                        ax[i+1].imshow(first_frame_trap_prediction[:,:,i])
+                    plt.show()
 
                 # flatten prediction stack such that each pixel of the resulting 2D image is the index of the prediction image above with the highest predicted probability
                 class_predictions = np.argmax(first_frame_trap_prediction, axis=2)
@@ -316,9 +316,9 @@ if __name__ == "__main__":
                 traps = class_predictions == 0 # returns boolean array where our intial guesses at trap locations are True
 
                 if p['debug']:
-                    io.imshow(traps);
+                    io.imshow(traps)
                     plt.title('Initial trap masks')
-                    plt.show();
+                    plt.show()
 
                 trap_labels = measure.label(traps)
                 trap_props = measure.regionprops(trap_labels)
@@ -342,9 +342,9 @@ if __name__ == "__main__":
                 dilated_traps = morphology.dilation(first_frame_trap_mask, dilator)
 
                 if p['debug']:
-                    io.imshow(dilated_traps);
-                    plt.title('Dilated trap masks');
-                    plt.show();
+                    io.imshow(dilated_traps)
+                    plt.title('Dilated trap masks')
+                    plt.show()
 
                 dilated_trap_labels = measure.label(dilated_traps)
                 dilated_trap_props = measure.regionprops(dilated_trap_labels)
@@ -362,9 +362,9 @@ if __name__ == "__main__":
                 dilated_trap_props = measure.regionprops(dilated_trap_labels)
 
                 if p['debug']:
-                    io.imshow(dilated_traps);
-                    plt.title("Area-filtered dilated traps");
-                    plt.show();
+                    io.imshow(dilated_traps)
+                    plt.title("Area-filtered dilated traps")
+                    plt.show()
 
                 # get centroids for each "trap region" identified in first frame
                 centroids = np.round(np.asarray([reg.centroid for reg in dilated_trap_props]))

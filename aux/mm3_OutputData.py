@@ -59,6 +59,7 @@ if __name__ == "__main__":
             param_file_path = arg # parameter file path
         if opt in ['-o',"--fov"]:
             try:
+                user_spec_fovs=[]
                 for fov_to_proc in arg.split(","):
                     user_spec_fovs.append(int(fov_to_proc))
             except:
@@ -277,15 +278,20 @@ if __name__ == "__main__":
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 
+        mpf = p['min_per_frame']
+
+
         # Data frame is convinient for plotting.
-        Cells_df = mm3_plots.cells2df(Cells)
+        Cells_df = mm3_plots.cells2df(Cells, rescale=False)
+        Cells_df_r = mm3_plots.cells2df(Cells, rescale=True)
+
 
         mm3.information('Plotting violin plots by FOV.')
-        fig, ax = mm3_plots.violin_fovs(Cells_df)
+        fig, ax = mm3_plots.plot_violin_fovs(Cells_df)
         fig.savefig(os.path.join(plot_dir,'cell_parameters_by_fov.png'), dpi=100)
 
         mm3.information('Plotting stats by birth label.')
-        fig, ax = mm3_plots.violin_birth_label(Cells_df)
+        fig, ax = mm3_plots.plot_violin_birth_label(Cells_df)
         fig.savefig(os.path.join(plot_dir,'cell_parameters_by_birth_label.png'), dpi=100)
 
         mm3.information('Plotting stats over time.')
@@ -293,18 +299,30 @@ if __name__ == "__main__":
         fig.savefig(os.path.join(plot_dir,'cell_parameters_over_time.png'), dpi=100)
 
         mm3.information('Plotting traces over time.')
-        fig, ax = mm3_plots.plot_traces(Cells, trace_limit=500)
+        fig, ax = mm3_plots.plot_feather_traces(Cells, trace_limit=500)
         fig.savefig(os.path.join(plot_dir,'traces.png'), dpi=100)
 
         mm3.information('Plotting parameter distributions.')
-        fig, ax = mm3_plots.plot_distributions(Cells_df)
-        fig.savefig(os.path.join(plot_dir,'distributions.png'), dpi=100)
+        fig, ax = mm3_plots.plotmulti_dist_rt(Cells_df)
+        fig.savefig(os.path.join(plot_dir,'distributions.png'), dpi=200)
 
-        mm3.information('Plotting rescaled parameter ditributions.')
-        fig, ax = mm3_plots.plot_rescaled_distributions(Cells_df)
-        fig.savefig(os.path.join(plot_dir,'rescaled_distributions.png'), dpi=100)
+        mm3.information('Plotting rescaled parameter distributions.')
+        fig, ax = mm3_plots.plotmulti_dist_rt(Cells_df,rescale_data = True)
+        fig.savefig(os.path.join(plot_dir,'distributions_rescaled.png'), dpi=200)
 
-        mm3.information('Plotting rescaled parameter correlations.')
-        Cells_df_r = mm3_plots.cells2df(Cells, rescale=True)
-        g = mm3_plots.plot_correlations(Cells_df_r, rescale=True)
-        g.fig.savefig(os.path.join(plot_dir,'correlations_rescaled.png'), dpi=100)
+        mm3.information('Plotting cross correlations')
+        fig = mm3_plots.plot_correlations_sns(Cells_df, rescale=False)
+        fig.savefig(os.path.join(plot_dir,'cross_correlations.png'), dpi=200)
+
+        mm3.information('Plotting rescaled cross correlations')
+        fig = mm3_plots.plot_correlations_sns(Cells_df, rescale=True)
+        fig.savefig(os.path.join(plot_dir,'cross_correlations_rescaled.png'), dpi=200)
+
+        fig, ax = mm3_plots.plotmulti_time(Cells_df, plot_params=None, x_param='birth_time', alt_time=None, plot_scatter=True, plot_moving_average=True, \
+                                plot_moving_error=False, window=10, fig_legend=True, figlabelcols=None, figlabelfontsize=12)
+        fig.savefig(os.path.join(plot_dir,'multi_time.png'), dpi=200)
+        
+        Lineages = mm3_plots.organize_cells_by_channel(Cells, specs)
+
+        fig, ax = mm3_plots.plot_saw_tooth(Lineages)
+        fig.savefig(os.path.join(plot_dir,'sawtooth.png'), dpi=100)

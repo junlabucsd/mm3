@@ -26,7 +26,7 @@ plt.rcParams['axes.linewidth']=0.5
 
 from skimage.exposure import rescale_intensity # for displaying in GUI
 from skimage import io, morphology, segmentation
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 import multiprocessing
 from multiprocessing import Pool
 import warnings
@@ -1093,37 +1093,43 @@ if __name__ == "__main__":
             crosscorrs[fov_id] = {}
 
             # initialize pool for analyzing image metadata
-            pool = Pool(p['num_analyzers'])
+            #pool = Pool(p['num_analyzers'])
 
             # find all peak ids in the current FOV
             for peak_id in sorted(channel_masks[fov_id].keys()):
                 mm3.information("Calculating cross correlations for peak %d." % peak_id)
 
                 # linear loop
-                # crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
+                crosscorrs[fov_id][peak_id] = mm3.channel_xcorr(fov_id, peak_id)
 
                 # # multiprocessing verion
-                crosscorrs[fov_id][peak_id] = pool.apply_async(mm3.channel_xcorr,
-                                                               args=(fov_id, peak_id,))
+                #crosscorrs[fov_id][peak_id] = pool.apply_async(mm3.channel_xcorr, args=(fov_id, peak_id,))
 
             mm3.information('Waiting for cross correlation pool to finish for FOV %d.' % fov_id)
 
-            pool.close() # tells the process nothing more will be added.
-            pool.join() # blocks script until everything has been processed and workers exit
+            #pool.close() # tells the process nothing more will be added.
+            #pool.join() # blocks script until everything has been processed and workers exit
 
             mm3.information("Finished cross correlations for FOV %d." % fov_id)
+
+        # # get results from the pool and put the results in the dictionary if succesful
+        # for fov_id, peaks in six.iteritems(crosscorrs):
+        #     for peak_id, result in six.iteritems(peaks):
+        #         if result.successful():
+        #             # put the results, with the average, and a guess if the channel
+        #             # is full into the dictionary
+        #             crosscorrs[fov_id][peak_id] = {'ccs' : result.get(),
+        #                                            'cc_avg' : np.average(result.get()),
+        #                                            'full' : np.average(result.get()) < p['channel_picker']['channel_picking_threshold']}                              
+        #         else:
+        #             crosscorrs[fov_id][peak_id] = False # put a false there if it's bad
 
         # get results from the pool and put the results in the dictionary if succesful
         for fov_id, peaks in six.iteritems(crosscorrs):
             for peak_id, result in six.iteritems(peaks):
-                if result.successful():
-                    # put the results, with the average, and a guess if the channel
-                    # is full into the dictionary
-                    crosscorrs[fov_id][peak_id] = {'ccs' : result.get(),
-                                                   'cc_avg' : np.average(result.get()),
-                                                   'full' : np.average(result.get()) < p['channel_picker']['channel_picking_threshold']}
-                else:
-                    crosscorrs[fov_id][peak_id] = False # put a false there if it's bad
+                crosscorrs[fov_id][peak_id] = {'ccs' : result,
+                                                   'cc_avg' : np.average(result),
+                                                   'full' : np.average(result) < p['channel_picker']['channel_picking_threshold']}                              
 
         # write cross-correlations to pickle and text
         mm3.information("Writing cross correlations file.")
