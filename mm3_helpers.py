@@ -3577,7 +3577,6 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
         for leaf_id in rep_leaves:
             if (t - reps[leaf_id].times[-1]) > lost_trace_time:
                 rep_leaves.remove(leaf_id)
-                print('too much time has passed, removing')
                 try:
                     reps[leaf_id].terminate(reps[leaf_id].times[-1])
                 except:
@@ -3666,7 +3665,6 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
 
             ### iterate over the leaves, looking to see what regions connect to them.
             for rep_id, foci_links in six.iteritems(leaf_region_map):
-                # print('foci links ' +str(foci_links[0][0]))
                 # if there is just one suggested descendant,
                 # see if it checks out and append the data
                 if len(foci_links) == 1:
@@ -3930,7 +3928,8 @@ class Cell():
 
         # calculating cell length and width by using Feret Diamter. These values are in pixels
         # length_tmp, width_tmp = feretdiameter(region)
-        length_tmp, width_tmp = (region.axis_major_length,region.axis_minor_length)
+        # length_tmp, width_tmp = (region.axis_major_length,region.axis_minor_length)
+        length_tmp, width_tmp = feretdiameter(region)
         if length_tmp == None:
             mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
         self.lengths = [length_tmp]
@@ -4422,9 +4421,16 @@ def feretdiameter(region):
     y0, x0 = region.centroid
     y0 = y0 - np.int16(region.bbox[0]) + 1
     x0 = x0 - np.int16(region.bbox[1]) + 1
-    cosorient = np.cos(region.orientation)
-    sinorient = np.sin(region.orientation)
-    # print(cosorient, sinorient)
+
+    ## orientation is now measured in RC coordinates - quick fix to convert
+    ## back to xy
+    if region.orientation > 0:
+        ori1 = np.pi / 2 - region.orientation
+    else:
+        ori1 = - np.pi / 2 - region.orientation
+    cosorient = np.cos(ori1)
+    sinorient = np.sin(ori1)
+
     amp_param = 1.2 #amplifying number to make sure the axis is longer than actual cell length
 
     # coordinates relative to bounding box
@@ -4438,7 +4444,7 @@ def feretdiameter(region):
 
     # coordinates are already sorted by y. partion into top and bottom to search faster later
     # if orientation > 0, L1 is closer to top of image (lower Y coord)
-    if region.orientation > 0:
+    if (ori1) > 0:
         L1_coords = r_coords[:int(np.round(len(r_coords)/4))]
         L2_coords = r_coords[int(np.round(len(r_coords)/4)):]
     else:
@@ -4478,7 +4484,7 @@ def feretdiameter(region):
 
     # limit to points in each half
     W_coords = []
-    if region.orientation > 0:
+    if (ori1) > 0:
         W_coords.append(r_coords[:int(np.round(len(r_coords)/2))]) # note the /2 here instead of /4
         W_coords.append(r_coords[int(np.round(len(r_coords)/2)):])
     else:
@@ -4527,7 +4533,6 @@ def feretdiameter(region):
 
     # take the average of the two at quarter positions
     width = np.mean([d_W[0],d_W[1]])
-
     return length, width
 
 # take info and make string for cell id
