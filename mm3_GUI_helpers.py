@@ -56,7 +56,7 @@ def init_params(param_file_path):
         params['use_jd'] = False
 
 class cc_picking(QMainWindow):
-    def __init__(self,params,cell_file):
+    def __init__(self,params,cell_file,trace_file):
         # super(Window, self).__init__(cell_dir,cell_file)
         super().__init__()
 
@@ -72,7 +72,7 @@ class cc_picking(QMainWindow):
         with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
             specs = yaml.safe_load(specs_file)
 
-        self.frames = FrameImgWidget(specs,cell_file,params)
+        self.frames = FrameImgWidget(specs,cell_file,trace_file,params)
         #make scene the central widget
         self.setCentralWidget(self.frames)
 
@@ -182,10 +182,10 @@ class cc_picking(QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
 
 class FrameImgWidget(QWidget):
-    def __init__(self,specs,cell_file,params):
+    def __init__(self,specs,cell_file,trace_file,params):
         super(FrameImgWidget, self).__init__()
         self.specs = specs
-        self.scene = TrackItem(self.specs,cell_file,params)
+        self.scene = TrackItem(self.specs,cell_file,trace_file,params)
         self.view = View(self)
         self.view.setScene(self.scene)
 
@@ -209,7 +209,7 @@ class FrameImgWidget(QWidget):
 
 class TrackItem(QGraphicsScene):
 
-    def __init__(self,specs,cell_file,params):
+    def __init__(self,specs,cell_file,trace_file,params):
         # super(TrackItem, self).__init__()
         super().__init__()
         self.items = []
@@ -232,10 +232,15 @@ class TrackItem(QGraphicsScene):
 
         self.color = params['foci']['foci_plane']
 
+        self.params = params
+
 
 
         with open(os.path.join(params['cell_dir'],cell_file), 'rb') as cf:
             all_cells = pickle.load(cf)
+
+        with open(os.path.join(params['cell_dir'],trace_file), 'rb') as tf:
+            traces = pickle.load(tf)
 
         ## filter for cells with doubling time above some threshold, to eliminate all_cell artefacts. Maybe filter for cells with mothers only?
 
@@ -247,8 +252,10 @@ class TrackItem(QGraphicsScene):
 
         # self.Cells = complete_cells
         self.Cells = all_cells
+        self.traces = traces
 
         self.Cells_by_peak = mm3_plots.organize_cells_by_channel(self.Cells,specs)
+
         self.cell_id_list_in_peak = [cell_id for cell_id in self.Cells_by_peak[self.fov_id][self.peak_id].keys()]
 
         self.init1 = False
@@ -324,6 +331,7 @@ class TrackItem(QGraphicsScene):
         self.items = []
 
         self.flag = False
+        params = self.params
 
         try:
             self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
@@ -364,6 +372,7 @@ class TrackItem(QGraphicsScene):
         # start by removing all current graphics items from the scene, the scene here being 'self'
         self.clear()
         specs = self.specs
+        params = self.params
         self.peakIndex -= 1
         self.ccf = []
         self.clicks = 0
@@ -410,6 +419,8 @@ class TrackItem(QGraphicsScene):
         self.fovIndex += 1
         self.flag = False
 
+        params = self.params
+
         # if self.fovIndex == 20:
         #     self.fovIndex +=1
         try:
@@ -455,6 +466,7 @@ class TrackItem(QGraphicsScene):
         self.clear()
 
         specs = self.specs
+        params = self.params
         self.ccf = []
         self.items = []
         self.clicks = 0
@@ -503,6 +515,7 @@ class TrackItem(QGraphicsScene):
     def label_divs(self):
         try:
             cells_tmp = self.Cells_by_peak[self.fov_id][self.peak_id]
+            traces_tmp = self.traces[self.fov_id][self.peak_id]
         except KeyError:
             return
         self.divs_p = []
@@ -531,16 +544,16 @@ class TrackItem(QGraphicsScene):
                 except TypeError:
                     continue
 
-                pen.setColor(QColor("red"))
-
-                init.setPen(pen)
-                init.setBrush(brush)
-                self.divs_p.append([x,y])
-                self.divs_t.append([cell.division_time, cell.centroids[-1][0]])
-                self.addItem(init)
-
-                eventItem = self.set_event_item(QPoint(x,(y + ld/2)),QPoint(x,(y - ld/2)), color="white")
-                self.addItem(eventItem)
+                # pen.setColor(QColor("red"))
+                #
+                # init.setPen(pen)
+                # init.setBrush(brush)
+                # self.divs_p.append([x,y])
+                # self.divs_t.append([cell.division_time, cell.centroids[-1][0]])
+                # self.addItem(init)
+                #
+                # eventItem = self.set_event_item(QPoint(x,(y + ld/2)),QPoint(x,(y - ld/2)), color="white")
+                # self.addItem(eventItem)
 
             times = np.array(cell.times)*self.x_scale/self.x_px
             lengths = np.array(cell.lengths)*self.y_scale/self.y_px
@@ -553,49 +566,74 @@ class TrackItem(QGraphicsScene):
             # self.addItem(birth)
 
 
-            for i in range(len(cell.times)-1):
-                eventItem = self.set_event_item(QPoint(times[i],cents[i] - lengths[i]/2),QPoint(times[i+1],cents[i+1] - lengths[i+1]/2),color="yellow")
-                self.addItem(eventItem)
-                eventItem = self.set_event_item(QPoint(times[i],cents[i] + lengths[i]/2),QPoint(times[i+1],cents[i+1] + lengths[i+1]/2), color="yellow")
-                self.addItem(eventItem)
-            self.overlay_cc = True
-            if self.overlay_cc:
-                # (c1,c2,c3) = np.random.rand(3,)
+            # for i in range(len(cell.times)-1):
+            #     eventItem = self.set_event_item(QPoint(times[i],cents[i] - lengths[i]/2),QPoint(times[i+1],cents[i+1] - lengths[i+1]/2),color="yellow")
+            #     self.addItem(eventItem)
+            #     eventItem = self.set_event_item(QPoint(times[i],cents[i] + lengths[i]/2),QPoint(times[i+1],cents[i+1] + lengths[i+1]/2), color="yellow")
+            #     self.addItem(eventItem)
+        self.overlay_cc = True
+        if self.overlay_cc:
+            # (c1,c2,c3) = np.random.rand(3,)
+
+            for (trace_id,trace) in traces_tmp.items():
+                x_pos = [t*self.x_scale/self.x_px for t in trace.times]
+                y_pos = [p[1]*self.y_scale/self.y_px for p in trace.positions]
+
+                painter = QPainter()
+                # path = QPainterPath()
+                points = [QPoint(t,y) for t,y in zip(x_pos,y_pos)]
+                Color = QColor(np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+                for i in range(len(points)-1):
+                    # path.lineto(p)
+                    eventItem = self.set_event_item(points[i],points[i+1], color=Color)
+                    self.addItem(eventItem)
+                # painter.setPen(QColor(np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)))
+                # painter.drawPath(path)
+
+                # for t, y in zip(trace.times,y_pos):
+                #     focus = QGraphicsEllipseItem(t,y* self.y_scale/self.y_px,6,6)
+                #     penColor= QColor("orange")
+                #     # penColor.setAlphaF(0.5)
+                #     pen.setColor(penColor)
+                #     focus.setPen(pen)
+                #     #focus.setBrush(brush)
+                #     self.addItem(focus)
+
 
                 # try:
-                if cell.disp_l:
-                    print(type(cell.disp_l))
-                    print(type(self.y_scale))
-                    print(type(self.y_px))
-                    # disps = np.array(cell.disp_l) * self.y_scale/self.y_px
-                    disps = [np.array(x)*self.y_scale/self.y_px for x in cell.disp_l]
-                    for t, c, l in zip(times,cents,cell.disp_l):
-                        for i in range(len(l)):
-                            focus = QGraphicsEllipseItem(t-3,c+l[i]* self.y_scale/self.y_px-3,6,6)
-                            penColor= QColor("orange")
-                            # penColor.setAlphaF(0.5)
-                            pen.setColor(penColor)
-                            focus.setPen(pen)
-                            #focus.setBrush(brush)
-                            self.addItem(focus)
-                if cell.termination_time:
-                    penColor= QColor('blue')
-                    pen.setColor(penColor)
-                    #mark termination in same color but bolded
-                    focus = QGraphicsEllipseItem(cell.termination_time-4,cell.termination_y* self.y_scale/self.y_px-4,8,8)
-                    focus.setPen(pen)
-
-                    self.addItem(focus)
-                    print('adding termination time')
-                if cell.initiation_time:
-                    penColor= QColor('green')
-                    pen.setColor(penColor)
-                    #mark initiation in same color but bolded
-                    focus = QGraphicsEllipseItem(cell.initiation_time-4,cell.initiation_y* self.y_scale/self.y_px-4,8,8)
-                    focus.setPen(pen)
-
-                    self.addItem(focus)
-                    print('adding initiation time')
+                # if cell.disp_l:
+                #     print(type(cell.disp_l))
+                #     print(type(self.y_scale))
+                #     print(type(self.y_px))
+                #     # disps = np.array(cell.disp_l) * self.y_scale/self.y_px
+                #     disps = [np.array(x)*self.y_scale/self.y_px for x in cell.disp_l]
+                #     for t, c, l in zip(times,cents,cell.disp_l):
+                #         for i in range(len(l)):
+                #             focus = QGraphicsEllipseItem(t-3,c+l[i]* self.y_scale/self.y_px-3,6,6)
+                #             penColor= QColor("orange")
+                #             # penColor.setAlphaF(0.5)
+                #             pen.setColor(penColor)
+                #             focus.setPen(pen)
+                #             #focus.setBrush(brush)
+                #             self.addItem(focus)
+                # if cell.termination_time:
+                #     penColor= QColor('blue')
+                #     pen.setColor(penColor)
+                #     #mark termination in same color but bolded
+                #     focus = QGraphicsEllipseItem(cell.termination_time-4,cell.termination_y* self.y_scale/self.y_px-4,8,8)
+                #     focus.setPen(pen)
+                #
+                #     self.addItem(focus)
+                #     print('adding termination time')
+                # if cell.initiation_time:
+                #     penColor= QColor('green')
+                #     pen.setColor(penColor)
+                #     #mark initiation in same color but bolded
+                #     focus = QGraphicsEllipseItem(cell.initiation_time-4,cell.initiation_y* self.y_scale/self.y_px-4,8,8)
+                #     focus.setPen(pen)
+                #
+                #     self.addItem(focus)
+                #     print('adding initiation time')
 
 
                 # except AttributeError:
@@ -1120,8 +1158,8 @@ class TrackItem(QGraphicsScene):
         elif self.overlay_cc == True:
             self.overlay_cc = False
 
-    def set_event_item(self,firstPoint,lastPoint, color="white"):
-        eventItem = RepLine(firstPoint, lastPoint, color)
+    def set_event_item(self,firstPoint,lastPoint, color="white",alpha=1):
+        eventItem = RepLine(firstPoint, lastPoint, color,alpha)
 
         return(eventItem)
 
@@ -1173,7 +1211,7 @@ class View(QGraphicsView):
 class RepLine(QGraphicsLineItem):
     # A class for helping to draw and organize migration events
     #  within a QGraphicsScene
-    def __init__(self, firstPoint, lastPoint, color):
+    def __init__(self, firstPoint, lastPoint, color,alpha=1):
         super(RepLine, self).__init__()
 
         brushColor = QColor(color)
@@ -1193,7 +1231,7 @@ class RepLine(QGraphicsLineItem):
             self.end = firstPoint
             #self.endItem = startItem
         line = QLineF(self.start,self.end)
-        brushColor.setAlphaF(0.5)
+        brushColor.setAlphaF(alpha)
         pen.setColor(brushColor)
         pen.setWidth(brushSize)
         self.setPen(pen)

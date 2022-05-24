@@ -98,7 +98,7 @@ times_all = np.array(times_all,np.int_)
 
 # make list of FOVs to process (keys of channel_mask file)
 fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-fov_id_list = range(1,10,1)
+fov_id_list = range(1,2,1)
 ### foci analysis
 
 # create dictionary which organizes cells by fov and peak_id
@@ -108,23 +108,88 @@ color = p['foci']['foci_plane']
 
 rep_traces = mm3.extract_foci_array(fov_id_list,Cells_by_peak)
 
-for fov, peaks in six.iteritems(Cells_by_peak):
-    for peak, Cells in six.iteritems(peaks):
-        fig=plt.figure()
-        ax=plt.axes()
-        fig.set_facecolor('black')
-        ax.set_facecolor('black')
-        for trace_id,trace in rep_traces[fov][peak].items():
-            y_pos = [p[1] for p in trace.positions]
-            if len(y_pos)>3:
-                ax.plot(trace.times,y_pos,marker='o',ls='-',ms=2)
-            else:
-                ax.plot(trace.times,y_pos,marker='o',color='lightgray',ls='',ms=2)
-        plt.show()
+# for fov, peaks in six.iteritems(Cells_by_peak):
+#     for peak, Cells in six.iteritems(peaks):
+#         fig=plt.figure()
+#         ax=plt.axes()
+#         fig.set_facecolor('black')
+#         ax.set_facecolor('black')
+#         for trace_id,trace in rep_traces[fov][peak].items():
+#             y_pos = [p[1] for p in trace.positions]
+#             if len(y_pos)>3:
+#                 ax.plot(trace.times,y_pos,marker='o',ls='-',ms=2)
+#             else:
+#                 ax.plot(trace.times,y_pos,marker='o',color='lightgray',ls='',ms=2)
+#         plt.show()
 
 
 ### save out the replication traces
 
-# cell_filename = os.path.basename(cell_file_path)
-# with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci_mod.pkl'), 'wb') as cell_file:
-#     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
+## do some pruning of traces athat are obviously erroneous ids
+
+min_trace_length = 8
+max_trace_length = 30
+
+fTraces = {}
+for fov_id in fov_id_list:
+    fTraces[fov_id] = {}
+    for peak_id, spec in specs[fov_id].items():
+        fTraces[fov_id][peak_id] = {}
+        try:
+            for trace_id,trace in rep_traces[fov_id][peak_id].items():
+                if min_trace_length < len(trace.times) < max_trace_length:
+                    fTraces[fov_id][peak_id][trace_id] = trace
+
+        except KeyError:
+            pass
+
+## link them to cell divisions and calculate cell cycle parameters. color code division line and trace in gui
+ncc = 2
+
+for fov, peaks in fTraces.items():
+    for peak, Traces in peaks.items():
+        for trace_id, trace in Traces.items():
+            if ncc == 1:
+                # no overlap of cell cycles
+                cell_ids = np.unique(trace.cell_ids)
+                if len(cell_ids)>1:
+                    print('No overlap set but replication crosses generation')
+                else:
+                    cell = Cells[cell_id]
+                    cell.initiation_time = trace.initiation_time
+                    cell.initiation_size = cell.lengths[np.where(trace.initiation_time == cell.times)]/2**(ncc - 1)
+                    cell.termination_time = trace.termination_time
+            elif ncc == 2:
+                # initiation occurs in previous generation
+                cell_ids = np.unique(trace.cell_ids)
+                if len(cell_ids) != 2:
+                    print('Found '+str(len(cell_ids)) + ' cells but n_cc is 2')
+                else:
+                    cell_m = Cells[cell_ids[0]]
+                    cell_d = Cells[cell_ids[1]]
+                    cell_d.initiation_time = trace.initiation_time
+                    cell_m.initiation_time_n = trace.initiation_time
+                    print(np.where(trace.initiation_time == cell_m.times))
+                    cell_d.initiation_size = np.array(cell_m.lengths)[np.where(trace.initiation_time == cell_m.times)]/2**(ncc - 1)
+                    cell_m.initiation_size_n = np.array(cell_m.lengths)[np.where(trace.initiation_time == cell_m.times)]/2**(ncc - 1)
+                    ## should be able to do these in one line
+                    cell_d.termination_time = trace.termination_time
+                    cell_m.termination_time_n = trace.termination_time
+            elif ncc == 3:
+                cell_ids = np.unique(trace.cell_ids)
+                cell_m = cell_ids[0]
+                cell_d = cell_ids[1]
+                cell_gd = cell_ids[2]
+                cell_gd.initiation_time = trace.initiation_time
+                cell_m.initiation_time_n = trace.initiation_time
+                cell_gd.initiation_size = cell_m.lengths[np.where(trace.initiation_time == cell_m.times)]/2**(ncc - 1)
+                cell_m.initiation_size_n = cell_m.lengths[np.where(trace.initiation_time == cell_m.times)]/2**(ncc - 1)
+                ## should be able to do these in one line
+                cell_gd.termination_time = trace.termination_time
+                cell_m.termination_time_n = trace.termination_time
+
+
+
+cell_filename = os.path.basename(cell_file_path)
+with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_rep_traces.pkl'), 'wb') as trace_file:
+    pickle.dump(fTraces, trace_file, protocol=pickle.HIGHEST_PROTOCOL)
