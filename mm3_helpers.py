@@ -121,7 +121,7 @@ def init_mm3_helpers(param_file_path):
         params['use_jd'] = False
 
     if not 'save_predictions' in params['segment'].keys():
-        params['segment']['save_predictions'] = False
+        params['segment']['unet']['save_predictions'] = False
 
     return params
 
@@ -2370,8 +2370,8 @@ def get_pad_distances(unet_shape, img_height, img_width):
 #@profile
 def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
-    batch_size = params['segment']['batch_size']
-    cellClassThreshold = params['segment']['cell_class_threshold']
+    batch_size = params['segment']['unet']['batch_size']
+    cellClassThreshold = params['segment']['unet']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
     min_object_size = params['segment']['min_object_size']
@@ -2391,7 +2391,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
         img_stack = load_stack(fov_id, peak_id, color=params['phase_plane'])
 
-        if params['segment']['normalize_to_one']:
+        if params['segment']['unet']['normalize_to_one']:
             med_stack = np.zeros(img_stack.shape)
             selem = morphology.disk(1)
 
@@ -2433,7 +2433,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              (0,pad_dict['right_trim'])),
                              mode='constant')
 
-        if params['segment']['save_predictions']:
+        if params['segment']['unet']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
@@ -2505,8 +2505,8 @@ def segment_fov_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
@@ -2647,8 +2647,8 @@ def segment_fov_foci_unet(fov_id, specs, model, color=None):
         color = params['phase_plane']
 
     # load segmentation parameters
-    unet_shape = (params['segment']['trained_model_image_height'],
-                  params['segment']['trained_model_image_width'])
+    unet_shape = (params['segment']['unet']['trained_model_image_height'],
+                  params['segment']['unet']['trained_model_image_width'])
 
     ### determine stitching of images.
     # need channel shape, specifically the width. load first for example
