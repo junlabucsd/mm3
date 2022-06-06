@@ -60,6 +60,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     cell_file = 'complete_cells_test_foci.pkl'
     trace_file = 'complete_cells_test_foci_rep_traces.pkl'
-    window = GUI.cc_picking(params,cell_file, trace_file)
+    window = GUI.FocusTrackWindow(params,cell_file, trace_file)
     window.show()
     app.exec_()

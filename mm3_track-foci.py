@@ -98,7 +98,6 @@ times_all = np.array(times_all,np.int_)
 
 # make list of FOVs to process (keys of channel_mask file)
 fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-fov_id_list = range(1,30,1)
 ### foci analysis
 
 # create dictionary which organizes cells by fov and peak_id
@@ -110,27 +109,12 @@ ncc = p['foci']['n_cc']
 
 rep_traces = mm3.extract_foci_array(fov_id_list,Cells_by_peak)
 
-# for fov, peaks in six.iteritems(Cells_by_peak):
-#     for peak, Cells in six.iteritems(peaks):
-#         fig=plt.figure()
-#         ax=plt.axes()
-#         fig.set_facecolor('black')
-#         ax.set_facecolor('black')
-#         for trace_id,trace in rep_traces[fov][peak].items():
-#             y_pos = [p[1] for p in trace.positions]
-#             if len(y_pos)>3:
-#                 ax.plot(trace.times,y_pos,marker='o',ls='-',ms=2)
-#             else:
-#                 ax.plot(trace.times,y_pos,marker='o',color='lightgray',ls='',ms=2)
-#         plt.show()
-
-
 ### save out the replication traces
 
 ## do some pruning of traces athat are obviously erroneous ids
 
-min_trace_length = 8
-max_trace_length = 30
+min_trace_length = p['min_c']
+max_trace_length = p['max_c']
 
 fTraces = {}
 for fov_id in fov_id_list:
@@ -145,12 +129,13 @@ for fov_id in fov_id_list:
         except KeyError:
             pass
 
+## initialize cell cycle attributes to None
 for cell_id, cell in Cells.items():
     cell.initiation_time = None
-    cell.initiation_length = None
+    cell.init_l = None
     cell.terminination_time = None
     cell.initiation_time_n = None
-    cell.initiation_length_n = None
+    cell.init_l_n = None
     cell.C = None
     cell.D = None
 
@@ -159,6 +144,7 @@ for cell_id, cell in Cells.items():
 for fov, peaks in fTraces.items():
     for peak, Traces in peaks.items():
         for trace_id, trace in Traces.items():
+            ## analysis depends on number of overlapping cell cycles
             if ncc == 1:
                 # no overlap of cell cycles
                 cell_ids = np.unique(trace.cell_ids)
@@ -170,7 +156,8 @@ for fov, peaks in fTraces.items():
                     cell = Cells[cell_id]
                     cell.initiation_time = trace.initiation_time
                     init_i = np.where(trace.initiation_time == cell_m.times)
-                    cell.initiation_length = cell.lengths[init_i]/2**(ncc - 1)*p['pxl2um']
+                    cell.init_l = cell.lengths[init_i]/2**(ncc - 1)*p['pxl2um']
+                    cell.init_s = cell.volumes[init_i]/2**(ncc - 1)*p['pxl2um']**3
                     cell.termination_time = trace.termination_time
                     cell.C = (cell.termination_time - cell.initiation_time)*p['min_per_frame']
                     cell.D = (cell.division_time - cell.termination_time)*p['min_per_frame']
@@ -188,8 +175,11 @@ for fov, peaks in fTraces.items():
                     cell_m.initiation_time_n = trace.initiation_time
                     # print(np.where(trace.initiation_time == cell_m.times))
                     init_i = np.where(trace.initiation_time == cell_m.times)
-                    cell_d.initiation_length = np.array(cell_m.lengths)[init_i]/2**(ncc - 1) * p['pxl2um']
-                    cell_m.initiation_length_n = np.array(cell_m.lengths)[init_i]/2**(ncc - 1)* p['pxl2um']
+                    cell_d.init_l = np.array(cell_m.lengths)[init_i]/2**(ncc - 1) * p['pxl2um']
+                    cell_m.init_l_n = np.array(cell_m.lengths)[init_i]/2**(ncc - 1)* p['pxl2um']
+
+                    cell_d.init_s = cell_m.volumes[init_i]/2**(ncc - 1)*p['pxl2um']**3
+                    cell_m.init_s_n = cell_m.volumes[init_i]/2**(ncc - 1)*p['pxl2um']**3
                     ## should be able to do these in one line
                     cell_d.termination_time = trace.termination_time
                     cell_m.termination_time_n = trace.termination_time
@@ -213,8 +203,12 @@ for fov, peaks in fTraces.items():
                     cell_gd.initiation_time = trace.initiation_time
                     cell_m.initiation_time_n = trace.initiation_time
                     init_i = np.where(trace.initiation_time == cell_m.times)
-                    cell_gd.initiation_length = cell_m.lengths[init_i]/2**(ncc - 1)* p['pxl2um']
-                    cell_m.initiation_length_n = cell_m.lengths[init_i]/2**(ncc - 1)* p['pxl2um']
+                    cell_gd.init_l = cell_m.lengths[init_i]/2**(ncc - 1)* p['pxl2um']
+                    cell_m.init_l_n = cell_m.lengths[init_i]/2**(ncc - 1)* p['pxl2um']
+
+                    cell_gd.init_s = cell_m.volumes[init_i]/2**(ncc - 1)*p['pxl2um']**3
+                    cell_m.init_s_n = cell_m.volumes[init_i]/2**(ncc - 1)*p['pxl2um']**3
+
                     ## should be able to do these in one line
                     cell_gd.termination_time = trace.termination_time
                     cell_m.termination_time_n = trace.termination_time
@@ -227,8 +221,11 @@ for fov, peaks in fTraces.items():
 
 
 cell_filename = os.path.basename(cell_file_path)
+
+## save out dictionary of trace objects
 with open(os.path.join(p['cell_dir'], p['experiment_name'] + '_rep_traces.pkl'), 'wb') as trace_file:
     pickle.dump(fTraces, trace_file, protocol=pickle.HIGHEST_PROTOCOL)
 
+# save out dictionary of cell objects
 with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_cc.pkl'), 'wb') as cell_file:
     pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
