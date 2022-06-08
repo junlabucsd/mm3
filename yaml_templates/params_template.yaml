@@ -208,3 +208,6 @@ foci:
   # foci peaks must be this many times greater than median cell intensity.
   # Think signal to noise ratio
   foci_log_peak_med_ratio: 1.5 # default: 1.2;
+  n_cc: 2 # number of concurrent cell cycles (1,2, or 3)
+  min_c: 8 # lower bound for replication time (C period in time steps)
+  max_c: 30 # upper bound for replication time

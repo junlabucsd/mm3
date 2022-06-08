@@ -43,6 +43,11 @@ if __name__ == "__main__":
                                      description='Update existing tracking data for use as training data by neural network.')
     parser.add_argument('-f', '--paramfile', type=str,
                         required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-c', '--cellfile', type=str,
+                        required=False, help='pkl file containing cell objects')
+    parser.add_argument('-t', '--tracefile', type=str,
+                        required=False, help='pickle file containing replication trace objects')
+
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -57,9 +62,18 @@ if __name__ == "__main__":
     global params
     params = mm3.init_mm3_helpers(param_file_path)
 
+    if namespace.cellfile:
+        cell_file_path = os.path.join(params['cell_dir'], namespace.cellfile)
+    else:
+        cell_file_path = os.path.join(params['cell_dir'], 'complete_cells_foci.pkl')
+
+    if namespace.tracefile:
+        trace_file_path = os.path.join(params['cell_dir'], namespace.tracefile)
+    else:
+        trace_file_path = os.path.join(params['cell_dir'], 'rep_traces.pkl')
+
+
     app = QApplication(sys.argv)
-    cell_file = 'complete_cells_test_foci.pkl'
-    trace_file = 'complete_cells_test_foci_rep_traces.pkl'
-    window = GUI.FocusTrackWindow(params,cell_file, trace_file)
+    window = GUI.FocusTrackWindow(params,cell_file_path, trace_file_path)
     window.show()
     app.exec_()

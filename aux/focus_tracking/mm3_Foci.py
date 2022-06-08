@@ -114,12 +114,13 @@ if __name__ == "__main__":
 
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
-    ### foci analysis
 
+    # .mat file won't accept None values
     for cell_id, cell in six.iteritems(Cells):
         if cell.death is None:
             cell.death = np.nan
 
+    ### foci analysis
     mm3.information("Starting foci analysis.")
 
     # create dictionary which organizes cells by fov and peak_id

@@ -3482,7 +3482,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     # return the dictionary with all the cells
     return Cells
 
-def extract_foci_array(fov_id_list, Cells_by_peak):
+def extract_foci_dict(fov_id_list, Cells_by_peak):
     tracks = {}
     for fov_id in fov_id_list:
         tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
@@ -3787,7 +3787,6 @@ class ReplicationTrace():
         # put the daugther ids into the cell
         # self.daughters = [daughter1.id, daughter2.id]
 
-        # give this guy a division time
         self.termination_time = t
 
         # self.abs_times.append(params['time_table'][self.fov][self.division_time])
