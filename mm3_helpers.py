@@ -3482,7 +3482,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     # return the dictionary with all the cells
     return Cells
 
-def extract_foci_array(fov_id_list, Cells_by_peak):
+def extract_foci_dict(fov_id_list, Cells_by_peak):
     tracks = {}
     for fov_id in fov_id_list:
         tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
@@ -3754,82 +3754,6 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
 
 ### Cell class and related functions
 
-# this is the object that holds all information for a detection
-class Detection():
-    '''
-    The Detection is a single detection in a single frame.
-    '''
-
-    # initialize (birth) the cell
-    def __init__(self, detection_id, region, t):
-        '''The detection must be given a unique detection_id and passed the region
-        information from the segmentation
-
-        Parameters
-        __________
-
-        detection_id : str
-            detection_id is a string in the form fXpXtXrX
-            f is 3 digit FOV number
-            p is 4 digit peak number
-            t is 4 digit time point
-            r is region label for that segmentation
-            Use the function create_detection_id to return a proper string.
-
-        region : region properties object
-            Information about the labeled region from
-            skimage.measure.regionprops()
-
-            '''
-
-        # create all the attributes
-        # id
-        self.id = detection_id
-
-        # identification convenience
-        self.fov = int(detection_id.split('f')[1].split('p')[0])
-        self.peak = int(detection_id.split('p')[1].split('t')[0])
-        self.t = t
-
-        self.cell_count = 1
-
-        # self.abs_times = [params['time_table'][self.fov][t]] # elapsed time in seconds
-        if region is not None:
-            self.label = region.label
-            self.bbox = region.bbox
-            self.area = region.area
-
-            # calculating cell length and width by using Feret Diamter. These values are in pixels
-            length_tmp, width_tmp = feretdiameter(region)
-            if length_tmp == None:
-                mm3.warning('feretdiameter() failed for ' + self.id + ' at t=' + str(t) + '.')
-            self.length = length_tmp
-            self.width = width_tmp
-
-            # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
-            self.volume = (length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 + (4/3) * np.pi * (width_tmp/2)**3
-
-            # angle of the fit elipsoid and centroid location
-            self.orientation = region.orientation
-            self.centroid = region.centroid
-
-        else:
-            self.label = None
-            self.bbox = None
-            self.area = None
-
-            # calculating cell length and width by using Feret Diamter. These values are in pixels
-            length_tmp, width_tmp = (None, None)
-            self.length = None
-            self.width = None
-
-            # calculate cell volume as cylinder plus hemispherical ends (sphere). Unit is px^3
-            self.volume = None
-
-            # angle of the fit elipsoid and centroid location
-            self.orientation = None
-            self.centroid = None
-
 class ReplicationTrace():
     def __init__(self,rep_id,x,y,t,cell_id,parent_id=None):
         self.id = rep_id
@@ -3863,7 +3787,6 @@ class ReplicationTrace():
         # put the daugther ids into the cell
         # self.daughters = [daughter1.id, daughter2.id]
 
-        # give this guy a division time
         self.termination_time = t
 
         # self.abs_times.append(params['time_table'][self.fov][self.division_time])
