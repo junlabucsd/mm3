@@ -16,6 +16,7 @@ import numpy as np
 import sys
 import re
 import os
+import inspect
 import yaml
 import multiprocessing
 
@@ -31,6 +32,18 @@ from skimage.measure import profile_line # used for ring an nucleoid analysis
 from skimage.exposure import equalize_adapthist
 import tifffile as tiff
 
+# realpath() will make your script run, even if you symlink it
+cmd_folder = os.path.realpath(os.path.abspath(
+                              os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+if cmd_folder not in sys.path:
+    sys.path.insert(0, cmd_folder)
+
+# This makes python look for modules in directory above this one
+mm3_dir = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], '../..')))
+if mm3_dir not in sys.path:
+    sys.path.insert(0, mm3_dir)
 
 import mm3_helpers as mm3
 import mm3_plots

@@ -25,7 +25,7 @@ if cmd_folder not in sys.path:
 # This makes python look for modules in directory above this one
 mm3_dir = os.path.realpath(os.path.abspath(
                                  os.path.join(os.path.split(inspect.getfile(
-                                 inspect.currentframe()))[0], '..')))
+                                 inspect.currentframe()))[0], '../..')))
 if mm3_dir not in sys.path:
     sys.path.insert(0, mm3_dir)
 
