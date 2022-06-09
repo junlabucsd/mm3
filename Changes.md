@@ -32,3 +32,11 @@
 ## 4. Key discrepancies in .yaml config file
 ### Resolution:
     Corrected the ['otsu'] related keys in the params.yaml file.
+
+
+## 5. Changes to skimage.measure regionprops
+### Description:
+    Regionprops uses RC rather than xy coordinates since version 0.17.
+
+### Resolution:
+    Compute region orientation as pi/2 - previous orientation in feretdiameter()
