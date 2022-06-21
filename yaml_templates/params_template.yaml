@@ -59,7 +59,6 @@ compile:
   do_slicing : True
 
   t_end : # only analyze images up until this t point. Leave blank otherwise
-  find_channels_method: 'peaks' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
   image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
   channel_width : 10 # width of channels in pixels
   channel_separation : 45 # peak-to-peak distance between channels in pixels
