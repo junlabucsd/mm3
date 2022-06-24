@@ -1841,7 +1841,12 @@ def subtract_phase(image_pair):
 
     # ### Align channel to empty using match template.
     # use match template to get a correlation array and find the position of maximum overlap
-    match_result = match_template(padded_chnl, empty_channel)
+    try:
+        match_result = match_template(padded_chnl, empty_channel)
+    except:
+        information("match_template failed. This is likely due to cropping issues with the image of the channel containing bacteria.")
+        information("Consider marking this channel as disabled in specs.yaml")
+        raise
     # get row and colum of max correlation value in correlation array
     y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
