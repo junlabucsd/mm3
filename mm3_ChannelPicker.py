@@ -131,7 +131,7 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
         if crosscorrs: # don't try to plot if it's not there.
             ccs = peak_xc['ccs'] # list of cc values
             ax.plot(ccs,range(len(ccs)))
-            ax.set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+            ax.set_title(f"{peak_xc['cc_avg']:1.2f}", fontsize = 8)
         else:
             ax.plot(np.zeros(10), range(10))
 
@@ -462,7 +462,8 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         if crosscorrs: # don't try to plot if it's not there.
             ccs = peak_xc['ccs'] # list of cc values
             ax[-1].plot(ccs, range(len(ccs)))
-            ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+            # TODO: What does this actually measure??
+            ax[-1].set_title(f"{peak_xc['cc_avg']:1.2f}", fontsize = 8)
         else:
             pass
             # ax[-1].plot(np.zeros(10), range(10))
@@ -473,6 +474,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
             ax[-1].get_yaxis().set_ticks([])
         else:
             ax[-1].set_ylabel("time index, CC on X")
+            ax[-1].set_xlabel("Use these to determine if the tube is unchanged over time. Average of peak cross correlation on top.", horizontalalignment='left', x = 1)
 
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
@@ -483,7 +485,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
         plt.show(block=False)
-        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
+        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPress enter to go to the next FOV.")
     else:
         print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
         plt.show(block=True)
@@ -624,6 +626,7 @@ def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        plt.tight_layout()
         plt.show(block=False)
         raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
     else:
