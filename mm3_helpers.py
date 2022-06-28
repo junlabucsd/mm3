@@ -1841,7 +1841,12 @@ def subtract_phase(image_pair):
 
     # ### Align channel to empty using match template.
     # use match template to get a correlation array and find the position of maximum overlap
-    match_result = match_template(padded_chnl, empty_channel)
+    try:
+        match_result = match_template(padded_chnl, empty_channel)
+    except:
+        information("match_template failed. This is likely due to cropping issues with the image of the channel containing bacteria.")
+        information("Consider marking this channel as disabled in specs.yaml")
+        raise
     # get row and colum of max correlation value in correlation array
     y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
@@ -4160,8 +4165,8 @@ def foci_lap(img, img_foci, cell, t):
     img_foci_masked = np.copy(img_foci).astype(np.float)
     # correction for difference between segmentation image mask and fluorescence channel by padding on the rightmost column(s)
     if np.shape(img) != np.shape(img_foci_masked):
-    	delta_col = np.shape(img)[1] - np.shape(img_foci_masked)[1]
-    	img_foci_masked = np.pad(img_foci_masked, ((0, 0), (0, delta_col)), 'edge')
+        delta_col = np.shape(img)[1] - np.shape(img_foci_masked)[1]
+        img_foci_masked = np.pad(img_foci_masked, ((0, 0), (0, delta_col)), 'edge')
     img_foci_masked[img != region] = np.nan
     cell_fl_median = np.nanmedian(img_foci_masked)
     cell_fl_mean = np.nanmean(img_foci_masked)

@@ -18,6 +18,7 @@ Run in terminal or iPython session. The -f option is required followed by the pa
 **Options**
 
 * -o "1,2,3" : Only these FOVs. Use a list of numbers separated by commas to only process these FOVs.
+* -c "c1" : c1/c2/c3 suggest which channels to run subtraction on. Make sure to run subtraction on each channel (phase contrast, fluorescence, etc.)
 
 **Parameters File**
 
