@@ -1776,7 +1776,10 @@ def subtract_fov_stack(fov_id, specs, color='c1', method='phase'):
         # pool.join() # blocks script until everything has been processed and workers exit
 
         # linear loop for debug
-        subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
+        if method == 'phase':
+            subtracted_imgs = [subtract_phase(subtract_pair) for subtract_pair in subtract_pairs]
+        if method == 'fluor':
+            subtracted_imgs = [subtract_fluor(subtract_pair) for subtract_pair in subtract_pairs]
 
         # stack them up along a time axis
         subtracted_stack = np.stack(subtracted_imgs, axis=0)
@@ -1838,7 +1841,12 @@ def subtract_phase(image_pair):
 
     # ### Align channel to empty using match template.
     # use match template to get a correlation array and find the position of maximum overlap
-    match_result = match_template(padded_chnl, empty_channel)
+    try:
+        match_result = match_template(padded_chnl, empty_channel)
+    except:
+        information("match_template failed. This is likely due to cropping issues with the image of the channel containing bacteria.")
+        information("Consider marking this channel as disabled in specs.yaml")
+        raise
     # get row and colum of max correlation value in correlation array
     y, x = np.unravel_index(np.argmax(match_result), match_result.shape)
 
@@ -3689,12 +3697,18 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
 
     # Load fluorescent images and segmented images for this channel
     fl_stack = load_stack(fov_id, peak_id, color=channel_name)
-    seg_stack = load_stack(fov_id, peak_id, color='seg_unet')
+
+    
+    # TODO: un-hardcode
+    seg_stack = load_stack(fov_id, peak_id, color='seg_otsu')
+
+    time_table = params['time_table']
+
 
     # determine absolute time index
     times_all = []
     for fov in params['time_table']:
-        times_all = np.append(times_all, time_table[fov].keys())
+        times_all = np.append(times_all, list(time_table[fov].keys()))
     times_all = np.unique(times_all)
     times_all = np.sort(times_all)
     times_all = np.array(times_all,np.int_)
@@ -3719,8 +3733,8 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
             # append total flourescent image
             Cell.fl_tots.append(np.sum(fl_image_masked))
             # and the average fluorescence
-            Cell.fl_area_avgs.append(np.sum(fl_image_masked) / Cell.areas[n])
-            Cell.fl_vol_avgs.append(np.sum(fl_image_masked) / Cell.volumes[n])
+            Cell.fl_area_avgs.append(float(np.sum(fl_image_masked)) / float(Cell.areas[n]))
+            Cell.fl_vol_avgs.append(float(np.sum(fl_image_masked)) / float(Cell.volumes[n]))
 
             if midline:
                 # add the midline average by first applying morphology transform
