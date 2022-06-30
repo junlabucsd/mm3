@@ -152,24 +152,6 @@ class FocusTrackWindow(QMainWindow):
 
         eventButtonGroup = QButtonGroup()
 
-        init1Button = QRadioButton("1")
-        init1Button.setShortcut("1")
-        init1Button.setToolTip("(1) No overlapping cell cycles")
-        init1Button.clicked.connect(self.frames.scene.set_init1)
-        eventButtonGroup.addButton(init1Button)
-
-        init2Button = QRadioButton("2")
-        init2Button.setShortcut("2")
-        init2Button.setToolTip("(2) 2 overlapping cell cycles")
-        init2Button.clicked.connect(self.frames.scene.set_init2)
-        eventButtonGroup.addButton(init2Button)
-
-        init3Button = QRadioButton("3")
-        init3Button.setShortcut("3")
-        init3Button.setToolTip("(3) 3 overlapping cell cycles")
-        init3Button.clicked.connect(self.frames.scene.set_init3)
-        eventButtonGroup.addButton(init3Button)
-
         removeButton = QPushButton("Remove trace")
         removeButton.setCheckable(True)
         removeButton.setShortcut("W")
@@ -187,34 +169,16 @@ class FocusTrackWindow(QMainWindow):
         # undoButton.setToolTip("(U) Clear all events from peak")
         # undoButton.clicked.connect(self.frames.scene.clear_cc_events)
 
-        olButton = QPushButton("Toggle overlay")
-        olButton.setShortcut("T")
-        olButton.setToolTip("(T) Toggle foci overlay")
-        olButton.clicked.connect(self.frames.scene.toggle_overlay)
+        overlayButton = QPushButton("Toggle overlay")
+        overlayButton.setShortcut("T")
+        overlayButton.setToolTip("(T) Toggle foci overlay")
+        overlayButton.clicked.connect(self.frames.scene.toggle_overlay)
 
         saveUpdatedTracksButton = QPushButton("Save updated initiations")
         saveUpdatedTracksButton.setShortcut("S")
         saveUpdatedTracksButton.clicked.connect(self.frames.scene.save_output)
 
         eventButtonLayout = QVBoxLayout()
-
-        # eventButtonLayout.addWidget(resetButton)
-
-        eventButtonLayout.addWidget(init1Button)
-        eventButtonLayout.addWidget(init2Button)
-        eventButtonLayout.addWidget(init3Button)
-        eventButtonLayout.addWidget(removeButton)
-
-
-        # eventButtonLayout.addWidget(undoButton)
-        eventButtonLayout.addWidget(olButton)
-
-        eventButtonGroupWidget = QWidget()
-        eventButtonGroupWidget.setLayout(eventButtonLayout)
-
-        eventButtonDockWidget = QDockWidget()
-        eventButtonDockWidget.setWidget(eventButtonGroupWidget)
-        self.addDockWidget(Qt.LeftDockWidgetArea, eventButtonDockWidget)
 
         advancePeakButton = QPushButton("Next peak")
         advancePeakButton.setShortcut("P")
@@ -237,6 +201,8 @@ class FocusTrackWindow(QMainWindow):
         fileAdvanceLayout.addWidget(advanceFOVButton)
         fileAdvanceLayout.addWidget(priorFOVButton)
 
+        fileAdvanceLayout.addWidget(removeButton)
+        fileAdvanceLayout.addWidget(overlayButton)
         fileAdvanceLayout.addWidget(saveUpdatedTracksButton)
 
         fileAdvanceGroupWidget = QWidget()
@@ -244,7 +210,7 @@ class FocusTrackWindow(QMainWindow):
 
         fileAdvanceDockWidget = QDockWidget()
         fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
-        self.addDockWidget(Qt.RightDockWidgetArea, fileAdvanceDockWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, fileAdvanceDockWidget)
 
 class TrackItem(QGraphicsScene):
 
@@ -336,9 +302,44 @@ class TrackItem(QGraphicsScene):
         ## draw inferred replication tracks
         self.label_traces()
 
+    def toggle_reload(self):
+        self.clear()
+        specs = self.specs
+        self.ccf = []
+        self.clicks = 0
+        self.items = []
+
+        params = self.params
+
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        try:
+            self.cell_id_list_in_peak = [cell_id for cell_id in self.Cells_by_peak[self.fov_id][self.peak_id].keys()]
+
+        except KeyError:
+            print('no cells in this peak')
+            self.peakIndex+=1
+            return
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            try:
+                img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+                img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+                with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                    self.fl_kymo = tif.asarray()
+                overlay = self.phase_img_and_regions()
+                self.addPixmap(overlay)
+
+            except:
+                pass
+
+        self.label_traces()
+
     def next_peak(self):
         # start by removing all current graphics items from the scene, the scene here being 'self'
-
         self.clear()
         specs = self.specs
         self.peakIndex += 1
@@ -414,11 +415,7 @@ class TrackItem(QGraphicsScene):
         self.label_traces()
 
     def next_fov(self):
-        #overwrite cc events for this peak only if new data was added
-        # if len(self.items)>0:
-        #     self.match_cc_events()
-        #     print('writing new cc data')
-
+        self.save_output()
         self.clear()
         self.items = []
 
@@ -466,6 +463,7 @@ class TrackItem(QGraphicsScene):
         self.label_traces()
 
     def prior_fov(self):
+        self.save_output()
         self.clear()
 
         specs = self.specs
@@ -527,22 +525,22 @@ class TrackItem(QGraphicsScene):
         brush.setColor(QColor("white"))
 
         pen.setWidth(3)
+        if not self.overlay_fl:
+            for cell_id, cell in cells_p.items():
+                times = np.array(cell.times)*self.x_scale/self.x_px
+                lengths = np.array(cell.lengths)*self.y_scale/self.y_px
+                cents = np.array(cell.centroids)[:,0]*self.y_scale/self.y_px
 
-        for cell_id, cell in cells_p.items():
-            times = np.array(cell.times)*self.x_scale/self.x_px
-            lengths = np.array(cell.lengths)*self.y_scale/self.y_px
-            cents = np.array(cell.centroids)[:,0]*self.y_scale/self.y_px
-
-            if cell.disp_l:
-                for t, c, l in zip(times,cents,cell.disp_l):
-                    for i in range(len(l)):
-                        focus = QGraphicsEllipseItem(t-3,c+l[i]* self.y_scale/self.y_px-3,6,6)
-                        penColor= QColor("gray")
-                        penColor.setAlphaF(1)
-                        pen.setColor(penColor)
-                        focus.setPen(pen)
-                        #focus.setBrush(brush)
-                        self.addItem(focus)
+                if cell.disp_l:
+                    for t, c, l in zip(times,cents,cell.disp_l):
+                        for i in range(len(l)):
+                            focus = QGraphicsEllipseItem(t-3,c+l[i]* self.y_scale/self.y_px-3,6,6)
+                            penColor= QColor("gray")
+                            penColor.setAlphaF(1)
+                            pen.setColor(penColor)
+                            focus.setPen(pen)
+                            #focus.setBrush(brush)
+                            self.addItem(focus)
 
         self.tracks = {}
 
@@ -572,19 +570,6 @@ class TrackItem(QGraphicsScene):
     def mousePressEvent(self, event):
         cells_p = self.Cells_by_peak[self.fov_id][self.peak_id]
         # traces_p = self.Traces[self.fov_id][self.peak_id]
-
-        if self.init1: #edit to add button that indicates init
-            self.nc = 1
-
-        elif self.init2:
-            self.nc = 2
-
-        elif self.init3:
-            self.nc = 3
-
-        else:
-            print('Defaulting to two overlapping cell cycle')
-            self.nc = 2
 
         def match_cells(init_y,init_t):
             matched_id = None
@@ -739,9 +724,9 @@ class TrackItem(QGraphicsScene):
     def toggle_overlay(self):
         if self.overlay_fl == False:
             self.overlay_fl = True
-            self.addPixmap(self.phase_img_and_regions())
         elif self.overlay_fl == True:
             self.overlay_fl = False
+        self.toggle_reload()
 
     def save_output(self):
         with open(os.path.join(self.params['cell_dir'], 'rep_traces_mod.pkl'), 'wb') as trace_file:

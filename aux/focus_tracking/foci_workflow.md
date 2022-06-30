@@ -8,10 +8,15 @@ Output: .pkl file with a dictionary of cell objects, with x, y and time position
 
 ### 2. mm3_TrackFoci.py
 Constructs a tree of replication cycles from individual focus detections.
+Input: .pkl file of cell objects with foci detections, from mm3_Foci.py
 Output: .pkl file with a dictionary of replication trace objects, with attributes initiation time, termination time, etc.
 
 ### 3. mm3_CurateFocusTracks.py
 Allows manual curation of replication traces.
+Input: .pkl file of replication trace objects.
+Output: modified .pkl file of replication trace objects.
 
 ### 4. mm3_OutputCC.py
 Calculation of cell cycle parameters.
+Input: .pkl file of cell objects, .pkl file of replication trace objects.
+Output: modified .pkl file of cell objects, with updated cell cycle parameters (C period, D period, initiation size, etc.)

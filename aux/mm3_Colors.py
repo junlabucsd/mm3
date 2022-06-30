@@ -9,6 +9,7 @@ import inspect
 import argparse
 import yaml
 from pprint import pprint # for human readable file output
+from io import IOBase
 try:
     import cPickle as pickle
 except:
@@ -23,8 +24,11 @@ from functools import partial
 # realpath() will make your script run, even if you symlink it
 cmd_folder = os.path.realpath(os.path.abspath(
                           os.path.split(inspect.getfile(inspect.currentframe()))[0]))
+mm3_helper_folder = os.path.join(cmd_folder, '..')
 if cmd_folder not in sys.path:
     sys.path.insert(0, cmd_folder)
+if mm3_helper_folder not in sys.path:
+    sys.path.insert(0, mm3_helper_folder)
 
 # This makes python look for modules in ./external_lib
 cmd_subfolder = os.path.realpath(os.path.abspath(
@@ -34,7 +38,8 @@ if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
 import mm3_helpers as mm3
-import mm3_plots as mm3_plots
+import mm3_plots
+
 
 # when using this script as a function and not as a library the following will execute
 if __name__ == "__main__":
@@ -50,11 +55,11 @@ if __name__ == "__main__":
     # set switches and parameters
     parser = argparse.ArgumentParser(prog='python mm3_Colors.py',
                                      description='Calculates total and average fluorescence per cell.')
-    parser.add_argument('-f', '--paramfile', type=file,
+    parser.add_argument('-f', '--paramfile', type=argparse.FileType('r'),
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
-    parser.add_argument('-c', '--cellfile', type=file,
+    parser.add_argument('-c', '--cellfile', type=argparse.FileType('r'),
                         required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
     namespace = parser.parse_args()
 
@@ -80,7 +85,7 @@ if __name__ == "__main__":
         mm3.warning('No cell file specified. Using complete_cells.pkl.')
         cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
 
-    with open(cell_file_path, 'r') as cell_file:
+    with open(cell_file_path, 'rb') as cell_file:
         Complete_Cells = pickle.load(cell_file)
 
     # load specs file
@@ -102,9 +107,15 @@ if __name__ == "__main__":
     Cells_by_peak = mm3_plots.organize_cells_by_channel(Complete_Cells, specs)
     
     # multiprocessing 
-    color_multiproc = True
+    color_multiproc = False
     if color_multiproc:
-        Cells_to_pool = [(fov_id, peak_id, Cells) for fov_id in fov_id_list for peak_id, Cells in Cells_by_peak[fov_id].items()] 
+        Cells_to_pool = []
+        for fov_id in fov_id_list:
+            peak_ids = Cells_by_peak[fov_id].keys()
+            peak_id_Cells = Cells_by_peak[fov_id].values()
+            fov_ids = [fov_id] * len(peak_ids)
+
+            Cells_to_pool += zip(fov_ids, peak_ids, peak_id_Cells)
         # print(Cells_to_pool[0:5])
         pool = Pool(processes=p['num_analyzers'])
 

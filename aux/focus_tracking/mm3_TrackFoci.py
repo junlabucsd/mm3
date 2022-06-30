@@ -32,6 +32,13 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
+# This makes python look for modules in directory above this one
+mm3_dir = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], '../..')))
+if mm3_dir not in sys.path:
+    sys.path.insert(0, mm3_dir)
+
 import mm3_helpers as mm3
 import mm3_plots as mm3_plots
 import mm3_GUI_helpers as GUI

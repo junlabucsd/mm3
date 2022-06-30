@@ -32,6 +32,13 @@ cmd_subfolder = os.path.realpath(os.path.abspath(
 if cmd_subfolder not in sys.path:
     sys.path.insert(0, cmd_subfolder)
 
+# This makes python look for modules in directory above this one
+mm3_dir = os.path.realpath(os.path.abspath(
+                                 os.path.join(os.path.split(inspect.getfile(
+                                 inspect.currentframe()))[0], '../..')))
+if mm3_dir not in sys.path:
+    sys.path.insert(0, mm3_dir)
+
 import mm3_helpers as mm3
 import mm3_plots as mm3_plots
 import mm3_GUI_helpers as GUI
@@ -94,12 +101,101 @@ for cell_id, cell in Cells.items():
     cell.init_s_n = None
     cell.C = None
     cell.D = None
+    cell.ncc = None
 
 ## link them to cell divisions and calculate cell cycle parameters. color code division line and trace in gui
+if ncc == None:
+    print('Number of overlapping cell cycles not provided \nInferring from focus tracks')
 
 for fov, peaks in Traces.items():
     for peak, pTraces in peaks.items():
         for trace_id, trace in pTraces.items():
+            if ncc == None:
+                ## infer number of overlapping cell cycles
+                cell_ids = np.unique(trace.cell_ids)
+                if len(cell_ids)==1:
+                    try:
+                        cell = Cells[cell_id]
+                    except KeyError:
+                        continue
+                    init_i = np.squeeze(np.where(cell.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell.times == trace.termination_time))
+                    if init_i.size ==0 or term_i.size==0:
+                        continue
+                    cell.initiation_time = trace.initiation_time
+                    # length at initiation per origin in uM
+                    cell.init_l = np.array(cell.lengths)[init_i]*p['pxl2um']
+                    # volume at initiation per origin in uM^3
+                    cell.init_s = np.array(cell.volumes)[init_i]*p['pxl2um']**3
+                    cell.termination_time = trace.termination_time
+                    # B period in minutes
+                    cell.B = (cell.initiation_time - cell.birth_time)*p['min_per_frame']
+                    # C period in minutes
+                    cell.C = (cell.termination_time - cell.initiation_time)*p['min_per_frame']
+                    # D period in minutes
+                    cell.D = (cell.division_time - cell.termination_time)*p['min_per_frame']
+                    cell.ncc = 1
+
+                elif len(cell_ids)==2:
+                    try:
+                        cell_m = Cells[cell_ids[0]]
+                        cell_d = Cells[cell_ids[1]]
+                    except KeyError:
+                        continue
+
+                    init_i = np.squeeze(np.nonzero(cell_m.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell_d.times == trace.termination_time))
+
+                    if init_i.size==0 or term_i.size==0:
+                        continue
+                    cell_d.initiation_time = trace.initiation_time
+                    cell_m.initiation_time_n = trace.initiation_time
+
+                    cell_d.init_l = np.array(cell_m.lengths)[init_i]/2 * p['pxl2um']
+                    cell_m.init_l_n = np.array(cell_m.lengths)[init_i]/2* p['pxl2um']
+
+                    cell_d.init_s = np.array(cell_m.volumes)[init_i]/2*p['pxl2um']**3
+                    cell_m.init_s_n = np.array(cell_m.volumes)[init_i]/2*p['pxl2um']**3
+                    cell_d.termination_time = trace.termination_time
+                    cell_m.termination_time_n = trace.termination_time
+                    cell_d.C = (cell_d.termination_time - cell_d.initiation_time)*p['min_per_frame']
+                    try:
+                        cell_d.D = (cell_d.division_time - cell_d.termination_time)*p['min_per_frame']
+                    except TypeError:
+                        pass
+                    cell.ncc = 2
+
+                elif len(cell_ids)==3:
+                    try:
+                        cell_m = Cells[cell_ids[0]]
+                        cell_d = Cells[cell_ids[1]]
+                        cell_gd = Cells[cell_ids[2]]
+                    except KeyError:
+                        continue
+
+                    init_i = np.squeeze(np.where(cell_m.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell_gd.times == trace.termination_time))
+
+                    if init_i.size==0 or term_i.size==0:
+                        continue
+                    cell_gd.initiation_time = trace.initiation_time
+                    cell_m.initiation_time_n = trace.initiation_time
+                    init_i = np.squeeze(np.where(cell_m.times == trace.initiation_time))
+                    cell_gd.init_l = np.array(cell_m.lengths)[init_i]/4* p['pxl2um']
+                    cell_m.init_l_n = np.array(cell_m.lengths)[init_i]/4* p['pxl2um']
+
+                    cell_gd.init_s = np.array(cell_m.volumes)[init_i]/4*p['pxl2um']**3
+                    cell_m.init_s_n = np.array(cell_m.volumes)[init_i]/4*p['pxl2um']**3
+
+                    cell_gd.termination_time = trace.termination_time
+                    cell_m.termination_time_n = trace.termination_time
+                    cell_gd.C = (cell_gd.termination_time - cell_gd.initiation_time) *p['min_per_frame']
+                    try:
+                        cell_gd.D = (cell_gd.division_time - cell_gd.termination_time)*p['min_per_frame']
+                    except TypeError:
+                        pass
+                    cell.ncc = 3
+
             ## analysis depends on number of overlapping cell cycles
             if ncc == 1:
                 # no overlap of cell cycles
@@ -109,9 +205,15 @@ for fov, peaks in Traces.items():
                     pass
 
                 else:
-                    cell = Cells[cell_id]
+                    try:
+                        cell = Cells[cell_id]
+                    except KeyError:
+                        continue
                     cell.initiation_time = trace.initiation_time
-                    init_i = np.where(cell_m.times == trace.initiation_time)
+                    init_i = np.squeeze(np.where(cell.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell.times == trace.termination_time))
+                    if init_i.size ==0 or term_i.size==0:
+                        continue
                     # length at initiation per origin in uM
                     cell.init_l = np.array(cell.lengths)[init_i]/2**(ncc - 1)*p['pxl2um']
                     # volume at initiation per origin in uM^3
@@ -131,12 +233,20 @@ for fov, peaks in Traces.items():
                     # print('Found '+str(len(cell_ids)) + ' cells but n_cc is 2')
                     pass
                 else:
-                    cell_m = Cells[cell_ids[0]]
-                    cell_d = Cells[cell_ids[1]]
-                    trace.initiation_time = trace.initiation_time
+                    try:
+                        cell_m = Cells[cell_ids[0]]
+                        cell_d = Cells[cell_ids[1]]
+                    except KeyError:
+                        continue
+
+                    init_i = np.squeeze(np.nonzero(cell_m.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell_d.times == trace.termination_time))
+
+                    if init_i.size ==0 or term_i.size==0:
+                        continue
+
                     cell_d.initiation_time = trace.initiation_time
                     cell_m.initiation_time_n = trace.initiation_time
-                    init_i = np.squeeze(np.nonzero(cell_m.times == trace.initiation_time))
 
                     cell_d.init_l = np.array(cell_m.lengths)[init_i]/2**(ncc - 1) * p['pxl2um']
                     cell_m.init_l_n = np.array(cell_m.lengths)[init_i]/2**(ncc - 1)* p['pxl2um']
@@ -145,10 +255,8 @@ for fov, peaks in Traces.items():
                     cell_m.init_s_n = np.array(cell_m.volumes)[init_i]/2**(ncc - 1)*p['pxl2um']**3
                     cell_d.termination_time = trace.termination_time
                     cell_m.termination_time_n = trace.termination_time
-                    try:
-                        cell_d.C = (cell_d.termination_time - cell_d.initiation_time)*p['min_per_frame']
-                    except TypeError:
-                        pass
+                    cell_d.C = (cell_d.termination_time - cell_d.initiation_time)*p['min_per_frame']
+
                     try:
                         cell_d.D = (cell_d.division_time - cell_d.termination_time)*p['min_per_frame']
                     except TypeError:
@@ -160,12 +268,19 @@ for fov, peaks in Traces.items():
                     pass
                 else:
                     ## now we have mother / daughter / granddaughter
-                    cell_m = Cells[cell_ids[0]]
-                    cell_d = Cells[cell_ids[1]]
-                    cell_gd = Cells[cell_ids[2]]
+                    try:
+                        cell_m = Cells[cell_ids[0]]
+                        cell_d = Cells[cell_ids[1]]
+                        cell_gd = Cells[cell_ids[2]]
+                    except KeyError:
+                        continue
+                    init_i = np.squeeze(np.where(cell_m.times == trace.initiation_time))
+                    term_i = np.squeeze(np.where(cell_gd.times == trace.termination_time))
+                    if init_i.size ==0 or term_i.size==0:
+                        continue
+
                     cell_gd.initiation_time = trace.initiation_time
                     cell_m.initiation_time_n = trace.initiation_time
-                    init_i = np.where(cell_m.times == trace.initiation_time)
                     cell_gd.init_l = np.array(cell_m.lengths)[init_i]/2**(ncc - 1)* p['pxl2um']
                     cell_m.init_l_n = np.array(cell_m.lengths)[init_i]/2**(ncc - 1)* p['pxl2um']
 

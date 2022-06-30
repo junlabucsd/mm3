@@ -51,6 +51,11 @@ if cmd_subfolder not in sys.path:
 # this is the mm3 module with all the useful functions and classes
 import mm3_helpers as mm3
 
+# Color constants. The assigned shape allows the to be multiplied by 2d arrays in a simple way.
+RED = np.array((1.0, 0.4, 0.4)) * 3
+GREEN = np.array((0.4, 1.0, 0.4)) * 2
+BLUE = np.array((0.4, 0.4, 1.0)) * 4
+
 ### functions
 def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'):
     '''
@@ -131,7 +136,7 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
         if crosscorrs: # don't try to plot if it's not there.
             ccs = peak_xc['ccs'] # list of cc values
             ax.plot(ccs,range(len(ccs)))
-            ax.set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+            ax.set_title(f"{peak_xc['cc_avg']:1.2f}", fontsize = 8)
         else:
             ax.plot(np.zeros(10), range(10))
 
@@ -148,7 +153,7 @@ def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'
     fileout=os.path.join(outputdir,'fov_xy{:03d}.pdf'.format(fov_id))
     fig.savefig(fileout,bbox_inches='tight',pad_inches=0)
     plt.close('all')
-    mm3.information("Written FOV {}'s channels in {}".format(fov_id,fileout))
+    mm3.information(f"Written FOV {fov_id}'s channels in {fileout}")
 
     return specs
 
@@ -378,30 +383,31 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         try:
             peak_id = int(event.inaxes.get_title())
         except AttributeError:
+            mm3.information("Could not find peak_id.")
             return
 
-        # reset image to be updated based on user clicks
-        ax_id = sorted_peaks.index(peak_id) * 3 + 1
-        new_img = last_imgs[sorted_peaks.index(peak_id)]
-        ax[ax_id].imshow(new_img, cmap=plt.cm.gray, interpolation='nearest')
+        new_img_first = first_imgs[sorted_peaks.index(peak_id)]
+        new_img_last = last_imgs[sorted_peaks.index(peak_id)]
 
+        color = None
         # if it says analyze, change to empty
         if specs[fov_id][peak_id] == 1:
             specs[fov_id][peak_id] = 0
-            ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array*0.1, ones_array)), alpha=0.25)
-            #mm3.information("peak %d now set to empty." % peak_id)
-
+            color = BLUE
         # if it says empty, change to don't analyze
         elif specs[fov_id][peak_id] == 0:
             specs[fov_id][peak_id] = -1
-            ax[ax_id].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
-            #mm3.information("peak %d now set to ignore." % peak_id)
-
+            color = RED
         # if it says don't analyze, change to analyze
         elif specs[fov_id][peak_id] == -1:
             specs[fov_id][peak_id] = 1
-            ax[ax_id].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
-            #mm3.information("peak %d now set to analyze." % peak_id)
+            color = GREEN
+
+        # reset image to be updated based on user clicks
+        ax_id = sorted_peaks.index(peak_id) * 3 + 1
+
+        ax[ax_id - 1].imshow(color_image(new_img_first, color))
+        ax[ax_id].imshow(color_image(new_img_last, color))
 
         plt.draw()
         return
@@ -415,6 +421,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     # plot the peaks peak by peak using sorted list
     sorted_peaks = sorted([peak_id for peak_id in specs[fov_id].keys()])
     npeaks = len(sorted_peaks)
+    first_imgs = [] # list that holds last images for updating figure
     last_imgs = [] # list that holds last images for updating figure
 
     for n, peak_id in enumerate(sorted_peaks, start=1):
@@ -424,8 +431,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         # load data for figure
         # image_data = mm3.load_stack(fov_id, peak_id, color='c1')
 
-        # first_img = rescale_intensity(image_data[0,:,:]) # phase image at t=0
-        # last_img = rescale_intensity(image_data[-1,:,:]) # phase image at end
+        first_imgs.append(UI_images[fov_id][peak_id]['first']) # append for updating later
         last_imgs.append(UI_images[fov_id][peak_id]['last']) # append for updating later
         # del image_data # clear memory (maybe)
 
@@ -434,23 +440,24 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
 
         # plot the first image in each channel in top row
         ax.append(fig.add_subplot(3, npeaks, n))
-        ax[-1].imshow(UI_images[fov_id][peak_id]['first'],
-                      cmap=plt.cm.gray, interpolation='nearest')
+        # color image based on if it is thought empty or full
+        color = None
+        if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
+            color = GREEN
+        else: # otherwise show red, means don't analyze
+            color = RED
+        
+        colored_first_image = color_image(UI_images[fov_id][peak_id]['first'], color)
+        colored_last_image = color_image(UI_images[fov_id][peak_id]['last'], color)
+        ax[-1].imshow(colored_first_image)
+
         ax = format_channel_plot(ax, peak_id) # format axis and title
         if n == 1:
             ax[-1].set_ylabel("first time point")
 
         # plot middle row using last time point with highlighting for empty/full
         ax.append(fig.add_subplot(3, npeaks, n + npeaks))
-        ax[-1].imshow(UI_images[fov_id][peak_id]['last'],
-                      cmap=plt.cm.gray, interpolation='nearest')
-
-        # color image based on if it is thought empty or full
-        ones_array = np.ones_like(UI_images[fov_id][peak_id]['last'])
-        if specs[fov_id][peak_id] == 1: # 1 means analyze, show green
-            ax[-1].imshow(np.dstack((ones_array*0.1, ones_array, ones_array*0.1)), alpha=0.25)
-        else: # otherwise show red, means don't analyze
-            ax[-1].imshow(np.dstack((ones_array, ones_array*0.1, ones_array*0.1)), alpha=0.25)
+        ax[-1].imshow(colored_last_image)
 
         # format
         ax = format_channel_plot(ax, peak_id)
@@ -462,7 +469,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
         if crosscorrs: # don't try to plot if it's not there.
             ccs = peak_xc['ccs'] # list of cc values
             ax[-1].plot(ccs, range(len(ccs)))
-            ax[-1].set_title('avg=%1.2f' % peak_xc['cc_avg'], fontsize = 8)
+            ax[-1].set_title(f"{peak_xc['cc_avg']:1.2f}", fontsize = 8)
         else:
             pass
             # ax[-1].plot(np.zeros(10), range(10))
@@ -473,6 +480,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
             ax[-1].get_yaxis().set_ticks([])
         else:
             ax[-1].set_ylabel("time index, CC on X")
+            ax[-1].set_xlabel("Use these to determine if the channel contained cells. Average of peak cross correlation on top.", horizontalalignment='left', x = 1)
 
     # show the plot finally
     fig.suptitle("FOV %d" % fov_id)
@@ -483,7 +491,7 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
         plt.show(block=False)
-        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
+        raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPress enter to go to the next FOV.")
     else:
         print("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nClose figure to go to the next FOV.")
         plt.show(block=True)
@@ -491,6 +499,28 @@ def fov_choose_channels_UI(fov_id, crosscorrs, specs, UI_images):
     plt.close()
 
     return specs
+
+def color_image(image, color):
+    """Returns an image, ready to display, colored by 'color'.
+    Automatically caps values at 0/1, and automatically normalizes the image.
+
+    Parameters
+    image : nxm array
+        The image we wish to color
+    color : (3,) numpy array
+        The color we wish to multiply it by
+    
+    Returns
+    out_image : n x m x 3 array
+        The image colored appropriately. All values between 0, 1.
+    """
+    image_normalized = (image - np.min(image)) / (np.max(image) - np.min(image))
+    image_reshaped = image_normalized.reshape(image.shape + (1,))
+    image_multiply = color * image_reshaped + color /10 
+    image_multiply[image_multiply < 0] = 0.
+    image_multiply[image_multiply > 1] = 1.
+
+    return image_multiply
 
 # function to plot CNN-derived trap classifications
 def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
@@ -624,6 +654,7 @@ def fov_CNN_choose_channels_UI(fov_id, predictionDict, specs, UI_images):
     cells_handler = fig.canvas.mpl_connect('button_press_event', onclick_cells)
     # matplotlib has difefrent behavior for interactions in different versions.
     if float(mpl.__version__[:3]) < 1.5: # check for verions less than 1.5
+        plt.tight_layout()
         plt.show(block=False)
         raw_input("Click colored channels to toggle between analyze (green), use for empty (blue), and ignore (red).\nPrees enter to go to the next FOV.")
     else:
