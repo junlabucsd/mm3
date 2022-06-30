@@ -4167,6 +4167,7 @@ def foci_lap(img, img_foci, cell, t):
     if np.shape(img) != np.shape(img_foci_masked):
         delta_col = np.shape(img)[1] - np.shape(img_foci_masked)[1]
         img_foci_masked = np.pad(img_foci_masked, ((0, 0), (0, delta_col)), 'edge')
+
     img_foci_masked[img != region] = np.nan
     cell_fl_median = np.nanmedian(img_foci_masked)
     cell_fl_mean = np.nanmean(img_foci_masked)
