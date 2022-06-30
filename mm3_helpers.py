@@ -2305,101 +2305,6 @@ def segment_fov_unet(fov_id, specs, model, color=None):
 
     return
 
-def segment_foci_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
-
-    # batch_size = params['foci']['batch_size']
-    focusClassThreshold = params['foci']['focus_threshold']
-    if focusClassThreshold == 'None': # yaml imports None as a string
-        focusClassThreshold = False
-
-    # arguments to data generator
-    data_gen_args = {'batch_size':params['foci']['batch_size'],
-                     'n_channels':1,
-                     'normalize_to_one':False,
-                     'shuffle':False}
-    # arguments to predict_generator
-    predict_args = dict(use_multiprocessing=False,
-                        # workers=params['num_analyzers'],
-                        verbose=1)
-
-    for peak_id in ana_peak_ids:
-        information('Segmenting foci in peak {}.'.format(peak_id))
-        # print(peak_id) # debugging a shape error at some traps
-
-        img_stack = load_stack(fov_id, peak_id, color=params['foci']['foci_plane'])
-
-        # pad image to correct size
-        img_stack = np.pad(img_stack,
-                           ((0,0),
-                           (pad_dict['top_pad'],pad_dict['bottom_pad']),
-                           (pad_dict['left_pad'],pad_dict['right_pad'])),
-                           mode='constant')
-        img_stack = np.expand_dims(img_stack, -1)
-        # set up image generator
-        image_generator = FocusSegmentationDataGenerator(img_stack, **data_gen_args)
-
-        # predict foci locations.
-        predictions = model.predict_generator(image_generator, **predict_args)
-
-        # post processing
-        # remove padding including the added last dimension
-        predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
-                                     pad_dict['left_pad']:unet_shape[1]-pad_dict['right_pad'], 0]
-
-        if params['foci']['save_predictions']:
-            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
-            if not os.path.isdir(params['foci_pred_dir']):
-                os.makedirs(params['foci_pred_dir'])
-            int_preds = (predictions * 255).astype('uint8')
-            tiff.imsave(os.path.join(params['foci_pred_dir'], pred_filename),
-                            int_preds, compress=4)
-
-        # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
-        if focusClassThreshold:
-            predictions[predictions >= focusClassThreshold] = 1
-            predictions[predictions < focusClassThreshold] = 0
-            predictions = predictions.astype('uint8')
-
-            segmented_imgs = np.zeros(predictions.shape, dtype='uint8')
-            # process and label each frame of the channel
-            for frame in range(segmented_imgs.shape[0]):
-                # get rid of small holes
-                # predictions[frame,:,:] = morphology.remove_small_holes(predictions[frame,:,:], min_object_size)
-                # get rid of small objects.
-                # predictions[frame,:,:] = morphology.remove_small_objects(morphology.label(predictions[frame,:,:], connectivity=1), min_size=min_object_size)
-                # remove labels which touch the boarder
-                predictions[frame,:,:] = segmentation.clear_border(predictions[frame,:,:])
-                # relabel now
-                segmented_imgs[frame,:,:] = morphology.label(predictions[frame,:,:], connectivity=2)
-
-        else: # in this case you just want to scale the 0 to 1 float image to 0 to 255
-            information('Converting predictions to grayscale.')
-            segmented_imgs = np.around(predictions * 100)
-
-        # both binary and grayscale should be 8bit. This may be ensured above and is unneccesary
-        segmented_imgs = segmented_imgs.astype('uint8')
-
-        # save out the segmented stacks
-        if params['output'] == 'TIFF':
-            seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
-            tiff.imsave(os.path.join(params['foci_seg_dir'], seg_filename),
-                            segmented_imgs, compress=4)
-
-        if params['output'] == 'HDF5':
-            h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
-            # put segmented channel in correct group
-            h5g = h5f['channel_%04d' % peak_id]
-            # delete the dataset if it exists (important for debug)
-            if 'p%04d_%s' % (peak_id, params['seg_img']) in h5g:
-                del h5g['p%04d_%s' % (peak_id, params['seg_img'])]
-
-            h5ds = h5g.create_dataset(u'p%04d_%s' % (peak_id, params['seg_img']),
-                                data=segmented_imgs,
-                                chunks=(1, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                maxshape=(None, segmented_imgs.shape[1], segmented_imgs.shape[2]),
-                                compression="gzip", shuffle=True, fletcher32=True)
-            h5f.close()
-
 
 def absolute_diff(y_true, y_pred):
     y_true_sum = K.sum(y_true)
@@ -2495,165 +2400,6 @@ def make_lineages_fov(fov_id, specs):
 
     return Cells
 
-# get number of cells in each frame and total number of pairwise interactions
-def get_cell_counts(regionprops_list):
-
-    cell_count_list = [len(time_regions) for time_regions in regionprops_list]
-    interaction_count_list = []
-
-    for i,cell_count in enumerate(cell_count_list):
-        if i+1 == len(cell_count_list):
-            break
-        interaction_count_list.append(cell_count*cell_count_list[i+1])
-
-    total_cells = np.sum(cell_count_list)
-    total_interactions = np.sum(interaction_count_list)
-
-    return(total_cells, total_interactions, cell_count_list, interaction_count_list)
-
-# get cells' information for track prediction
-def gather_interactions_and_events(regionprops_list):
-
-    total_cells, total_interactions, cell_count_list, interaction_count_list = get_cell_counts(regionprops_list)
-
-    # instantiate an array with a 2x4 array for each pair of cells'
-    #   min_y, max_y, centroid_y, and area
-    # in reality it would be much, much more efficient to
-    #   look this information up in the data generator at run time
-    #   for now, this will work
-    pairwise_cell_data = np.zeros((total_interactions,2,5,1))
-
-    # make a dictionary, the keys of which will be row indices so that we
-    #   can quickly look up which timepoints/cells correspond to which
-    #   rows of our model's ouput
-    pairwise_cell_lookup = {}
-
-    # populate arrays
-    interaction_count = 0
-    cell_count = 0
-
-    for frame, frame_regions in enumerate(regionprops_list):
-
-        for region in frame_regions:
-
-            cell_label = region.label
-            y,x = region.centroid
-            bbox = region.bbox
-            orientation = region.orientation
-            min_y = bbox[0]
-            max_y = bbox[2]
-            area = region.area
-            cell_label = region.label
-            cell_info = (min_y, max_y, y, area, orientation)
-            cell_count += 1
-
-            try:
-                frame_plus_one_regions = regionprops_list[frame+1]
-            except IndexError as e:
-                # print(e)
-                break
-
-            for region_plus_one in frame_plus_one_regions:
-
-                paired_cell_label = region_plus_one.label
-                y,x = region_plus_one.centroid
-                bbox = region_plus_one.bbox
-                min_y = bbox[0]
-                max_y = bbox[2]
-                area = region_plus_one.area
-                paired_cell_label = region_plus_one.label
-
-                pairwise_cell_data[interaction_count,0,:,0] = cell_info
-                pairwise_cell_data[interaction_count,1,:,0] = (min_y, max_y, y, area, orientation)
-
-                pairwise_cell_lookup[interaction_count] = {'frame':frame, 'cell_label':cell_label, 'paired_cell_label':paired_cell_label}
-
-                interaction_count += 1
-
-    return(pairwise_cell_data, pairwise_cell_lookup)
-
-# look up which cells are interacting according to the track model
-def cell_interaction_lookup(predictions, lookup_table):
-    '''
-    Accepts prediction matrix and
-    '''
-    frame = []
-    cell_label = []
-    paired_cell_label = []
-    interaction_type = []
-
-    # loop over rows of predictions
-    for row_index in range(predictions.shape[0]):
-
-        row_predictions = predictions[row_index]
-        row_relationship = np.where(row_predictions > 0.95)[0]
-        if row_relationship.size == 0:
-            continue
-        elif row_relationship[0] == 3:
-            continue
-        elif row_relationship[0] == 0:
-            interaction_type.append('migration')
-        elif row_relationship[0] == 1:
-            interaction_type.append('child')
-        elif row_relationship[0] == 2:
-            interaction_type.append('false_join')
-
-        frame.append(lookup_table[row_index]['frame'])
-        cell_label.append(lookup_table[row_index]['cell_label'])
-        paired_cell_label.append(lookup_table[row_index]['paired_cell_label'])
-
-    track_df = pd.DataFrame(data={'frame':frame,
-                              'cell_label':cell_label,
-                              'paired_cell_label':paired_cell_label,
-                              'interaction_type':interaction_type})
-    return(track_df)
-
-def get_tracking_model_dict():
-
-    model_dict = {}
-
-    if not 'migrate_model' in model_dict:
-        model_dict['migrate_model'] = models.load_model(params['tracking']['migrate_model'],
-                                                                    custom_objects={'all_loss':all_loss,
-                                                                        'f2_m':f2_m})
-    if not 'child_model' in model_dict:
-        model_dict['child_model'] = models.load_model(params['tracking']['child_model'],
-                                        custom_objects={'bce_dice_loss':bce_dice_loss,
-                                                                    'f2_m':f2_m})
-    if not 'appear_model' in model_dict:
-        model_dict['appear_model'] = models.load_model(params['tracking']['appear_model'],
-                                        custom_objects={'all_loss':all_loss,
-                                                                    'f2_m':f2_m})
-    if not 'die_model' in model_dict:
-        model_dict['die_model'] = models.load_model(params['tracking']['die_model'],
-                                        custom_objects={'all_loss':all_loss,
-                                                                    'f2_m':f2_m})
-    if not 'disappear_model' in model_dict:
-        model_dict['disappear_model'] = models.load_model(params['tracking']['disappear_model'],
-                                        custom_objects={'all_loss':all_loss,
-                                                                    'f2_m':f2_m})
-    if not 'born_model' in model_dict:
-        model_dict['born_model'] = models.load_model(params['tracking']['born_model'],
-                                        custom_objects={'all_loss':all_loss,
-                                                                    'f2_m':f2_m})
-    # if not 'zero_cell_model' in model_dict:
-    #     model_dict['zero_cell_model'] = models.load_model(params['tracking']['zero_cell_model'],
-    #                                     custom_objects={'absolute_dice_loss':absolute_dice_loss,
-    #                                                                 'f2_m':f2_m})
-    # if not 'one_cell_model' in model_dict:
-    #     model_dict['one_cell_model'] = models.load_model(params['tracking']['one_cell_model'],
-    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
-    #                                                                 'f2_m':f2_m})
-    # if not 'two_cell_model' in model_dict:
-    #     model_dict['two_cell_model'] = models.load_model(params['tracking']['two_cell_model'],
-    #                                     custom_objects={'all_loss':all_loss,
-    #                                                                 'f2_m':f2_m})
-    # if not 'geq_three_cell_model' in model_dict:
-    #     model_dict['geq_three_cell_model'] = models.load_model(params['tracking']['geq_three_cell_model'],
-    #                                     custom_objects={'bce_dice_loss':bce_dice_loss,
-    #                                                                 'f2_m':f2_m})
-
-    return(model_dict)
 
 # Creates lineage for a single channel
 def make_lineage_chnl_stack(fov_and_peak_id):
@@ -2840,6 +2586,15 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     return Cells
 
 def extract_foci_dict(fov_id_list, Cells_by_peak):
+    
+    time_table = params['time_table']
+    times_all = []
+    for fov in params['time_table']:
+        times_all = np.append(times_all, [int(x) for x in time_table[fov].keys()])
+    times_all = np.unique(times_all)
+    times_all = np.sort(times_all)
+    times_all = np.array(times_all,np.int_)
+
     tracks = {}
     for fov_id in fov_id_list:
         tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
@@ -2849,42 +2604,49 @@ def extract_foci_dict(fov_id_list, Cells_by_peak):
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
             if (len(Cells_of_peak) == 0):
                 continue
-            rep_dict = {}
             ## load stack
             foci_list = []
             foci_list_id = []
+            foci_dict = {t:[] for t in times_all}
             for (cell_id, cell) in Cells_of_peak.items():
                 ## loop over cell times, foci positions, centroid positions
-                for n, [t, dw, dl, c] in enumerate(zip(cell.times,cell.disp_w,cell.disp_l,cell.centroids)):
+                for n, [t, dw, dl, c,fh] in enumerate(zip(cell.times,cell.disp_w,cell.disp_l,cell.centroids,cell.foci_h)):
                     # for now try tracking relative to cell centroid (disp)
                     # actually need absolute x, y to distinguish foci from different cells
                     # need to check how times missing foci are stored
                     # loop over x & y foci positions at this time point
-                    for (w,l) in zip(dw,dl):
+                    for (w,l,h) in zip(dw,dl,fh):
                         # append time and absolute foci positions
-                        foci_list.append([t,w+c[1], l+c[0]])
-                        # foci_list_id.append([t,w+c[1], l+c[0],cell_id])
-                        foci_list_id.append(cell_id)
-            foci_list = np.array(foci_list)
-            foci_list_id = np.array(foci_list_id)
-            tracks[fov_id][peak_id] = make_foci_lineage(foci_list,foci_list_id,(fov_id,peak_id),Cells_by_peak[fov_id][peak_id])
+                        # foci_list.append([t,w+c[1], l+c[0],w,l,h])
+                        # foci_list_id.append(cell_id)
+                        # should make this a nested dictionary instead
+                        foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0],'rel_x':w,'rel_y':l,'intensity':h,'cell_id':cell_id})
+            # foci_list = np.array(foci_list)
+            # foci_list_id = np.array(foci_list_id)
+            tracks[fov_id][peak_id] = make_foci_lineage(foci_dict,(fov_id,peak_id),Cells_by_peak[fov_id][peak_id])
 
     return(tracks)
 
 # Creates lineage for a single channel
-def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
+def make_foci_lineage(foci_dict,fov_and_peak_id,Cells):
     '''
-    Create the lineage for a set of segmented images for one channel. Start by making the regions in the first time points potenial cells. Go forward in time and map regions in the timepoint to the potential cells in previous time points, building the life of a cell. Used basic checks such as the regions should overlap, and grow by a little and not shrink too much. If regions do not link back in time, discard them. If two regions map to one previous region, check if it is a sensible division event.
+    Link foci into replication cycles
 
     Parameters
     ----------
     fov_and_peak_ids : tuple.
         (fov_id, peak_id)
+    
+    foci_list
+        5 x (# time points) array of (time,x,y,rel_x,rel_y) for each focus detection
+
+    Cells
+        The dictionary of cell objects for this peak
 
     Returns
     -------
-    Cells : dict
-        A dictionary of all the cells from this lineage, divided and undivided
+    reps : dict
+        A dictionary of all the replication cycles from this lineage
 
     '''
     time_table = params['time_table']
@@ -2897,6 +2659,7 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
     # load in parameters
     # if leaf regions see no action for longer than this, drop them
     lost_trace_time = params['foci']['lost_trace_time']
+    max_y = params['foci']['max_y_dist']
 
     # get the specific ids from the tuple
     fov_id, peak_id = fov_and_peak_id
@@ -2920,16 +2683,21 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
     for t in times_all:
 
         ## get all foci from this peak at time t
-        ## foci_list is a 3 x (# time points) array of (time,x,y) for each focus detection
-        foci = foci_list[np.where(foci_list[:,0]==t)]
-        cell_ids = foci_list_id[np.where(foci_list[:,0]==t)]
+        ## foci_list is a 5 x (# time points) array of (time,x,y,rel_x,rel_y) for each focus detection
+        # foci = foci_list[np.where(foci_list[:,0]==t)]
+
+        ## this is now a list (ordered) of dicts
+        foci = foci_dict[t]
+        print(foci)
+        # cell_ids = foci_list_id[np.where(foci_list[:,0]==t)]
 
         ## now just a set of [t,x,y] x number detections at this time
         # if no foci, move to next time point
-        if len(np.squeeze(foci)) == 0:
+        if len(foci) == 0:
+            print('passing')
             continue
 
-        # if there are cell leaves who are still waiting to be linked, but
+        # if there are leaves who are still waiting to be linked, but
         # too much time has passed, remove them.
         for leaf_id in rep_leaves:
             if (t - reps[leaf_id].times[-1]) > lost_trace_time:
@@ -2941,11 +2709,12 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
 
         # make all the regions leaves if there are no current leaves
         if len(rep_leaves)==0:
-            for f,id in zip(foci,cell_ids):
+            for f in foci:
                 # Create track and add it to dictionary
-                rep_id = create_rep_id(f[1],f[2],t, peak_id, fov_id)
+                rep_id = create_rep_id(f['abs_x'],f['abs_y'],t, peak_id, fov_id)
                 ## need to define rep trace analogue to cell class
-                reps[rep_id] = ReplicationTrace(rep_id, f[1], f[2], t, id, parent_id=None)
+                reps[rep_id] = ReplicationTrace(rep_id, f['abs_x'], f['abs_y'], t,f['intensity'], f['cell_id'], parent_id=None)
+                print('making trace')
 
                 # add the id to list of current leaves
                 rep_leaves.append(rep_id)
@@ -2963,11 +2732,11 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
             # current_leaf_positions = [(leaf_id, reps[leaf_id].positions[-1][1]) for leaf_id in rep_leaves]
 
             ## need to sort foci by y position?
-            for f,focus in enumerate(foci):
+            for i, f in enumerate(foci):
 
                 ## pull out the leaves that have same cell_id as this detection
                 ## if there are none, look for leaves that are in the mother of current detection's cell
-                current_id = cell_ids[f]
+                current_id = f['cell_id']
                 mother_id = Cells[current_id].parent
                 cell_m = any([reps[leaf_id].cell_ids[-1] == current_id for leaf_id in rep_leaves])
                 mother_m = any([reps[leaf_id].cell_ids[-1] == mother_id for leaf_id in rep_leaves])
@@ -2984,14 +2753,14 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
                 # find the closest one in y.
                 for leaf in current_leaf_positions:
                     # calculate distance between region and leaf
-                    y_dist_region_to_leaf = abs(focus[2] - leaf[1])
+                    y_dist_region_to_leaf = abs(f['abs_y'] - leaf[1])
 
                     # if the distance is closer than before, update
                     if y_dist_region_to_leaf < current_closest[1]:
                         current_closest = (leaf[0], y_dist_region_to_leaf)
 
                 # update map with the closest region
-                leaf_region_map[current_closest[0]].append((f, y_dist_region_to_leaf))
+                leaf_region_map[current_closest[0]].append((i, y_dist_region_to_leaf))
 
                 ### leaf region map now has (nearest_focus_id, distance between)
 
@@ -3010,15 +2779,10 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
                     # if they are near the closed end of the channel
                     discarded_foci = sorted(foci_links, key=lambda x: x[1])[2:]
                     for discarded_focus in discarded_foci:
-                        focus = foci[discarded_focus[0]]
-                        cell_id = cell_ids[discarded_focus[0]]
-                        # if region.centroid[0] < new_cell_y_cutoff and region.label <= new_cell_region_cutoff:
-                        rep_id = create_rep_id(focus[1],focus[2], t, peak_id, fov_id)
-                        reps[rep_id] = ReplicationTrace(rep_id,focus[1],focus[2],t,cell_id, parent_id=None)
+                        f = foci[discarded_focus[0]]
+                        rep_id = create_rep_id(f['abs_x'],f['abs_y'], t, peak_id, fov_id)
+                        reps[rep_id] = ReplicationTrace(rep_id,f['abs_x'],f['abs_y'],t,f['intensity'],f['cell_id'], parent_id=None)
                         rep_leaves.append(rep_id) # add to leaves
-                    #     # else:
-                        #     # since the regions are ordered, none of the remaining will pass
-                        #     break
 
             ### iterate over the leaves, looking to see what regions connect to them.
             for rep_id, foci_links in six.iteritems(leaf_region_map):
@@ -3026,27 +2790,38 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
                 # see if it checks out and append the data
                 if len(foci_links) == 1:
 
-                    focus = foci[foci_links[0][0]] # grab the region from the list using its number
-                    # check if the pairing makes sense based on size and position
-                    # this function returns true if things are okay
+                    f = foci[foci_links[0][0]] # grab the region from the list using its number
 
                     ## check if this detection is in the same cell as the mother
                     ## if not - is it in a descendant?
                     # should there be a distance check too?
                     last_cell_id = reps[rep_id].cell_ids[-1]
 
-                    current_id = cell_ids[foci_links[0][0]]
+
+                    current_id = f['cell_id']
                     if last_cell_id == current_id:
-                        ## x, y, time, cell_id
-                        reps[rep_id].process(focus[1],focus[2],t,current_id)
-                        # print('still in same cell, extending')
+                        if abs(f['abs_y'] - reps[rep_id].positions[-1][1]) < max_y:
+                            ## x, y, time, cell_id
+                            reps[rep_id].process(f['abs_x'],f['abs_y'],t,f['intensity'],current_id)
+                            print('still in same cell, extending')
+                        else:
+                            # initialize new trace
+                            print('failed dist check')
+                            daughter1_id = create_rep_id(f['abs_x'],f['abs_y'],t,peak_id,fov_id)
+                            reps[daughter1_id]= ReplicationTrace(daughter1_id,f['abs_x'],f['abs_y'],t,f['intensity'],current_id,parent_id=rep_id)
+                            rep_leaves.remove(rep_id)
+                            reps[rep_id].terminate(reps[rep_id].times[-1])
+                            rep_leaves.append(daughter1_id)
+
+
                     else:
+                        # try to map it onto the daughters
                         try:
                             if Cells[last_cell_id].daughters[0] == current_id:
-                                reps[rep_id].process(focus[1],focus[2],t,current_id)
+                                reps[rep_id].process(f['abs_x'],f['abs_y'],t,f['intensity'],current_id)
 
                             if Cells[last_cell_id].daughters[1] == current_id:
-                                reps[rep_id].process(focus[1],focus[2],t,current_id)
+                                reps[rep_id].process(f['abs_x'],f['abs_y'],t,f['intensity'],current_id)
                         except:
                             pass
 
@@ -3057,46 +2832,55 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
                     ## if not - are they in the daughters of the mother?
                     ## if only one is in same cell as the mother (or in a descendant), extend the trace
                     ## if neither are linked, drop both and terminate the trace
-                    focus1 = foci[foci_links[0][0]]
-                    f1_id = cell_ids[foci_links[0][0]]
-                    focus2 = foci[foci_links[1][0]]
-                    f2_id = cell_ids[foci_links[1][0]]
+                    f1 = foci[foci_links[0][0]]
+                    f1_id = f1['cell_id']
+                    f2 = foci[foci_links[1][0]]
+                    f2_id = f2['cell_id']
                     last_cell_id = reps[rep_id].cell_ids[-1]
 
                     if last_cell_id == f1_id and last_cell_id == f2_id:
-
-                        daughter1_id = create_rep_id(focus1[1],focus1[2],t,peak_id,fov_id)
-                        daughter2_id = create_rep_id(focus2[1],focus2[2],t,peak_id,fov_id)
-                        reps[daughter1_id]= ReplicationTrace(daughter1_id,focus1[1],focus1[2],t,f1_id,parent_id=rep_id)
-                        reps[daughter2_id]= ReplicationTrace(daughter2_id,focus2[1],focus2[2],t,f2_id,parent_id=rep_id)
-                        rep_leaves.remove(rep_id)
-                        reps[rep_id].terminate(reps[rep_id].times[-1])
-                        rep_leaves.append(daughter1_id)
-                        rep_leaves.append(daughter2_id)
-
+                        dist1 = abs(f1['abs_y'] - reps[rep_id].positions[-1][1])
+                        dist2 = abs(f2['abs_y'] - reps[rep_id].positions[-1][1])
+                        if dist1 > max_y and dist2 > max_y:
+                            daughter1_id = create_rep_id(f1['abs_x'],f1['abs_y'],t,peak_id,fov_id)
+                            daughter2_id = create_rep_id(f2['abs_x'],f2['abs_y'],t,peak_id,fov_id)
+                            reps[daughter1_id]= ReplicationTrace(daughter1_id,f1['abs_x'],f1['abs_y'],t,f1['intensity'],f1_id,parent_id=rep_id)
+                            reps[daughter2_id]= ReplicationTrace(daughter2_id,f2['abs_x'],f2['abs_y'],t,f2['intensity'],f2_id,parent_id=rep_id)
+                            rep_leaves.remove(rep_id)
+                            reps[rep_id].terminate(reps[rep_id].times[-1])
+                            rep_leaves.append(daughter1_id)
+                            rep_leaves.append(daughter2_id)
+                        elif dist1 > max_y:
+                            daughter1_id = create_rep_id(f1['abs_x'],f1['abs_y'],t,peak_id,fov_id)
+                            reps[daughter1_id]= ReplicationTrace(daughter1_id,f1['abs_x'],f1['abs_y'],t,f1['intensity'],f1_id,parent_id=rep_id)
+                            rep_leaves.append(daughter1_id)
+                        elif dist2 > max_y:
+                            daughter2_id = create_rep_id(f2['abs_x'],f2['abs_y'],t,peak_id,fov_id)
+                            reps[daughter2_id]= ReplicationTrace(daughter2_id,f2['abs_x'],f2['abs_y'],t,f2['intensity'],f2_id,parent_id=rep_id)
+                            rep_leaves.append(daughter2_id)
                     elif last_cell_id == f1_id:
-                        reps[rep_id].process(focus1[1],focus1[2],t,f1_id)
+                        reps[rep_id].process(f1['abs_x'],f1['abs_y'],t,f1['intensity'],f1_id)
 
-                        rep_id_n = create_rep_id(focus2[1],focus2[2], t, peak_id, fov_id)
-                        reps[rep_id_n] = ReplicationTrace(rep_id_n,focus2[1],focus2[2],t,f2_id, parent_id=None)
+                        rep_id_n = create_rep_id(f2['abs_x'],f2['abs_y'], t, peak_id, fov_id)
+                        reps[rep_id_n] = ReplicationTrace(rep_id_n,f2['abs_x'],f2['abs_y'],t,f2['intensity'],f2_id, parent_id=None)
                         rep_leaves.append(rep_id_n)
 
                     elif last_cell_id == f2_id:
-                        reps[rep_id].process(focus2[1],focus2[2],t,f2_id)
+                        reps[rep_id].process(f2['abs_x'],f2['abs_y'],t,f2['intensity'],f2_id)
 
-                        rep_id_n = create_rep_id(focus1[1],focus1[2], t, peak_id, fov_id)
-                        reps[rep_id_n] = ReplicationTrace(rep_id_n,focus1[1],focus1[2],t,f1_id, parent_id=None)
+                        rep_id_n = create_rep_id(f1['abs_x'],f1['abs_y'], t, peak_id, fov_id)
+                        reps[rep_id_n] = ReplicationTrace(rep_id_n,f1['abs_x'],f1['abs_y'],t,f1['intensity'],f1_id, parent_id=None)
                         rep_leaves.append(rep_id_n)
 
                     else:
                         try:
                             if Cells[last_cell_id].daughters == (f1_id, f2_id) or Cells[last_cell_id].daughters == (f2_id, f1_id):
-                                rep_id_n1 = create_rep_id(focus1[1],focus1[2], t, peak_id, fov_id)
-                                reps[rep_id_n1] = ReplicationTrace(rep_id_n1,focus1[1],focus1[2],t,f1_id, parent_id=rep_id)
+                                rep_id_n1 = create_rep_id(f1['abs_x'],f1['abs_y'], t, peak_id, fov_id)
+                                reps[rep_id_n1] = ReplicationTrace(rep_id_n1,f1['abs_x'],f1['abs_y'],t,f1['intensity'],f1_id, parent_id=rep_id)
                                 rep_leaves.append(rep_id_n1)
 
-                                rep_id_n2 = create_rep_id(focus2[1],focus2[2], t, peak_id, fov_id)
-                                reps[rep_id_n2] = ReplicationTrace(rep_id_n2,focus2[1],focus2[2],t,f2_id, parent_id=rep_id)
+                                rep_id_n2 = create_rep_id(f2['abs_x'],f2['abs_y'], t, peak_id, fov_id)
+                                reps[rep_id_n2] = ReplicationTrace(rep_id_n2,f2['abs_x'],f2['abs_y'],t,f2['intensity'],f2_id, parent_id=rep_id)
                                 rep_leaves.append(rep_id_n2)
 
                                 rep_leaves.remove(rep_id)
@@ -3112,7 +2896,7 @@ def make_foci_lineage(foci_list,foci_list_id,fov_and_peak_id,Cells):
 ### Cell class and related functions
 
 class ReplicationTrace():
-    def __init__(self,rep_id,x,y,t,cell_id,parent_id=None):
+    def __init__(self,rep_id,x,y,t,h,cell_id,parent_id=None):
         self.id = rep_id
         self.fov = int(rep_id.split('f')[1].split('p')[0])
         self.peak = int(rep_id.split('p')[1].split('t')[0])
@@ -3131,7 +2915,9 @@ class ReplicationTrace():
         self.positions = [(x,y)]
         self.cell_ids = [cell_id]
 
-    def process(self, x,y,t,cell_id):
+        self.intensity = [h]
+
+    def process(self, x,y,t,h,cell_id):
         '''Append data from a region to this cell.
         use cell.times[-1] to get most current value'''
 
@@ -3139,6 +2925,7 @@ class ReplicationTrace():
         self.abs_times.append(params['time_table'][self.fov][t])
         self.positions.append((x,y))
         self.cell_ids.append(cell_id)
+        self.intensity.append(h)
 
     def terminate(self,t):
         # put the daugther ids into the cell
@@ -4151,8 +3938,8 @@ def foci_lap(img, img_foci, cell, t):
     img_foci_masked = np.copy(img_foci).astype(np.float)
     # correction for difference between segmentation image mask and fluorescence channel by padding on the rightmost column(s)
     if np.shape(img) != np.shape(img_foci_masked):
-    	delta_col = np.shape(img)[1] - np.shape(img_foci_masked)[1]
-    	img_foci_masked = np.pad(img_foci_masked, ((0, 0), (0, delta_col)), 'edge')
+        delta_col = np.shape(img)[1] - np.shape(img_foci_masked)[1]
+        img_foci_masked = np.pad(img_foci_masked, ((0, 0), (0, delta_col)), 'edge')
     img_foci_masked[img != region] = np.nan
     cell_fl_median = np.nanmedian(img_foci_masked)
     cell_fl_mean = np.nanmean(img_foci_masked)
