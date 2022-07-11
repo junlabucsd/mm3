@@ -2152,7 +2152,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
     cellClassThreshold = params['segment']['unet']['cell_class_threshold']
     if cellClassThreshold == 'None': # yaml imports None as a string
         cellClassThreshold = False
-    min_object_size = params['segment']['min_object_size']
+    min_object_size = params['segment']['unet']['min_object_size']
 
     # arguments to data generator
     # data_gen_args = {'batch_size':batch_size,
@@ -3429,6 +3429,19 @@ def find_complete_cells(Cells):
 
     return Complete_Cells
 
+## for runout analysis
+def find_complete_cells_mothers(Cells):
+    '''Go through a dictionary of cells and return another dictionary
+    that contains just those with a parent'''
+
+    Complete_Cells = {}
+
+    for cell_id in Cells:
+        if Cells[cell_id].parent:
+            Complete_Cells[cell_id] = Cells[cell_id]
+
+    return Complete_Cells
+
 # finds cells whose birth label is 1
 def find_mother_cells(Cells):
     '''Return only cells whose starting region label is 1.'''
@@ -3688,7 +3701,7 @@ def find_cell_intensities_worker(fov_id, peak_id, Cells, midline=True, channel='
     # return the cell object to the pool initiated by mm3_Colors.
     return Cells
 
-def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='sub_c2'):
+def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='sub_c2',seg_method='seg_otsu'):
     '''
     Finds fluorescenct information for cells. All the cells in Cells
     should be from one fov/peak. See the function
@@ -3697,10 +3710,13 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
 
     # Load fluorescent images and segmented images for this channel
     fl_stack = load_stack(fov_id, peak_id, color=channel_name)
+    seg_stack = load_stack(fov_id, peak_id, color=seg_method)
 
-    
-    # TODO: un-hardcode
-    seg_stack = load_stack(fov_id, peak_id, color='seg_otsu')
+    #Segmented stack may have different width than fluorescence stack
+    if np.shape(fl_stack) != np.shape(seg_stack):
+        delta_col = np.shape(seg_stack)[2] - np.shape(fl_stack)[2]
+        fl_stack = np.pad(fl_stack, ((0, 0),(0,0),(0, delta_col)), 'edge')
+        print('Padding fl stack')
 
     time_table = params['time_table']
 
@@ -3714,6 +3730,8 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
     times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
 
+    
+
     # Loop through cells
     for Cell in Cells.values():
         # give this cell two lists to hold new information
@@ -3724,8 +3742,10 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
         if midline:
             Cell.mid_fl = [] # avg fluorescence of midline
 
+        
         # and the time points that make up this cell's life
         for n, t in enumerate(Cell.times):
+            
             # create fluorescent image only for this cell and timepoint.
             fl_image_masked = np.copy(fl_stack[t-t0])
             fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
