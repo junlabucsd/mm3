@@ -106,7 +106,7 @@ if __name__ == "__main__":
     if namespace.modelfile:
         model_file_path = namespace.modelfile
     else:
-        model_file_path = p['segment']['model_file']
+        model_file_path = p['segment']['unet']['model_file']
     # *** Need parameter for weights
     seg_model = models.load_model(model_file_path,
                               custom_objects={'bce_dice_loss': mm3.bce_dice_loss,
