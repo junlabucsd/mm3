@@ -139,7 +139,7 @@ def julian_day_number():
 
 def get_plane(filepath):
     pattern = r'(c\d+).tif'
-    res = re.search(pattern,filepath)
+    res = re.search(pattern,filepath,re.IGNORECASE)
     if (res != None):
         return res.group(1)
     else:
@@ -147,7 +147,7 @@ def get_plane(filepath):
 
 def get_fov(filepath):
     pattern = r'xy(\d+)\w*.tif'
-    res = re.search(pattern,filepath)
+    res = re.search(pattern,filepath,re.IGNORECASE)
     if (res != None):
         return int(res.group(1))
     else:
@@ -155,7 +155,7 @@ def get_fov(filepath):
 
 def get_time(filepath):
     pattern = r't(\d+)xy\w+.tif'
-    res = re.search(pattern,filepath)
+    res = re.search(pattern,filepath,re.IGNORECASE)
     if (res != None):
         return np.int_(res.group(1))
     else:
@@ -588,7 +588,8 @@ def get_tif_metadata_filename(tif):
              't' : get_time(tif.filename), # time point
              'jd' : -1 * 0.0, # absolute julian time
              'x' : -1 * 0.0, # x position on stage [um]
-             'y' : -1 * 0.0} # y position on stage [um]
+             'y' : -1 * 0.0,  # y position on stage [um]
+             'planes': get_plane(tif.filename)}
 
     return idata
 
