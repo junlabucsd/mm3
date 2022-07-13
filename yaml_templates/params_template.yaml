@@ -59,7 +59,6 @@ compile:
   do_slicing : True
 
   t_end : # only analyze images up until this t point. Leave blank otherwise
-  find_channels_method: 'peaks' # argument to mm3.get_tif_params in mm3_Compile.py, determines whether to use a convolutional neural network or peaks to detect channels
   image_orientation : 'auto' # direction of open end of channel. 'up', 'down', or 'auto'
   channel_width : 10 # width of channels in pixels
   channel_separation : 45 # peak-to-peak distance between channels in pixels
@@ -102,6 +101,7 @@ segment:
     first_opening_size: 2 # pixel size used in the first morphological opening
     distance_threshold: 2 # pixel distance to be zeroed
     second_opening_size: 1 # pixel size used in the second morphological opening
+    min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
   ##unet params
   unet:
@@ -112,8 +112,8 @@ segment:
     cell_class_threshold: 0.60
     normalize_to_one: False
     save_predictions: False
+    min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
-  min_object_size: 25 # labeled objects smaller than this will be zeroed. px^2
 
 track:
   lost_cell_time: 3 # no of frames after which a cell is dropped if no new regions connect to it
@@ -203,7 +203,7 @@ foci:
   # foci peaks must be this many times greater than median cell intensity.
   # Think signal to noise ratio
   foci_log_peak_med_ratio: 1.5 # default: 1.2;
-  n_cc: # number of concurrent cell cycles (1,2, or 3)
   lost_trace_time: 3
+  max_y_dist: 10 # max allowed change in absolute (channel) y position (pixels) for focus tracking
   min_c: 8 # lower bound for replication time (C period in time steps)
   max_c: 30 # upper bound for replication time

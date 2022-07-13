@@ -57,6 +57,7 @@ if __name__ == "__main__":
                                      description='Calculates total and average fluorescence per cell.')
     parser.add_argument('-f', '--paramfile', type=argparse.FileType('r'),
                         required=True, help='Yaml file containing parameters.')
+    parser.add_argument('-s', '--seg_method', type=str, required = False,help='Segmentation method (Otsu or Unet) to look for. Defaults to otsu')
     parser.add_argument('-o', '--fov', type=str,
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-c', '--cellfile', type=argparse.FileType('r'),
@@ -87,6 +88,12 @@ if __name__ == "__main__":
 
     with open(cell_file_path, 'rb') as cell_file:
         Complete_Cells = pickle.load(cell_file)
+
+    if namespace.seg_method:
+        seg_method = 'seg_'+str(namespace.seg_method)
+    else:
+        mm3.warning('Defaulting to otsu segmented cells')
+        seg_method = 'seg_otsu'
 
     # load specs file
     specs = mm3.load_specs()
@@ -137,7 +144,7 @@ if __name__ == "__main__":
                 mm3.information('Processing FOV {}.'.format(fov_id))
                 for peak_id, Cells in Cells_by_peak[fov_id].items():
                     mm3.information('Processing peak {}.'.format(peak_id))
-                    mm3.find_cell_intensities(fov_id, peak_id, Cells, midline=False)
+                    mm3.find_cell_intensities(fov_id, peak_id, Cells, seg_method=seg_method,midline=False)
 
     # Just the complete cells, those with mother and daugther
     cell_filename = os.path.basename(cell_file_path)
