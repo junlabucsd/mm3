@@ -247,12 +247,6 @@ if __name__ == "__main__":
             # get filenames just for this fov along with the julian date of acquistion
             send_to_write = [[k, v['t']] for k, v in six.iteritems(analyzed_imgs) if v['fov'] == fov]
 
-            # ## split filenames by plane
-            planes = list(set([i['planes'] for i in analyzed_imgs]))
-            if len(planes)>1:
-                
-
-
             # sort the filenames by jdn
             send_to_write = sorted(send_to_write, key=lambda time: time[1])
 
