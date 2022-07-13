@@ -135,7 +135,7 @@ if __name__ == "__main__":
             mm3.information('Removing images before time {}'.format(t_start))
             # go through list and find first place where timepoint is equivalent to t_start
             for n, ifile in enumerate(found_files):
-                string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_start,t_start)) # account for 3 and 4 digit
+                string = re.compile('t{:0=3}xy|t{:0=4}xy'.format(t_start,t_start),re.IGNORECASE) # account for 3 and 4 digit
                 # if re.search == True then a match was found
                 if re.search(string, ifile):
                     # cut off every file name prior to this one and quit the loop
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             mm3.information('Removing images after time {}'.format(t_end))
             # go through list and find first place where timepoint is equivalent to t_end
             for n, ifile in enumerate(found_files):
-                string = re.compile('t%03dxy|t%04dxy' % (t_end, t_end)) # account for 3 and 4 digit
+                string = re.compile('t%03dxy|t%04dxy' % (t_end, t_end),re.IGNORECASE) # account for 3 and 4 digit
                 if re.search(string, ifile):
                     found_files = found_files[:n]
                     break
@@ -156,12 +156,12 @@ if __name__ == "__main__":
         # if user has specified only certain FOVs, filter for those
         if (len(user_spec_fovs) > 0):
             mm3.information('Filtering TIFFs by FOV.')
-            fitered_files = []
+            filtered_files = []
             for fov_id in user_spec_fovs:
-                fov_string = 'xy%02d' % fov_id # xy01
-                fitered_files += [ifile for ifile in found_files if fov_string in ifile]
+                string = re.compile('xy%02d' %fov_id,re.IGNORECASE)
+                filtered_files += [ifile for ifile in found_files if re.search(string,ifile)]
 
-            found_files = fitered_files[:]
+            found_files = filtered_files[:]
 
         # get information for all these starting tiffs
         if len(found_files) > 0:
@@ -170,7 +170,7 @@ if __name__ == "__main__":
             mm3.warning('No TIFF files found')
 
         # initialize pool for analyzing image metadata
-        pool = Pool(p['num_analyzers'])
+        # pool = Pool(p['num_analyzers'])
 
         # loop over images and get information
         for fn in found_files:
@@ -181,14 +181,14 @@ if __name__ == "__main__":
             analyzed_imgs[fn] = mm3.get_tif_params(fn, True)
 
             # Parallelized
-            #analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
+            # analyzed_imgs[fn] = pool.apply_async(mm3.get_tif_params, args=(fn, True))
 
-        mm3.information('Waiting for image analysis pool to be finished.')
+        # mm3.information('Waiting for image analysis pool to be finished.')
 
-        pool.close() # tells the process nothing more will be added.
-        pool.join() # blocks script until everything has been processed and workers exit
+        # pool.close() # tells the process nothing more will be added.
+        # pool.join() # blocks script until everything has been processed and workers exit
 
-        mm3.information('Image analysis pool finished, getting results.')
+        # mm3.information('Image analysis pool finished, getting results.')
 
         # # get results from the pool and put them in a dictionary
         # for fn in analyzed_imgs.keys():
@@ -246,6 +246,12 @@ if __name__ == "__main__":
 
             # get filenames just for this fov along with the julian date of acquistion
             send_to_write = [[k, v['t']] for k, v in six.iteritems(analyzed_imgs) if v['fov'] == fov]
+
+            # ## split filenames by plane
+            planes = list(set([i['planes'] for i in analyzed_imgs]))
+            if len(planes)>1:
+                
+
 
             # sort the filenames by jdn
             send_to_write = sorted(send_to_write, key=lambda time: time[1])
