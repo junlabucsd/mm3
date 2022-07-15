@@ -52,9 +52,9 @@ if cmd_subfolder not in sys.path:
 import mm3_helpers as mm3
 
 # Color constants. The assigned shape allows the to be multiplied by 2d arrays in a simple way.
-RED = np.array((1.0, 0.4, 0.4)) * 3
-GREEN = np.array((0.4, 1.0, 0.4)) * 2
-BLUE = np.array((0.4, 0.4, 1.0)) * 4
+RED = np.array((1.0, 0.2, 0.2)) / 3
+GREEN = np.array((0.2, 1, 0.2)) / 4
+BLUE = np.array((.2, .2, 1.0)) / 2
 
 ### functions
 def fov_plot_channels(fov_id, crosscorrs, specs, outputdir='.', phase_plane='c1'):
@@ -514,9 +514,18 @@ def color_image(image, color):
     out_image : n x m x 3 array
         The image colored appropriately. All values between 0, 1.
     """
+    # Normalize image to prevent artifacts
     image_normalized = (image - np.min(image)) / (np.max(image) - np.min(image))
+    # Take a log to 'soften' image 
+    image = np.log(2 * image_normalized + 1)
+    # Normalize image again.
+    image_normalized = (image - np.min(image)) / (np.max(image) - np.min(image))
+    # Numpy broadcasting trickery to allow me to add/multiply 'image' and 'color'
     image_reshaped = image_normalized.reshape(image.shape + (1,))
-    image_multiply = color * image_reshaped + color /10 
+
+    # Coloring! Using the 'screen' blending mode.
+    one = np.ones(image_reshaped.shape)
+    image_multiply = one - (one - color) * (one - image_reshaped)
     image_multiply[image_multiply < 0] = 0.
     image_multiply[image_multiply > 1] = 1.
 
