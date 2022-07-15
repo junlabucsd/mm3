@@ -3150,7 +3150,7 @@ class Cell():
         self.volumes_w_div = [np.float16(vol) for vol in self.volumes_w_div]
         # note the float16 is hardcoded here
         self.orientations = [np.float16(orientation) for orientation in self.orientations]
-        self.centroids = [(np.float16(y), np.float16(y)) for y, x in self.centroids]
+        self.centroids = [(np.float16(y), np.float16(x)) for y, x in self.centroids]
 
     def print_info(self):
         '''prints information about the cell'''
@@ -4112,7 +4112,7 @@ def foci_lap(img, img_foci, cell, t):
         plt.close('all')
         nblobs = len(blobs)
         print ("nblobs = {:d}".format(nblobs))
-
+    
     return disp_l, disp_w, foci_h
 
 
