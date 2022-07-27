@@ -4125,7 +4125,7 @@ def foci_lap(img, img_foci, cell, t):
         plt.close('all')
         nblobs = len(blobs)
         print ("nblobs = {:d}".format(nblobs))
-
+    
     return disp_l, disp_w, foci_h
 
 
