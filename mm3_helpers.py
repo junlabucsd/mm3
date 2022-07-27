@@ -120,7 +120,7 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment'].keys():
+    if not 'save_predictions' in params['segment']['unet'].keys():
         params['segment']['unet']['save_predictions'] = False
 
     return params
@@ -735,7 +735,7 @@ def tiff_stack_slice_and_write(images_to_write, channel_masks, analyzed_imgs):
             # # chnl_dir and p will be looked for in the scope above (__main__)
             channel_filename = os.path.join(params['chnl_dir'], params['experiment_name'] + '_xy%03d_p%04d_c%1d.tif' % (fov_id, peak, color_index+1))
             # save stack
-            tiff.imsave(channel_filename, channel_stack[:,:,:,color_index], compress=4)
+            tiff.imwrite(channel_filename, channel_stack[:,:,:,color_index], compression=('zlib',4))
 
     return
 
@@ -1604,7 +1604,7 @@ def average_empties_stack(fov_id, specs, color='c1', align=True):
     if params['output'] == 'TIFF':
         # make new name and save it
         empty_filename = params['experiment_name'] + '_xy%03d_empty_%s.tif' % (fov_id, color)
-        tiff.imsave(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compress=4)
+        tiff.imwrite(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compression=('zlib',4))
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
@@ -1697,7 +1697,7 @@ def copy_empty_stack(from_fov, to_fov, color='c1'):
     if params['output'] == 'TIFF':
         # make new name and save it
         empty_filename = params['experiment_name'] + '_xy%03d_empty_%s.tif' % (to_fov, color)
-        tiff.imsave(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compress=4)
+        tiff.imwrite(os.path.join(params['empty_dir'],empty_filename), avg_empty_stack, compression=('zlib',4))
 
     if params['output'] == 'HDF5':
         h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % to_fov), 'r+')
@@ -1788,7 +1788,7 @@ def subtract_fov_stack(fov_id, specs, color='c1', method='phase'):
         # save out the subtracted stack
         if params['output'] == 'TIFF':
             sub_filename = params['experiment_name'] + '_xy%03d_p%04d_sub_%s.tif' % (fov_id, peak_id, color)
-            tiff.imsave(os.path.join(params['sub_dir'],sub_filename), subtracted_stack, compress=4) # save it
+            tiff.imwrite(os.path.join(params['sub_dir'],sub_filename), subtracted_stack, compression=('zlib',4)) # save it
 
         if params['output'] == 'HDF5':
             h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
@@ -2180,8 +2180,10 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
 
             # robust normalization of peak's image stack to 1
             max_val = np.max(med_stack)
-            img_stack = img_stack/max_val
-            img_stack[img_stack > 1] = 1
+            img_avg = np.mean(img_stack,axis=(1,2))
+            img_std = np.std(img_stack,axis=(1,2))
+            #permute axes to make use of numpy slicing then permute back
+            img_stack = np.transpose((np.transpose(img_stack)-img_avg)/img_std)
 
         # trim and pad image to correct size
         img_stack = img_stack[:, :unet_shape[0], :unet_shape[1]]
@@ -2199,7 +2201,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                                              shuffle=False) # keep same order
 
         # predict cell locations. This has multiprocessing built in but I need to mess with the parameters to see how to best utilize it. ***
-        predictions = model.predict(image_generator, **predict_args)
+        predictions = model.predict_generator(image_generator, **predict_args)
         # post processing
         # remove padding including the added last dimension
         predictions = predictions[:, pad_dict['top_pad']:unet_shape[0]-pad_dict['bottom_pad'],
@@ -2213,12 +2215,12 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              mode='constant')
 
         if params['segment']['unet']['save_predictions']:
-            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
+            pred_filename = params['experiment_name'] + '_xy%03d_p%04d_pred_unet.tif' % (fov_id, peak_id)
             if not os.path.isdir(params['pred_dir']):
                 os.makedirs(params['pred_dir'])
             int_preds = (predictions * 255).astype('uint8')
-            tiff.imsave(os.path.join(params['pred_dir'], pred_filename),
-                            int_preds, compress=4)
+            tiff.imwrite(os.path.join(params['pred_dir'], pred_filename),
+                            int_preds, compression=("zlib",4))
 
         # binarized and label (if there is a threshold value, otherwise, save a grayscale for debug)
         if cellClassThreshold:
@@ -2248,8 +2250,8 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
         # save out the segmented stacks
         if params['output'] == 'TIFF':
             seg_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['seg_img'])
-            tiff.imsave(os.path.join(params['seg_dir'], seg_filename),
-                            segmented_imgs, compress=4)
+            tiff.imwrite(os.path.join(params['seg_dir'], seg_filename),
+                            segmented_imgs, compression=("zlib",4))
 
         if params['output'] == 'HDF5':
             h5f = h5py.File(os.path.join(params['hdf5_dir'],'xy%03d.hdf5' % fov_id), 'r+')
@@ -2595,7 +2597,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     return Cells
 
 def extract_foci_dict(fov_id_list, Cells_by_peak):
-    
+
     time_table = params['time_table']
     times_all = []
     for fov in params['time_table']:
@@ -2645,7 +2647,7 @@ def make_foci_lineage(foci_dict,fov_and_peak_id,Cells):
     ----------
     fov_and_peak_ids : tuple.
         (fov_id, peak_id)
-    
+
     foci_list
         5 x (# time points) array of (time,x,y,rel_x,rel_y) for each focus detection
 
@@ -3014,7 +3016,13 @@ class Cell():
                        (4/3) * np.pi * (width_tmp/2)**3]
 
         # angle of the fit elipsoid and centroid location
-        self.orientations = [region.orientation]
+        # self.orientations = [region.orientation]
+
+        if region.orientation > 0:
+            self.orientations = [-(np.pi / 2 - region.orientation)]
+        else:
+            self.orientations = [np.pi / 2 + region.orientation]
+
         self.centroids = [region.centroid]
 
         # these are special datatype, as they include information from the daugthers for division
@@ -3053,8 +3061,11 @@ class Cell():
         self.widths.append(width_tmp)
         self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
                             (4/3) * np.pi * (width_tmp/2)**3)
-
-        self.orientations.append(region.orientation)
+        if region.orientation > 0:
+            ori = -(np.pi / 2 - region.orientation)
+        else:
+            ori = np.pi / 2 + region.orientation
+        self.orientations.append(ori)
         self.centroids.append(region.centroid)
 
     def die(self, region, t):
@@ -3176,9 +3187,11 @@ def feretdiameter(region):
     ## orientation is now measured in RC coordinates - quick fix to convert
     ## back to xy
     if region.orientation > 0:
-        ori1 = np.pi / 2 - region.orientation
+        # ori1 = np.pi / 2 - region.orientation
+        ori1 = -(np.pi / 2 - region.orientation)
     else:
-        ori1 = - np.pi / 2 - region.orientation
+        # ori1 = - np.pi / 2 - region.orientation
+        ori1 = np.pi / 2 + region.orientation
     cosorient = np.cos(ori1)
     sinorient = np.sin(ori1)
 
@@ -3731,7 +3744,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
     times_all = np.array(times_all,np.int_)
     t0 = times_all[0] # first time index
 
-    
+
 
     # Loop through cells
     for Cell in Cells.values():
@@ -3743,10 +3756,10 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
         if midline:
             Cell.mid_fl = [] # avg fluorescence of midline
 
-        
+
         # and the time points that make up this cell's life
         for n, t in enumerate(Cell.times):
-            
+
             # create fluorescent image only for this cell and timepoint.
             fl_image_masked = np.copy(fl_stack[t-t0])
             fl_image_masked[seg_stack[t-t0] != Cell.labels[n]] = 0
@@ -4019,9 +4032,9 @@ def foci_lap(img, img_foci, cell, t):
             r_blob.append(radius)
 
             # cut out a small image from original image to fit gaussian
-            gfit_area = img_foci[yloc-radius:yloc+radius, xloc-radius:xloc+radius]
-            # gfit_area_0 = img_foci[max(0, yloc-1*radius):min(img_foci.shape[0], yloc+1*radius),
-            #                        max(0, xloc-1*radius):min(img_foci.shape[1], xloc+1*radius)]
+            # gfit_area = img_foci[yloc-radius:yloc+radius, xloc-radius:xloc+radius]
+            gfit_area = img_foci[max(0, yloc-1*radius):min(img_foci.shape[0], yloc+1*radius),
+                                    max(0, xloc-1*radius):min(img_foci.shape[1], xloc+1*radius)]
             gfit_area_fixed = img_foci[yloc-maxsig:yloc+maxsig, xloc-maxsig:xloc+maxsig]
 
             # fit gaussian to proposed foci in small box
