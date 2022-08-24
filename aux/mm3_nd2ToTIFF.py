@@ -17,7 +17,7 @@ try:
 except:
     import pickle
 import numpy as np
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 import pims_nd2
 import warnings
 

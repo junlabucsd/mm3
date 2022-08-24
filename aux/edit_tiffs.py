@@ -8,7 +8,7 @@ import numpy as np
 # import json
 import warnings
 from skimage import io
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 
 # takes images with name format "20181011_JDW3308_StagePosition01_Frame0205_Second61500_Channel1.tif"
 #    and saves them as a multichannel stack in a subdirectory called "TIFF"

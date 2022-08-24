@@ -1,9 +1,16 @@
 #! /usr/bin/env python3
 from __future__ import print_function, division
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QRadioButton, QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QGridLayout, QAction, QDockWidget, QPushButton, QInputDialog
-from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor
-from PyQt5.QtCore import Qt, QPoint, QRectF
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, QRadioButton,
+    QMenu, QAction, QButtonGroup, QFileDialog, QVBoxLayout, QHBoxLayout, QWidget,
+    QLabel, QGridLayout, QAction, QDockWidget, QPushButton, QInputDialog,QGraphicsView,
+    QGraphicsScene,
+    QCheckBox,
+    QGraphicsItem,
+    QGridLayout, QGraphicsLineItem, QGraphicsPathItem, QGraphicsPixmapItem,
+    QGraphicsEllipseItem, QGraphicsTextItem)
+from PyQt5.QtGui import QIcon, QImage, QPainter, QPen, QPixmap, qGray, QColor, QBrush, QTransform
+from PyQt5.QtCore import Qt, QPoint, QRectF,QLineF
 from skimage import io, img_as_ubyte, color, draw, measure
 import numpy as np
 import sys
@@ -11,6 +18,16 @@ import re
 import os
 import yaml
 import multiprocessing
+try:
+    import cPickle as pickle # loading and saving python objects
+except:
+    import pickle
+
+import mm3_helpers as mm3
+import mm3_plots
+import tifffile as tiff
+import math
+
 
 def init_params(param_file_path):
     # load all the parameters into a global dictionary
@@ -37,6 +54,729 @@ def init_params(param_file_path):
         params['use_jd'] = True
     else:
         params['use_jd'] = False
+
+class FrameImgWidget(QWidget):
+    def __init__(self,specs,cell_file,trace_file,params):
+        super(FrameImgWidget, self).__init__()
+        self.specs = specs
+        self.scene = TrackItem(self.specs,cell_file,trace_file,params)
+        self.view = View(self)
+        self.view.setScene(self.scene)
+
+    def get_fov_peak_dialog(self):
+
+        fov_id, pressed = QInputDialog.getInt(self,
+                                              "Type your desired FOV",
+                                              "fov_id (should be an integer):")
+
+        if pressed:
+            fov_id = fov_id
+
+        peak_id, pressed = QInputDialog.getInt(self,
+                                               "Go to peak",
+                                               "peak_id (should be an integer):")
+
+        if pressed:
+            peak_id = peak_id
+
+        self.scene.go_to_fov_and_peak_id(fov_id,peak_id)
+
+
+class View(QGraphicsView):
+    '''
+    Re-implementation of QGraphicsView to accept mouse+Ctrl event
+    as a zoom transformation
+    '''
+    def __init__(self, parent):
+        super(View, self).__init__(parent)
+        # set upper and lower bounds on zooming
+        self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.maxScale = 2.5
+        self.minScale = 0.3
+
+    def wheelEvent(self, event):
+        if event.modifiers() == Qt.ControlModifier:
+            self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+            m11 = self.transform().m11() # horizontal scale factor
+            m12 = self.transform().m12()
+            m13 = self.transform().m13()
+            m21 = self.transform().m21()
+            m22 = self.transform().m22() # vertizal scale factor
+            m23 = self.transform().m23()
+            m31 = self.transform().m31()
+            m32 = self.transform().m32()
+            m33 = self.transform().m33()
+
+            adjust = event.angleDelta().y()/120 * 0.1
+            if (m11 >= self.maxScale) and (adjust > 0):
+                m11 = m11
+                m22 = m22
+            elif (m11 <= self.minScale) and (adjust < 0):
+                m11 = m11
+                m22 = m22
+            else:
+                m11 += adjust
+                m22 += adjust
+            self.setTransform(QTransform(m11, m12, m13, m21, m22, m23, m31, m32, m33))
+
+        elif event.modifiers() == Qt.AltModifier:
+            self.setTransformationAnchor(QGraphicsView.NoAnchor)
+            adjust = event.angleDelta().x()/120 * 50
+            self.translate(adjust,0)
+
+        else:
+            QGraphicsView.wheelEvent(self, event)
+
+class FocusTrackWindow(QMainWindow):
+    def __init__(self,params,cell_file_path,trace_file_path):
+        # super(Window, self).__init__(cell_dir,cell_file)
+        super().__init__()
+
+        # self.setStyleSheet("background-color: gray;")
+
+        top = 10
+        left = 10
+        width = 1100
+        height = 700
+
+        #self.setWindowTitle("")
+        self.setGeometry(top,left,width,height)
+
+        # load specs file
+        with open(os.path.join(params['ana_dir'], 'specs.yaml'), 'r') as specs_file:
+            specs = yaml.safe_load(specs_file)
+
+        self.frames = FrameImgWidget(specs,cell_file_path,trace_file_path,params)
+        #make scene the central widget
+        self.setCentralWidget(self.frames)
+
+        eventButtonGroup = QButtonGroup()
+
+        removeButton = QPushButton("Remove trace")
+        removeButton.setCheckable(True)
+        removeButton.setShortcut("W")
+        removeButton.setToolTip("Enter mode to remove existing trace")
+        removeButton.clicked.connect(self.frames.scene.set_remove)
+        eventButtonGroup.addButton(removeButton)
+
+        # resetButton = QPushButton("Reset")
+        # resetButton.setShortcut("R")
+        # resetButton.setToolTip("Reset click-through")
+        # resetButton.clicked.connect(self.frames.scene.reset_cc)
+
+        # undoButton = QPushButton("Clear events")
+        # undoButton.setShortcut("U")
+        # undoButton.setToolTip("(U) Clear all events from peak")
+        # undoButton.clicked.connect(self.frames.scene.clear_cc_events)
+
+        overlayButton = QPushButton("Toggle overlay")
+        overlayButton.setShortcut("T")
+        overlayButton.setToolTip("(T) Toggle foci overlay")
+        overlayButton.clicked.connect(self.frames.scene.toggle_overlay)
+
+        saveUpdatedTracksButton = QPushButton("Save updated initiations")
+        saveUpdatedTracksButton.setShortcut("S")
+        saveUpdatedTracksButton.clicked.connect(self.frames.scene.save_output)
+
+        eventButtonLayout = QVBoxLayout()
+
+        advancePeakButton = QPushButton("Next peak")
+        advancePeakButton.setShortcut("P")
+        advancePeakButton.clicked.connect(self.frames.scene.next_peak)
+
+        priorPeakButton = QPushButton("Prior peak")
+        priorPeakButton.clicked.connect(self.frames.scene.prior_peak)
+
+        advanceFOVButton = QPushButton("Next FOV")
+        advanceFOVButton.setShortcut("F")
+        advanceFOVButton.clicked.connect(self.frames.scene.next_fov)
+
+        priorFOVButton = QPushButton("Prior FOV")
+        priorFOVButton.clicked.connect(self.frames.scene.prior_fov)
+
+        fileAdvanceLayout = QVBoxLayout()
+
+        fileAdvanceLayout.addWidget(advancePeakButton)
+        fileAdvanceLayout.addWidget(priorPeakButton)
+        fileAdvanceLayout.addWidget(advanceFOVButton)
+        fileAdvanceLayout.addWidget(priorFOVButton)
+
+        fileAdvanceLayout.addWidget(removeButton)
+        fileAdvanceLayout.addWidget(overlayButton)
+        fileAdvanceLayout.addWidget(saveUpdatedTracksButton)
+
+        fileAdvanceGroupWidget = QWidget()
+        fileAdvanceGroupWidget.setLayout(fileAdvanceLayout)
+
+        fileAdvanceDockWidget = QDockWidget()
+        fileAdvanceDockWidget.setWidget(fileAdvanceGroupWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, fileAdvanceDockWidget)
+
+class TrackItem(QGraphicsScene):
+
+    def __init__(self,specs,cell_file_path,trace_file_path,params):
+        # super(TrackItem, self).__init__()
+        super().__init__()
+        self.items = []
+
+        #these set the size of the kymograph display in pixels in phase_imgs_and_regions
+        self.y_scale = 1000
+        self.x_scale = 1400
+
+        self.specs = specs
+
+        self.fov_id_list = [fov_id for fov_id in specs.keys()]
+
+        self.fovIndex = 0
+        self.fov_id = self.fov_id_list[self.fovIndex]
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in specs[self.fov_id].keys() if specs[self.fov_id][peak_id] == 1]
+
+        self.peakIndex = 0
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        self.color = params['foci']['foci_plane']
+
+        self.params = params
+
+        self.setBackgroundBrush(Qt.black)
+
+        with open(cell_file_path, 'rb') as cf:
+            self.Cells = pickle.load(cf)
+
+        with open(trace_file_path, 'rb') as tf:
+            self.Traces = pickle.load(tf)
+
+        self.Cells_by_peak = mm3_plots.organize_cells_by_channel(self.Cells,specs)
+
+        self.cell_id_list_in_peak = [cell_id for cell_id in self.Cells_by_peak[self.fov_id][self.peak_id].keys()]
+
+        self.init1 = False
+        self.init2 = False
+        self.init3 = False
+        self.remove = False
+        self.reset = False
+        self.overlay_fl = False
+
+        self.select = False
+
+        self.clicks = 0
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        mm3.load_time_table()
+
+        # determine absolute time index
+        time_table = params['time_table']
+        times_all = []
+        abs_times = []
+        for fov in params['time_table']:
+            times_all = np.append(times_all, [int(x) for x in time_table[fov].keys()])
+            abs_times = np.append(abs_times, [int(x) for x in time_table[fov].values()])
+        times_all = np.unique(times_all)
+        times_all = np.sort(times_all)
+        abs_times = np.unique(abs_times)
+        abs_times = np.sort(abs_times)
+
+        times_all = np.array(times_all,np.int_)
+        abs_times = np.array(abs_times,np.int_)
+
+        t0 = times_all[0] # first time index
+
+        self.times_all = times_all
+        self.abs_times = abs_times
+
+        img_dir = os.path.join(params['ana_dir'], 'kymograph')
+        img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+        with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+            self.fl_kymo = tif.asarray()
+
+        self.x_px = len(self.fl_kymo[0])
+        self.y_px = len(self.fl_kymo[:,0])
+
+        if self.overlay_fl:
+            overlay = self.phase_img_and_regions()
+            self.addPixmap(overlay)
+
+        ## draw inferred replication tracks
+        self.label_traces()
+
+    def toggle_reload(self):
+        self.clear()
+        specs = self.specs
+        self.ccf = []
+        self.clicks = 0
+        self.items = []
+
+        params = self.params
+
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        try:
+            self.cell_id_list_in_peak = [cell_id for cell_id in self.Cells_by_peak[self.fov_id][self.peak_id].keys()]
+
+        except KeyError:
+            print('no cells in this peak')
+            self.peakIndex+=1
+            return
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            try:
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
+                img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+                with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                    self.fl_kymo = tif.asarray()
+                overlay = self.phase_img_and_regions()
+                self.addPixmap(overlay)
+
+            except BaseException as err:
+                print(err)
+
+        self.label_traces()
+
+    def next_peak(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+        specs = self.specs
+        self.peakIndex += 1
+        self.ccf = []
+        self.clicks = 0
+        self.items = []
+
+        params = self.params
+
+        try:
+            self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+            print('Peak '+str(self.peak_id))
+
+        except IndexError:
+            print('go to next FOV')
+            return
+
+        try:
+            self.cell_id_list_in_peak = [cell_id for cell_id in self.Cells_by_peak[self.fov_id][self.peak_id].keys()]
+
+        except KeyError:
+            print('no cells in this peak')
+            self.peakIndex+=1
+            return
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            try:
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
+                img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+                with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                    self.fl_kymo = tif.asarray()
+                overlay = self.phase_img_and_regions()
+                self.addPixmap(overlay)
+
+            except:
+                pass
+
+        self.label_traces()
+
+    def prior_peak(self):
+        # start by removing all current graphics items from the scene, the scene here being 'self'
+        self.clear()
+        specs = self.specs
+        params = self.params
+        self.peakIndex -= 1
+        self.clicks = 0
+        self.items = []
+
+        try:
+            self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        except IndexError:
+            print('go to previous FOV')
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            try:
+                img_dir = os.path.join(params['ana_dir'], 'kymograph')
+                img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+                with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                    self.fl_kymo = tif.asarray()
+                overlay = self.phase_img_and_regions()
+                self.addPixmap(overlay)
+
+            except:
+                pass
+
+        self.label_traces()
+
+    def next_fov(self):
+        self.save_output()
+        self.clear()
+        self.items = []
+
+        specs = self.specs
+        self.clicks = 0
+        self.fovIndex += 1
+
+        params = self.params
+
+        try:
+            self.fov_id = self.fov_id_list[self.fovIndex]
+        except IndexError:
+            print('FOV not found')
+            while self.fovIndex < len(self.fov_id_list):
+                try:
+                    self.fovIndex+=1
+                    self.fov_id = self.fov_id_list[self.fovIndex]
+                except:
+                    pass
+                break
+            if self.fovIndex == len(self.fov_id_list):
+                print('no FOVs remaining')
+                return
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in self.specs[self.fov_id].keys() if self.specs[self.fov_id][peak_id] == 1]
+
+        self.peakIndex = 0
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            try:
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
+                img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+                with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                    self.fl_kymo = tif.asarray()
+                overlay = self.phase_img_and_regions()
+                self.addPixmap(overlay)
+
+            except BaseException as err:
+                print(err)
+
+        self.label_traces()
+
+    def prior_fov(self):
+        self.save_output()
+        self.clear()
+
+        specs = self.specs
+        params = self.params
+        self.ccf = []
+        self.items = []
+        self.clicks = 0
+
+        # self.flag = False
+
+        self.fovIndex -= 1
+        self.fov_id = self.fov_id_list[self.fovIndex]
+
+        self.peak_id_list_in_fov = [peak_id for peak_id in self.specs[self.fov_id].keys() if self.specs[self.fov_id][peak_id] == 1]
+
+        self.peakIndex = 0
+        self.peak_id = self.peak_id_list_in_fov[self.peakIndex]
+
+        print('FOV '+str(self.fov_id))
+        print('Peak '+str(self.peak_id))
+
+        if self.overlay_fl:
+            img_dir = os.path.join(params['ana_dir'],'kymograph')
+            img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
+
+            with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
+                self.fl_kymo = tif.asarray()
+            overlay = self.phase_img_and_regions()
+            self.addPixmap(overlay)
+
+        self.label_traces()
+
+    def phase_img_and_regions(self):
+
+        phaseImg = self.fl_kymo
+        originalImgMax = np.max(phaseImg)
+        phaseImgN = phaseImg/originalImgMax
+        phaseImg = color.gray2rgb(phaseImgN)
+        RGBLabelImg = (phaseImg*255).astype('uint8')
+
+        originalHeight, originalWidth, RGBLabelChannelNumber = RGBLabelImg.shape
+        RGBLabelImg = QImage(RGBLabelImg, originalWidth, originalHeight, RGBLabelImg.strides[0], QImage.Format_RGB888).scaled(self.x_scale,self.y_scale, aspectRatioMode=Qt.IgnoreAspectRatio)
+        labelQpixmap = QPixmap(RGBLabelImg)
+
+        return(labelQpixmap)
+
+    def label_traces(self):
+        try:
+            cells_p = self.Cells_by_peak[self.fov_id][self.peak_id]
+            traces_p = self.Traces[self.fov_id][self.peak_id]
+        except KeyError:
+            return
+        self.divs_p = []
+        self.divs_t = []
+
+        pen = QPen()
+        brush = QBrush()
+        brush.setStyle(Qt.SolidPattern)
+        brush.setColor(QColor("white"))
+
+        pen.setWidth(3)
+        if not self.overlay_fl:
+            for cell_id, cell in cells_p.items():
+                times = np.array(cell.times)*self.x_scale/self.x_px
+                lengths = np.array(cell.lengths)*self.y_scale/self.y_px
+                cents = np.array(cell.centroids)[:,0]*self.y_scale/self.y_px
+
+                for i in range(len(cell.times)-1):
+                    eventItem = RepLine(QPoint(times[i],cents[i] - lengths[i]/2),QPoint(times[i+1],cents[i+1] - lengths[i+1]/2),color="yellow",alpha=.5)
+                    self.addItem(eventItem)
+                    eventItem = RepLine(QPoint(times[i],cents[i] + lengths[i]/2),QPoint(times[i+1],cents[i+1] + lengths[i+1]/2), color="yellow",alpha=.5)
+                    self.addItem(eventItem)
+
+                if cell.disp_l:
+                    for t, c, l,h in zip(times,cents,cell.disp_l,cell.foci_h):
+                        for i in range(len(l)):
+                            rad = h[i]/1000
+                            focus = QGraphicsEllipseItem(t-rad,c+l[i]* self.y_scale/self.y_px-rad,2*rad,2*rad)
+                            penColor= QColor("gray")
+                            penColor.setAlphaF(1)
+                            pen.setColor(penColor)
+                            focus.setPen(pen)
+                            #focus.setBrush(brush)
+                            self.addItem(focus)
+
+        self.tracks = {}
+
+        for (trace_id,trace) in traces_p.items():
+            x_pos = [t*self.x_scale/self.x_px for t in trace.times]
+            y_pos = [p[1]*self.y_scale/self.y_px for p in trace.positions]
+
+            # intensities = [h for h in trace.intensity]
+
+            painter = QPainter()
+            points = [QPoint(t,y) for t,y in zip(x_pos,y_pos)]
+            Color = QColor(np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+            trace_pts = []
+            for i in range(len(points)-1):
+                eventItem = RepLine(points[i],points[i+1], color=Color)
+                ## draw circles linked by the line scaled by their intensity
+                self.addItem(eventItem)
+                trace_pts.append(eventItem)
+            self.tracks[trace_id] = trace_pts
+
+    def clear_cc_events(self):
+        #clear data for this peak
+        for item in self.items:
+            self.removeItem(item)
+        self.items = []
+
+        self.clicks = 0
+
+
+    def mousePressEvent(self, event):
+        cells_p = self.Cells_by_peak[self.fov_id][self.peak_id]
+        # traces_p = self.Traces[self.fov_id][self.peak_id]
+
+        def match_cells(init_y,init_t):
+            matched_id = None
+            min_dist = np.inf
+            for cell_id, cell in cells_p.items():
+                init_age = init_t-cell.birth_time
+                try:
+                    if (cell.birth_time < init_t < cell.times[-1]
+                        and abs(cell.centroids[init_age][0] - init_y) < cell.lengths[init_age]/2.):
+                        if abs(cell.centroids[init_age][0] - init_y) < min_dist:
+                            matched_id = cell_id
+                            min_dist = abs(cell.centroids[init_age][0] - init_y)
+                except IndexError:
+                    pass
+            return(matched_id)
+
+        if self.remove == True:
+            x = event.scenePos().x()
+            y = event.scenePos().y()
+            min_dist = np.inf
+            min_id = None
+            for (trace_id,trace) in self.Traces[self.fov_id][self.peak_id].items():
+                x_pos = [t*self.x_scale/self.x_px for t in trace.times]
+                y_pos = [p[1]*self.y_scale/self.y_px for p in trace.positions]
+                diff = [np.sqrt((x1-x)**2+(y1-y)**2) for (x1,y1) in zip(x_pos,y_pos)]
+                curr_min = min(diff)
+                if curr_min < min_dist:
+                    min_dist = curr_min
+                    min_id = trace_id
+
+            sel_trace = self.Traces[self.fov_id][self.peak_id][min_id]
+            self.sel_trace_id = min_id
+
+            self.Traces[self.fov_id][self.peak_id].pop(self.sel_trace_id)
+            for item in self.tracks[self.sel_trace_id]:
+                self.removeItem(item)
+
+        elif self.clicks == 0:
+
+            col = "white"
+
+            self.drawing = True
+
+            x = event.scenePos().x()
+            y = event.scenePos().y()
+
+            self.trace_pts = []
+
+            self.init_pos = QPoint(x,y)
+
+            init = QGraphicsEllipseItem(x-5,y-5,10,10)
+            pen = QPen()
+            pen.setWidth(3)
+            pen.setColor(QColor(col))
+            init.setPen(pen)
+
+            self.addItem(init)
+            self.items.append(init)
+            self.trace_pts.append(init)
+            self.init_t = np.int64(math.ceil(x/self.x_scale*self.x_px))
+            self.init_y = np.int64(math.ceil(y/self.y_scale*self.y_px))
+
+            self.clicks +=1
+
+        elif self.clicks == 1:
+            #termination event
+            col = "white"
+            x = event.scenePos().x()
+            y = event.scenePos().y()
+
+            term = QGraphicsEllipseItem(x-5,y-5,10,10)
+            pen = QPen()
+            pen.setWidth(3)
+            pen.setColor(QColor(col))
+            term.setPen(pen)
+
+            self.term_pos = QPoint(x,y)
+
+            self.addItem(term)
+            self.items.append(term)
+            self.trace_pts.append(term)
+
+            Color = QColor(np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+            eventItem = RepLine(self.init_pos,self.term_pos,color=Color)
+            self.addItem(eventItem)
+            self.trace_pts.append(eventItem)
+
+            self.term_t = np.int64(math.ceil(x*self.x_px/self.x_scale))
+            self.term_y = np.int64(math.ceil(y*self.y_px/self.y_scale))
+
+            id_n = mm3.create_rep_id(0,self.init_y,self.init_t,self.peak_id,self.fov_id)
+            cell_id_init = match_cells(self.init_y,self.init_t)
+            if cell_id_init is not None:
+                trace_n = mm3.ReplicationTrace(id_n,None,self.init_y,self.init_t,None,cell_id_init)
+                cell_id_term = match_cells(self.term_y,self.term_t)
+
+                for t in range(self.init_t,self.term_t,1):
+                    yp = self.interp(t,self.init_t,self.init_y,self.term_t,self.term_y)
+                    cell_id_curr = match_cells(yp,t)
+                    if cell_id_curr is None:
+                        cell_id_curr = cell_id_init
+                    trace_n.process(None,yp,t,None,cell_id_curr)
+
+                trace_n.terminate(self.term_t)
+                self.Traces[self.fov_id][self.peak_id][id_n] = trace_n
+                self.tracks[id_n] = self.trace_pts
+                self.clicks = 0
+            else:
+                self.clicks = 0
+
+    def interp(self,t, t1,i1,t2,i2):
+        return i1 + (i2 - i1)/(t2 - t1) * (t - t1)
+
+    def get_time(self, cell):
+        return(cell.time)
+
+    def set_init1(self):
+        self.remove = False
+        self.reset = False
+        self.init1 = True
+        self.init2 = False
+        self.init3 = False
+        self.reset = False
+
+    def set_init2(self):
+        self.remove = False
+        self.reset = False
+        self.init1 = False
+        self.init2 = True
+        self.init3 = False
+        self.reset = False
+
+    def set_init3(self):
+        self.remove = False
+        self.reset = False
+        self.init1 = False
+        self.init2 = False
+        self.init3 = True
+        self.reset = False
+
+    def set_remove(self):
+        if self.remove == False:
+            self.remove = True
+        else:
+            self.remove = False
+
+    def reset_cc(self):
+        self.remove = False
+        self.reset = True
+        self.clicks = 0
+
+    def toggle_overlay(self):
+        if self.overlay_fl == False:
+            self.overlay_fl = True
+        elif self.overlay_fl == True:
+            self.overlay_fl = False
+        self.toggle_reload()
+
+    def save_output(self):
+        with open(os.path.join(self.params['cell_dir'], 'rep_traces_mod.pkl'), 'wb') as trace_file:
+            pickle.dump(self.Traces, trace_file, protocol=pickle.HIGHEST_PROTOCOL)
+        print('Saved updated tracks')
+
+class RepLine(QGraphicsLineItem):
+    # A class for helping to draw replication traces
+    #  within a QGraphicsScene
+    def __init__(self, firstPoint, lastPoint, color,alpha=1,width=3):
+        super(RepLine, self).__init__()
+
+        self.setFlag(QGraphicsLineItem.ItemIsSelectable, True)
+
+        brushColor = QColor(color)
+        brushSize = width
+        pen = QPen()
+        firstPointX = firstPoint.x()
+        lastPointX = lastPoint.x()
+        # ensure that lines' starts are to the left of their ends
+        if firstPointX < lastPointX:
+            self.start = firstPoint
+            #self.startItem = startItem
+            self.end = lastPoint
+            #self.endItem = endItem
+        else:
+            self.start = lastPoint
+            #self.startItem = endItem
+            self.end = firstPoint
+            #self.endItem = startItem
+        line = QLineF(self.start,self.end)
+        brushColor.setAlphaF(alpha)
+        pen.setColor(brushColor)
+        pen.setWidth(brushSize)
+        self.setPen(pen)
+        self.setLine(line)
+        self.color = QColor(color)
+
+    def type(self):
+        return("RepLine")
 
 class Window(QMainWindow):
 
@@ -307,7 +1047,7 @@ class MaskTransparencyWidget(QWidget):
                 if (event.buttons() & Qt.LeftButton) & self.drawing:
 
                         # make the mouse position the center of a circle whose radius is defined as self.brushSize
-                        rr,cc = draw.circle(event.y(), event.x(), self.brushSize)
+                        rr,cc = draw.disk((event.y(), event.x()), self.brushSize)
                         for pix in zip(rr,cc):
                                 rowIndex = pix[0]
                                 colIndex = pix[1]
@@ -707,25 +1447,3 @@ class PhaseWidget(QWidget):
                 # saveImg = self.originalPhaseQImage.convertToFormat(QImage.Format_Grayscale8)
                 # saveImg.save(savePath)
                 io.imsave(savePath, self.img)
-
-if __name__ == "__main__":
-
-        imgPaths = {1:[('/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/channels/20190214_JDW3418_xy001_p0028_c1.tif',
-                     '/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/segmented/20190214_JDW3418_xy001_p0028_seg_unet.tif'),
-                    ('/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/channels/20190214_JDW3418_xy001_p0039_c1.tif',
-                     '/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/segmented/20190214_JDW3418_xy001_p0039_seg_unet.tif')],
-                    2:[('/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/channels/20190214_JDW3418_xy001_p0127_c1.tif',
-                        '/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/segmented/20190214_JDW3418_xy001_p0127_seg_unet.tif'),
-                       ('/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/channels/20190214_JDW3418_xy001_p0104_c1.tif',
-                        '/home/wanglab/Users_local/Jeremy/Imaging/20190214/analysis/segmented/20190214_JDW3418_xy001_p0104_seg_unet.tif')]}
-
-        fov_id_list = [1,2]
-
-        training_dir = '/home/wanglab/sandbox/pyqtpainter/commonDir'
-
-        init_params('/home/wanglab/Users_local/Jeremy/Imaging/20190214/20190214_params_Unet.yaml')
-
-        app = QApplication(sys.argv)
-        window = Window(imgPaths=imgPaths, fov_id_list=fov_id_list, training_dir=training_dir)
-        window.show()
-        app.exec_()

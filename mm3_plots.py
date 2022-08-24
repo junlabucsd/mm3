@@ -430,7 +430,10 @@ def organize_cells_by_channel(Cells, specs):
 
     # organize the cells
     for cell_id, Cell in Cells.items():
-        Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        try:
+            Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        except KeyError:
+            pass
 
     # remove peaks and that do not contain cells
     remove_fovs = []
@@ -3063,6 +3066,73 @@ def plot_hex_time(Cells_df, t_int, time_mark='birth_time', x_extents=None, bin_e
 
     return fig, ax
 
+def plot_hex_time(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=None):
+    '''
+    Plots cell parameters over time using a hex scatter plot and a moving average
+    '''
+
+    # lists for plotting and formatting
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=int(len(columns)/2), ncols=2,
+                             figsize=[8,8], squeeze=False)
+    ax = np.ravel(axes)
+
+    # binning parameters, should be arguments
+    binmin = 3 # minimum bin size to display
+    bingrid = (20, 10) # how many bins to have in the x and y directions
+    moving_window = 10 # window to calculate moving stat
+
+    # bining parameters for each data type
+    # bin_extent in within which bounds should bins go. (left, right, bottom, top)
+    if x_extents == None:
+        x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
+
+    if bin_extents == None:
+        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1.5),
+                      (x_extents[0], x_extents[1], 0, 8),
+                      (x_extents[0], x_extents[1], 0, 140),
+                      (x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1)]
+
+    # Now plot the filtered data
+    for i, column in enumerate(columns):
+
+        # get out just the data to be plot for one subplot
+        time_df = Cells_df[[time_mark, column]].apply(pd.to_numeric)
+        time_df.sort_values(by=time_mark, inplace=True)
+
+        # plot the hex scatter plot
+        p = ax[i].hexbin(time_df[time_mark], time_df[column],
+                         mincnt=binmin, gridsize=bingrid, extent=bin_extents[i])
+
+        # graph moving average
+        # xlims = (time_df['birth_time'].min(), time_df['birth_time'].max()) # x lims for bins
+        xlims = x_extents
+        bin_mean, bin_edges, bin_n = sps.binned_statistic(time_df[time_mark], time_df[column],
+                        statistic='mean', bins=np.arange(xlims[0]-1, xlims[1]+1, moving_window))
+        bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+        ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
+
+        # formatting
+        ax[i].set_title(titles[i])
+        ax[i].set_ylabel(ylabels[i])
+
+        p.set_cmap(cmap=plt.cm.Blues) # set color and style
+
+    ax[5].legend(['%s frame binned average' % moving_window], loc='lower right',frameon=False)
+    ax[4].set_xlabel('%s [frame]' % time_mark)
+    ax[5].set_xlabel('%s [frame]' % time_mark)
+
+    plt.tight_layout()
+
+    return fig, ax
+
 def plot_derivative(Cells_df, time_mark='birth_time', x_extents=None, time_window=10):
     '''
     Plots the derivtive of the moving average of the cell parameters.
@@ -3556,6 +3626,529 @@ def plot_log_shift(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=
     # plt.show()
 
     return fig, ax
+
+## distributions
+
+def plot_dist_rt(data, labelx,plot_param=None, fig=None, ax=None, ax_i=0, norm=True,df_key='df', media = None,color=None,disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
+    '''
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+
+    plot_param : str
+        Parameter to plot. Must be a column in data DataFrame.
+    fig : matplotlib Figure
+        Figure in which to plot. If None, a figure with one plot will be created.
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects.
+    ax_i : int
+        Index of the axis to plot on.
+    df_key : str
+        The key of DataFrame within the data dicionary. Defaults to 'df', but somtimes 'cc_df' is used.
+    disttype : 'line' or 'step'
+        'line' plots a continuous line which moves from the center of the bins of the histogram.
+        'step' plots a stepwise histogram.
+    nbins : int or str
+        Number of bins to use for histograms. If 'tau' param is being plotted, bins are calculated based on the time interval, if str uses np.histogram_bin_edges. Can also be sequence defining the bin edges.
+    rescale_data : bool
+        If True, normalize all data by the mean
+    individual_legends : bool
+        Plot median/mean and CV for each individual plot
+    legend_stat : 'mean' or 'median' or 'CV'
+        Whether to plot the mean or median in the stat. CV is always plotted.
+    legendfontsize : int
+        Font size for plot legends
+    orientation : 'vertical' or 'horizontal'
+        'veritical' produces a "normal" distribution, while 'horizontal' has the axis switched
+    '''
+
+    if fig == None:
+        fig, axes = plt.subplots(nrows=1, ncols=1,
+                                 figsize=(6,6))
+        ax = [axes]
+
+    xlimmax = 0
+
+    if color==None:
+        color='C3'
+
+    line_style = '-'
+
+    # get just this data
+    data_temp = data
+    # remove rows where value is none or NaN
+    data_temp = data_temp.dropna()
+
+    # get stats for legend and limits
+    data_mean = data_temp.mean(numeric_only=True)
+    data_std = data_temp.std(numeric_only=True)
+    data_cv = data_std / data_mean
+    data_max = data_temp.max(numeric_only=True) # used for setting tau bins
+    data_med = data_temp.median(numeric_only=True)
+
+    if legend_stat == 'mean':
+        # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+        leg_stat = '$\mu$=%0.2f \nCV=%0.2f'%(data_mean, data_cv)
+    elif legend_stat == 'median':
+        leg_stat = 'Md=%0.2f \nCV=%0.2f'%(data_med, data_cv)
+    elif legend_stat == 'CV':
+        leg_stat = 'CV=%.02f'%(data_cv)
+
+    if rescale_data:
+        # rescale data to be centered at mean.
+        data_temp = data_temp / np.float(data_mean)
+
+    # set x lim by the highest mean
+    if data_mean > xlimmax:
+        xlimmax = data_mean
+
+    # determine bin bin_edge
+    if type(nbins) == str: # one of the numpy supported strings
+        # only use 3 std of mean for bins
+        if not rescale_data:
+            bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        else:
+            bin_range = (0, 2)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+    elif type(nbins) == int: # just even number
+        # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+        bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
+        if plot_param == 'tau': # make good bin sizes for the not float data
+            time_int = data[key]['t_int']
+            bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
+            if rescale_data:
+                bin_edges /= data_mean
+    else: # if bins is a sequence then use it directly.
+        bin_edges = nbins
+
+    if disttype == 'line':
+        # use this for line histogram
+        bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=norm)
+        # print(plot_param, bin_edges)
+        bin_steps = np.diff(bin_edges)/2.0
+        bin_centers = bin_edges[:-1] + bin_steps
+        # add zeros to the next points outside this so plot line always goes down
+        bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+        bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+        bin_vals = np.insert(bin_vals, 0, 0)
+        bin_vals = np.append(bin_vals, 0)
+
+        if orientation == 'vertical':
+            ax[ax_i].plot(bin_centers, bin_vals,lw=6,
+                       color=color, ls=line_style, alpha=1,
+                       label=labelx)
+        elif orientation == 'horizontal':
+            ax[ax_i].plot(bin_vals, bin_centers, lw=1,
+                       color=color, ls=line_style, alpha=0.75,
+                       label=leg_stat)
+
+    elif disttype == 'step':
+    # produce stepwise histogram
+        if orientation == 'vertical':
+            ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       lw=4, color=color, ls=line_style, alpha=1,
+                       label=leg_stat, orientation='vertical')
+        elif orientation == 'horizontal':
+            ax[ax_i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       lw=0.5, color=color, ls=line_style, alpha=0.75,
+                       label=leg_stat, orientation='horizontal')
+
+    # figure formatting
+    #ax_title = data[plot_param]['label'] + ', ' + data[plot_param]['symbol']
+    # ax[ax_i].set_title(label[ax_i], fontsize=figlabelfontsize)
+
+    if orientation == 'vertical':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_xlabel(data[plot_param]['unit'])
+        ax[ax_i].get_yaxis().set_ticks([])
+        if rescale_data:
+            ax[ax_i].set_xlim(0, 2)
+        else:
+            ax[ax_i].set_xlim(0, 2*xlimmax)
+        ax[ax_i].set_ylim(0, None)
+
+        sns.despine(ax=ax[ax_i], left=True)
+
+    elif orientation == 'horizontal':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_ylabel(data[plot_param]['unit'])
+        ax[ax_i].get_xaxis().set_ticks([])
+        if rescale_data:
+            ax[ax_i].set_ylim(0, 2)
+        else:
+            ax[ax_i].set_ylim(0, 2*xlimmax)
+        ax[ax_i].set_xlim(0, None)
+
+        sns.despine(ax=ax[ax_i], bottom=True)
+
+    if individual_legends:
+        ax[ax_i].legend(loc='upper left', fontsize=12, frameon=False)
+    ax[ax_i].set_xlabel(labelx,fontsize=18)
+
+    if media:
+        teststring = (media+'\nMG1655 DnaN-yPet')
+        plt.text(0,1.05, s=teststring, transform = ax[ax_i].transAxes, fontsize=10)
+    # ax[ax_i].set_xlim(0.6,1.8)
+    # ax[ax_i].set_ylim(0,8)
+
+    # ax[0].set_xlim((0,300))
+    # ax[0].set_ylim((0,10))
+    plt.tight_layout()
+    plt.show()
+
+    return fig, ax
+
+def plot_dist_rt_overlay(data_set, label,labels, colors, media=None,vline=None, fig=None, ax=None, ls=None,df_key='df', disttype='line', nbins='sturges', norm=True,rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
+    '''
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+    exps : list
+        List of strings of experimental ids to plot
+    plot_param : str
+        Parameter to plot. Must be a column in data DataFrame.
+    fig : matplotlib Figure
+        Figure in which to plot. If None, a figure with one plot will be created.
+    ax : list of matplotlib Axes object
+        This is a 1D array of Axes objects.
+    ax_i : int
+        Index of the axis to plot on.
+    df_key : str
+        The key of DataFrame within the data dicionary. Defaults to 'df', but somtimes 'cc_df' is used.
+    disttype : 'line' or 'step'
+        'line' plots a continuous line which moves from the center of the bins of the histogram.
+        'step' plots a stepwise histogram.
+    nbins : int or str
+        Number of bins to use for histograms. If 'tau' param is being plotted, bins are calculated based on the time interval, if str uses np.histogram_bin_edges. Can also be sequence defining the bin edges.
+    rescale_data : bool
+        If True, normalize all data by the mean
+    individual_legends : bool
+        Plot median/mean and CV for each individual plot
+    legend_stat : 'mean' or 'median' or 'CV'
+        Whether to plot the mean or median in the stat. CV is always plotted.
+    legendfontsize : int
+        Font size for plot legends
+    orientation : 'vertical' or 'horizontal'
+        'veritical' produces a "normal" distribution, while 'horizontal' has the axis switched
+    '''
+
+    if fig == None:
+        fig, ax = plt.subplots(nrows=1, ncols=1,
+                                 figsize=(6,6))
+
+
+    xlimmax = 0
+
+
+    if ls == None:
+        line_style = '-'*len(data_set)
+    else:
+        line_style = ls
+    # d1 = data.where(data['init_label']==(0 or 1))
+    # d2 = data.where(data['init_label']==2)
+    # d3 = data.where(data['init_label']==3)
+    # d1 = data.loc[data['init_label']==(0 or 1)]
+    # d2 = data.loc[data['init_label']==2]
+    # d3 = data.loc[data['init_label']==3]
+
+
+    for (i,data) in enumerate(data_set):
+        # get just this data
+        data_temp = data
+        # print(data_temp.std())
+        # print(data['C_min'].std())
+
+        # remove rows where value is none or NaN
+        data_temp = data_temp.dropna()
+        #print(data_temp)
+
+        # get stats for legend and limits
+        data_mean = data_temp.mean()
+        data_std = data_temp.std()
+        data_cv = data_std / data_mean
+        data_max = data_temp.max() # used for setting tau bins
+        data_med = data_temp.median()
+
+        data_n = len(data_temp)
+
+        if math.isnan(data_std):
+            print('nan')
+            continue
+
+        legend_stat = None
+        leg_stat = None
+
+        if legend_stat == 'mean':
+            # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
+            leg_stat = '$\mu$={:0.2f}\n n = {:d}'.format(data_mean,data_n)
+        elif legend_stat == 'median':
+            leg_stat = 'Md={:0.2f} \nCV={:0.2f}'.format(data_med, data_cv)
+        elif legend_stat == 'CV':
+            leg_stat = 'CV={:0.2f}'.format(data_cv)
+
+        if rescale_data:
+            # rescale data to be centered at mean.
+            data_temp = data_temp / np.float(data_mean)
+
+        # set x lim by the highest mean
+        if data_mean > xlimmax:
+            xlimmax = data_mean
+
+        # determine bin_edge
+        if type(nbins) == str: # one of the numpy supported strings
+            # only use 3 std of mean for bins
+            if not rescale_data:
+                bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+            else:
+                bin_range = (0, 2)
+            bin_edges = np.histogram_bin_edges(data_temp, bins=nbins, range=bin_range)
+        elif type(nbins) == int: # just even number
+            # bin_range = (data_mean - 3*data_std, data_mean + 3*data_std)
+            bin_edges = np.histogram_bin_edges(data_temp, bins=nbins)
+            # if plot_param == 'tau': # make good bin sizes for the not float data
+            #     time_int = data[key]['t_int']
+            #     bin_edges = np.arange(0, data_max, step=time_int) + time_int/2.0
+            #     if rescale_data:
+            #         bin_edges /= data_mean
+        else: # if bins is a sequence then use it directly.
+            bin_edges = nbins
+
+        if disttype == 'line':
+            # use this for line histogram
+            bin_vals, bin_edges = np.histogram(data_temp, bins=bin_edges, density=norm)
+            # print(plot_param, bin_edges)
+            bin_steps = np.diff(bin_edges)/2.0
+            bin_centers = bin_edges[:-1] + bin_steps
+            # add zeros to the next points outside this so plot line always goes down
+            bin_centers = np.insert(bin_centers, 0, bin_centers[0] - bin_steps[0])
+            bin_centers = np.append(bin_centers, bin_centers[-1] + bin_steps[-1])
+            bin_vals = np.insert(bin_vals, 0, 0)
+            bin_vals = np.append(bin_vals, 0)
+
+            if orientation == 'vertical':
+                if leg_stat:
+                    ax.plot(bin_centers, bin_vals, lw=6,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i]+'\n'+leg_stat)
+                else:
+                    ax.plot(bin_centers, bin_vals, lw=6,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i])
+            elif orientation == 'horizontal':
+                ax.plot(bin_vals, bin_centers, lw=2,
+                           color=colors[i], ls=line_style[i], alpha=0.9,
+                           label=labels[i]+'\n'+leg_stat)
+
+        elif disttype == 'step':
+        # produce stepwise histogram
+            if orientation == 'vertical':
+                data_temp = [x for x in data_temp]
+                ax.hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                           lw=1, color=colors[i], ls=line_style, alpha=0.75,
+                           label=labels[i]+'\n'+leg_stat, orientation='vertical')
+            elif orientation == 'horizontal':
+                ax.hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                           lw=1, color=colors[i], ls=line_style, alpha=0.75,
+                           label=labels[i]+'\n'+leg_stat, orientation='horizontal')
+    if vline:
+        for line in vline:
+            ax.axvline(line, color='gray',ls='--',label='<Init. length / ori>')
+
+
+    # figure formatting
+    #ax_title = data[plot_param]['label'] + ', ' + data[plot_param]['symbol']
+    #ax.set_title(plot_param, fontsize=figlabelfontsize)
+
+    if orientation == 'vertical':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_xlabel(data[plot_param]['unit'])
+        ax.get_yaxis().set_ticks([])
+        if rescale_data:
+            ax.set_xlim(0, 2)
+        else:
+            ax.set_xlim(0, 2*xlimmax)
+        ax.set_ylim(0, None)
+
+        sns.despine(ax=ax, left=True)
+
+    elif orientation == 'horizontal':
+        # if not rescale_data: # no units if rescaled plotting is on
+        #     ax[ax_i].set_ylabel(data[plot_param]['unit'])
+        ax.get_xaxis().set_ticks([])
+        if rescale_data:
+            ax.set_ylim(0, 2)
+        else:
+            ax.set_ylim(0, 2*xlimmax)
+        ax.set_xlim(0, None)
+
+        sns.despine(ax=ax, bottom=True)
+
+    if individual_legends:
+        ax.legend(loc=1, fontsize=legendfontsize, frameon=False)
+
+    ax.set_xlabel(label,fontsize=18)
+    # ax.set_xlim(-10,80)
+    plt.legend(frameon=False,fontsize=18)
+    if media:
+        teststring = (media+'\nMG1655 DnaN-yPet')
+        plt.text(0,1.05, s=teststring, transform = ax.transAxes, fontsize=10)
+    plt.tight_layout()
+    # plt.show()
+    return fig, ax
+
+def plotmulti_dist_rt(data, plot_params=None, df_key='df', disttype='line', nbins='sturges', rescale_data=False, fig_legend=True, figlabelcols=None, figlabelfontsize=BIGGER_SIZE, individual_legends=True, legend_stat='mean', legendfontsize=BIGGER_SIZE*0.75):
+    '''
+    Plot distributions of specified parameters.
+
+    Parameters
+    ----------
+    data : dictionary
+        Contains all dataframes, names, colors, etc.
+    exps : list
+        List of strings of experimental ids to plot
+    plot_params : list of parameters
+
+    Rest of the parameters are passed to plot_dist()
+    '''
+
+    if plot_params == None:
+        plot_params = ['sb', 'sd', 'delta', 'septum_position','tau','elong_rate', 'taucyc_min','C_min','D_min','unit_size']
+        labels = ['$L_b$ ($\mu$m)', '$L_d$ ($\mu$m)', '$\Delta$ ($\mu$m)', '$L_\\frac{1}{2}$',
+                   '$\\tau$ [min]', '$\lambda$ [1/hours]','$\\tau_{C}$ [min]','C [min]','D [min]','s$_{i}$ ($\mu$m)']
+        if rescale_data:
+            labels = ['$L_b$ /<$L_b$>', '$L_d$ /<$L_d$>', '$\Delta$ /<$\Delta$>','$L_\\frac{1}{2}$ /<$L_\\frac{1}{2}$>',
+                       '$\\tau$ /<$\\tau$>', '$\lambda$ /<$\lambda$>',
+                       '$\\tau_{C}$/<$\\tau_{C}$>','C/ <C>','D / <D>','s$_{i}$ / <s$_{i}$>']
+
+
+    no_p = len(plot_params)
+
+    # holds number of rows, columns, and fig height. All figs are 7.5 in width
+    fig_dims = ((0,0,0), (1,1,8), (1,2,4), (1,3,3), (1,4,3), (2,3,6), (2,3,6),
+                (3,3,8), (3,3,8), (3,3,8),
+                (4,3,9), (4,3,9), (4,3,9), # 10, 11, 12
+                (4,4,8), (4,4,8), (4,4,8), (4,4,8), # 13, 14, 15, 16
+                (None), (None), (None), (None), # 17, 18, 19, 20
+                (None), (None), (None), (6, 4, 10)) # 21, 22, 23, 24
+    bottom_pad = (0, 0.125, 0.25, 0.35, 0.125, 0.175, 0.175, 0.125, 0.125, 0.125,
+                  0.075, 0.075, 0.075,
+                  0.1, 0.1, 0.1, 0.1,
+                  0.1, 0.1, 0.1, 0.1,
+                  0.1, 0.1, 0.1, 0.1)
+    h_pad = (0, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.375, 0.5,
+             0.5, 0.5, 0.5,
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 0.6,
+             0.6, 0.6, 0.6, 1)
+
+    fig, axes = plt.subplots(nrows=fig_dims[no_p][0], ncols=fig_dims[no_p][1],
+                             figsize=(7.5, fig_dims[no_p][2]), squeeze=False)
+    ax = axes.flat
+
+    for ax_i, plot_param in enumerate(plot_params):
+
+        fig, ax = plot_dist_rt(data, labelx = labels[ax_i], plot_param=plot_param,
+                            fig=fig, ax=ax, ax_i=ax_i, df_key=df_key,
+                            disttype=disttype, nbins=nbins, rescale_data=rescale_data, individual_legends=individual_legends, legend_stat=legend_stat, figlabelfontsize = figlabelfontsize, legendfontsize=legendfontsize)
+
+    # remove axis for plots that are not there
+    for ax_i in range(fig_dims[no_p][0] * fig_dims[no_p][1]):
+        if ax_i >= no_p:
+            sns.despine(ax=ax[ax_i], left=True, bottom=True)
+            ax[ax_i].set_xticklabels([])
+            ax[ax_i].set_xticks([])
+            ax[ax_i].set_yticklabels([])
+            ax[ax_i].set_yticks([])
+
+    plt.tight_layout()
+    #plt.show()
+
+    return fig, ax
+
+def plotmulti_phase_dist_rt(data, figlabelcols=None):
+    '''
+    Plot distributions of the 6 major parameters.
+    This is an easy to use function with less customization. Use plotmulti_dist for more options.
+
+    Need to fix to use the pnames dictionary
+
+    Usage
+    -----
+    dataset_ids = ['exp_key_1', 'exp_key_2']
+    fig, ax = mm3_plots.plotmulti_phase_dist(data, dataset_ids)
+    fig.show()
+    '''
+
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    xlabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m', 'daughter/mother']
+    titles = ['birth length', 'elongation rate', 'length at division',
+              'generation time', 'added length', 'septum position']
+
+    titles = ['elongation rate', '[rplL-GFP]']
+    columns = ['elong_rate','fl_area_avg']
+    xlabels = ['$\lambda$','[rplL-GFP]']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=[4,2])
+    ax = np.ravel(axes)
+
+    xlimmaxs = [0 for col in columns]
+
+
+    time_int = 4
+    color = 'C0'
+
+    # Plot each distribution
+    for i, column in enumerate(columns):
+        data_temp = data[column]
+
+        # get stats for legend
+        data_mean = data_temp.mean()
+        data_std = data_temp.std()
+        data_cv = data_std / data_mean
+
+        # set x lim to the highest mean
+        if data_mean > xlimmaxs[i]:
+            xlimmaxs[i] = data_mean
+
+        # set tau bins to be in appropriate interval
+        if column == 'tau':
+            bin_edges = np.arange(0, data_temp.max(), step=time_int) + time_int/2
+            ax[i].hist(data_temp, bins=bin_edges, histtype='step', density=True,
+                       color=color, lw=2,
+                       label='$\mu$=%.3f \n CV=%.2f' % (data_mean, data_cv))
+
+        else:
+            ax[i].hist(data_temp, bins=20, histtype='stepfilled', density=True,
+                       color=color, lw=2, alpha=1,
+                       label='$\mu$=%.2f \n CV=%.2f \n N = %.0f' % (data_mean, data_cv, len(data_temp)))
+
+    # plot formatting
+    for i, column in enumerate(columns):
+        ax[i].set_title(titles[i])
+        ax[i].set_xlabel(xlabels[i])
+        ax[i].get_yaxis().set_ticks([])
+        ax[i].legend(loc=1, frameon=False)
+        ax[i].set_xlim(0, 2*xlimmaxs[i])
+
+    # legend for whole figure
+    # handles, _ = ax[-1].get_legend_handles_labels()
+    #
+    # fig.legend(handles, labels,
+    #            ncol=figlabelcols, loc=8, fontsize=SMALL_SIZE, frameon=False)
+
+    sns.despine(left=True)
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.925, bottom=0.09, hspace=0.35)
+    plt.show()
+    #fig.suptitle('Distributions')
+
+    return fig, ax
+
 
 ### Correlations -----------------------------------------------------------------------------------
 def plot_corr(data, exps, param_pair=None, fig=None, ax=None, ax_i=0, df_key='df', rescale_data=False, plot_scatter=True, plot_mean=False, plot_binmeans=True, plot_binmedians=False, plot_linreg=True, plot_linreg_error=True, plot_bin_linreg=False, bin_edges='sturges', binmin=None, show_legend=True, legendfontsize=SMALL_SIZE):

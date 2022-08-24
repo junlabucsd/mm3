@@ -13,7 +13,7 @@ import glob
 import math
 import subprocess as sp
 import numpy as np
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 from freetype import *
 import warnings
 
