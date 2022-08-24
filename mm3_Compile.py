@@ -140,7 +140,7 @@ if __name__ == "__main__":
                 im_out = np.stack((im1, im2), axis=0)
                 name_out = f1.replace("C1", "")
                 # 'minisblack' necessary to ensure that it interprets image as black/white.
-                tiff.imwrite(name_out, im_out, photometric="minisblack")
+                tiff.imwrite(name_out, im_out, photometric="minisblack",compress=4)
 
                 ## should make a new directory rather than just deleting the old images
                 old_tiff_path = os.path.join(
