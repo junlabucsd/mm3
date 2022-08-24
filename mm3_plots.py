@@ -420,7 +420,10 @@ def organize_cells_by_channel(Cells, specs):
 
     # organize the cells
     for cell_id, Cell in Cells.items():
-        Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        try:
+            Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        except KeyError:
+            pass
 
     # remove peaks and that do not contain cells
     remove_fovs = []
@@ -1704,6 +1707,73 @@ def plotmulti_phase_paramtime(data, exps, window=30, figlabelcols=None, figlabel
 
     return fig, ax
 
+def plot_hex_time(Cells_df, time_mark='birth_time', x_extents=None, bin_extents=None):
+    '''
+    Plots cell parameters over time using a hex scatter plot and a moving average
+    '''
+
+    # lists for plotting and formatting
+    columns = ['sb', 'elong_rate', 'sd', 'tau', 'delta', 'septum_position']
+    titles = ['Length at Birth', 'Elongation Rate', 'Length at Division',
+              'Generation Time', 'Delta', 'Septum Position']
+    ylabels = ['$\mu$m', '$\lambda$', '$\mu$m', 'min', '$\mu$m','daughter/mother']
+
+    # create figure, going to apply graphs to each axis sequentially
+    fig, axes = plt.subplots(nrows=int(len(columns)/2), ncols=2,
+                             figsize=[8,8], squeeze=False)
+    ax = np.ravel(axes)
+
+    # binning parameters, should be arguments
+    binmin = 3 # minimum bin size to display
+    bingrid = (20, 10) # how many bins to have in the x and y directions
+    moving_window = 10 # window to calculate moving stat
+
+    # bining parameters for each data type
+    # bin_extent in within which bounds should bins go. (left, right, bottom, top)
+    if x_extents == None:
+        x_extents = (Cells_df['birth_time'].min(), Cells_df['birth_time'].max())
+
+    if bin_extents == None:
+        bin_extents = [(x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1.5),
+                      (x_extents[0], x_extents[1], 0, 8),
+                      (x_extents[0], x_extents[1], 0, 140),
+                      (x_extents[0], x_extents[1], 0, 4),
+                      (x_extents[0], x_extents[1], 0, 1)]
+
+    # Now plot the filtered data
+    for i, column in enumerate(columns):
+
+        # get out just the data to be plot for one subplot
+        time_df = Cells_df[[time_mark, column]].apply(pd.to_numeric)
+        time_df.sort_values(by=time_mark, inplace=True)
+
+        # plot the hex scatter plot
+        p = ax[i].hexbin(time_df[time_mark], time_df[column],
+                         mincnt=binmin, gridsize=bingrid, extent=bin_extents[i])
+
+        # graph moving average
+        # xlims = (time_df['birth_time'].min(), time_df['birth_time'].max()) # x lims for bins
+        xlims = x_extents
+        bin_mean, bin_edges, bin_n = sps.binned_statistic(time_df[time_mark], time_df[column],
+                        statistic='mean', bins=np.arange(xlims[0]-1, xlims[1]+1, moving_window))
+        bin_centers = bin_edges[:-1] + np.diff(bin_edges) / 2
+        ax[i].plot(bin_centers, bin_mean, lw=4, alpha=0.8, color=(1.0, 1.0, 0.0))
+
+        # formatting
+        ax[i].set_title(titles[i])
+        ax[i].set_ylabel(ylabels[i])
+
+        p.set_cmap(cmap=plt.cm.Blues) # set color and style
+
+    ax[5].legend(['%s frame binned average' % moving_window], loc='lower right',frameon=False)
+    ax[4].set_xlabel('%s [frame]' % time_mark)
+    ax[5].set_xlabel('%s [frame]' % time_mark)
+
+    plt.tight_layout()
+
+    return fig, ax
+
 def plot_derivative(Cells_df, time_mark='birth_time', x_extents=None, time_window=10):
     '''
     Plots the derivtive of the moving average of the cell parameters.
@@ -1868,7 +1938,7 @@ def plot_average_derivative(Cells, n_diff=1, t_int=1, shift=False, t_shift=0):
 
 ## distributions
 
-def plot_dist_rt(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=0, norm=True,df_key='df', media = None,color=None,disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
+def plot_dist_rt(data, labelx,plot_param=None, fig=None, ax=None, ax_i=0, norm=True,df_key='df', media = None,color=None,disttype='line', nbins='sturges', rescale_data=False, individual_legends=True, legend_stat='mean', figlabelfontsize=BIGGER_SIZE, legendfontsize=MEDIUM_SIZE, orientation='vertical'):
     '''
 
     Parameters
@@ -1921,19 +1991,19 @@ def plot_dist_rt(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=0,
     data_temp = data_temp.dropna()
 
     # get stats for legend and limits
-    data_mean = data_temp.mean()
-    data_std = data_temp.std()
+    data_mean = data_temp.mean(numeric_only=True)
+    data_std = data_temp.std(numeric_only=True)
     data_cv = data_std / data_mean
-    data_max = data_temp.max() # used for setting tau bins
-    data_med = data_temp.median()
+    data_max = data_temp.max(numeric_only=True) # used for setting tau bins
+    data_med = data_temp.median(numeric_only=True)
 
     if legend_stat == 'mean':
         # leg_stat = '$\\bar x$={:0.2f}, CV={:0.2f}'.format(data_mean, data_cv)
-        leg_stat = '$\mu$={:0.2f} \nCV={:0.2f}'.format(data_mean, data_cv)
+        leg_stat = '$\mu$=%0.2f \nCV=%0.2f'%(data_mean, data_cv)
     elif legend_stat == 'median':
-        leg_stat = 'Md={:0.2f} \nCV={:0.2f}'.format(data_med, data_cv)
+        leg_stat = 'Md=%0.2f \nCV=%0.2f'%(data_med, data_cv)
     elif legend_stat == 'CV':
-        leg_stat = 'CV={:0.2f}'.format(data_cv)
+        leg_stat = 'CV=%.02f'%(data_cv)
 
     if rescale_data:
         # rescale data to be centered at mean.
@@ -1977,7 +2047,7 @@ def plot_dist_rt(data, label, labelx,plot_param=None, fig=None, ax=None, ax_i=0,
         if orientation == 'vertical':
             ax[ax_i].plot(bin_centers, bin_vals,lw=6,
                        color=color, ls=line_style, alpha=1,
-                       label=label)
+                       label=labelx)
         elif orientation == 'horizontal':
             ax[ax_i].plot(bin_vals, bin_centers, lw=1,
                        color=color, ls=line_style, alpha=0.75,
@@ -2290,7 +2360,7 @@ def plotmulti_dist_rt(data, plot_params=None, df_key='df', disttype='line', nbin
 
     for ax_i, plot_param in enumerate(plot_params):
 
-        fig, ax = plot_dist_rt(data, label = labels, plot_param=plot_param,
+        fig, ax = plot_dist_rt(data, labelx = labels[ax_i], plot_param=plot_param,
                             fig=fig, ax=ax, ax_i=ax_i, df_key=df_key,
                             disttype=disttype, nbins=nbins, rescale_data=rescale_data, individual_legends=individual_legends, legend_stat=legend_stat, figlabelfontsize = figlabelfontsize, legendfontsize=legendfontsize)
 
