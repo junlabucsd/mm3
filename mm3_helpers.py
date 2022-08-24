@@ -2594,7 +2594,7 @@ def make_lineage_chnl_stack(fov_and_peak_id):
     # return the dictionary with all the cells
     return Cells
 
-def extract_foci_dict(fov_id_list, Cells_by_peak):
+def extract_foci_dict(fov_id_list, Cells_by_peak,int_threshold=None):
     
     time_table = params['time_table']
     times_all = []
@@ -2603,35 +2603,34 @@ def extract_foci_dict(fov_id_list, Cells_by_peak):
     times_all = np.unique(times_all)
     times_all = np.sort(times_all)
     times_all = np.array(times_all,np.int_)
-
     tracks = {}
     for fov_id in fov_id_list:
-        tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
         if not fov_id in Cells_by_peak:
             continue
+        
+        tracks[fov_id] = {peak_id:{} for peak_id in Cells_by_peak[fov_id].keys()}
 
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
             if (len(Cells_of_peak) == 0):
                 continue
             ## load stack
-            foci_list = []
-            foci_list_id = []
             foci_dict = {t:[] for t in times_all}
             for (cell_id, cell) in Cells_of_peak.items():
                 ## loop over cell times, foci positions, centroid positions
                 for n, [t, dw, dl, c,fh] in enumerate(zip(cell.times,cell.disp_w,cell.disp_l,cell.centroids,cell.foci_h)):
-                    # for now try tracking relative to cell centroid (disp)
-                    # actually need absolute x, y to distinguish foci from different cells
-                    # need to check how times missing foci are stored
                     # loop over x & y foci positions at this time point
                     for (w,l,h) in zip(dw,dl,fh):
                         # append time and absolute foci positions
-                        # foci_list.append([t,w+c[1], l+c[0],w,l,h])
-                        # foci_list_id.append(cell_id)
                         # should make this a nested dictionary instead
-                        foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0],'rel_x':w,'rel_y':l,'intensity':h,'cell_id':cell_id})
-            # foci_list = np.array(foci_list)
-            # foci_list_id = np.array(foci_list_id)
+                        if int_threshold:
+                            if h < int_threshold:
+                                foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0],'rel_x':w,'rel_y':l,'intensity':h,'cell_id':cell_id})
+                            else:
+                                foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0]+.1,'rel_x':w,'rel_y':l+.1,'intensity':h/2,'cell_id':cell_id})
+                                foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0]-.1,'rel_x':w,'rel_y':l-.1,'intensity':h/2,'cell_id':cell_id})
+                        else:
+                            foci_dict[t].append({'abs_x':w+c[1],'abs_y':l+c[0],'rel_x':w,'rel_y':l,'intensity':h,'cell_id':cell_id})
+                        
             tracks[fov_id][peak_id] = make_foci_lineage(foci_dict,(fov_id,peak_id),Cells_by_peak[fov_id][peak_id])
 
     return(tracks)
@@ -2697,13 +2696,11 @@ def make_foci_lineage(foci_dict,fov_and_peak_id,Cells):
 
         ## this is now a list (ordered) of dicts
         foci = foci_dict[t]
-        print(foci)
         # cell_ids = foci_list_id[np.where(foci_list[:,0]==t)]
 
         ## now just a set of [t,x,y] x number detections at this time
         # if no foci, move to next time point
         if len(foci) == 0:
-            print('passing')
             continue
 
         # if there are leaves who are still waiting to be linked, but
@@ -2721,9 +2718,7 @@ def make_foci_lineage(foci_dict,fov_and_peak_id,Cells):
             for f in foci:
                 # Create track and add it to dictionary
                 rep_id = create_rep_id(f['abs_x'],f['abs_y'],t, peak_id, fov_id)
-                ## need to define rep trace analogue to cell class
                 reps[rep_id] = ReplicationTrace(rep_id, f['abs_x'], f['abs_y'], t,f['intensity'], f['cell_id'], parent_id=None)
-                print('making trace')
 
                 # add the id to list of current leaves
                 rep_leaves.append(rep_id)
@@ -2812,10 +2807,8 @@ def make_foci_lineage(foci_dict,fov_and_peak_id,Cells):
                         if abs(f['abs_y'] - reps[rep_id].positions[-1][1]) < max_y:
                             ## x, y, time, cell_id
                             reps[rep_id].process(f['abs_x'],f['abs_y'],t,f['intensity'],current_id)
-                            print('still in same cell, extending')
                         else:
                             # initialize new trace
-                            print('failed dist check')
                             daughter1_id = create_rep_id(f['abs_x'],f['abs_y'],t,peak_id,fov_id)
                             reps[daughter1_id]= ReplicationTrace(daughter1_id,f['abs_x'],f['abs_y'],t,f['intensity'],current_id,parent_id=rep_id)
                             rep_leaves.remove(rep_id)
@@ -3014,7 +3007,13 @@ class Cell():
                        (4/3) * np.pi * (width_tmp/2)**3]
 
         # angle of the fit elipsoid and centroid location
-        self.orientations = [region.orientation]
+        # self.orientations = [region.orientation]
+
+        if region.orientation > 0:
+            self.orientations = [-(np.pi / 2 - region.orientation)]
+        else:
+            self.orientations = [np.pi / 2 + region.orientation]
+
         self.centroids = [region.centroid]
 
         # these are special datatype, as they include information from the daugthers for division
@@ -3054,7 +3053,13 @@ class Cell():
         self.volumes.append((length_tmp - width_tmp) * np.pi * (width_tmp/2)**2 +
                             (4/3) * np.pi * (width_tmp/2)**3)
 
-        self.orientations.append(region.orientation)
+        if region.orientation > 0:
+            ori = -(np.pi / 2 - region.orientation)
+        else:
+            ori = np.pi / 2 + region.orientation
+            
+        self.orientations.append(ori)
+
         self.centroids.append(region.centroid)
 
     def die(self, region, t):
@@ -3168,17 +3173,17 @@ def feretdiameter(region):
 
     # y: along vertical axis of the image; x: along horizontal axis of the image;
     # calculate the relative centroid in the bounding box (non-rotated)
-    # print(region.centroid)
     y0, x0 = region.centroid
+
     y0 = y0 - np.int16(region.bbox[0]) + 1
     x0 = x0 - np.int16(region.bbox[1]) + 1
 
     ## orientation is now measured in RC coordinates - quick fix to convert
     ## back to xy
     if region.orientation > 0:
-        ori1 = np.pi / 2 - region.orientation
+        ori1 = -(np.pi / 2 - region.orientation)
     else:
-        ori1 = - np.pi / 2 - region.orientation
+        ori1 = np.pi / 2 + region.orientation
     cosorient = np.cos(ori1)
     sinorient = np.sin(ori1)
 
@@ -3207,6 +3212,7 @@ def feretdiameter(region):
     L1_pt = np.zeros((2,1))
     L2_pt = np.zeros((2,1))
 
+
     # define the two end points of the the long axis line
     # one pole.
     L1_pt[1] = x0 + cosorient * 0.5 * region.major_axis_length*amp_param
@@ -3215,7 +3221,6 @@ def feretdiameter(region):
     # the other pole.
     L2_pt[1] = x0 - cosorient * 0.5 * region.major_axis_length*amp_param
     L2_pt[0] = y0 + sinorient * 0.5 * region.major_axis_length*amp_param
-
 
     # calculate the minimal distance between the points at both ends of 3 lines
     # aka calcule the closest coordiante in the region to each of the above points.
@@ -3262,6 +3267,7 @@ def feretdiameter(region):
     W2_pts[0,0] = y1 + cosorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,1] = x2 + sinorient * 0.5 * region.minor_axis_length*amp_param
     W2_pts[1,0] = y2 + cosorient * 0.5 * region.minor_axis_length*amp_param
+
 
     # calculate the minimal distance between the points at both ends of 3 lines
     pt_W1 = np.zeros((2,2))
@@ -3717,7 +3723,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
     if np.shape(fl_stack) != np.shape(seg_stack):
         delta_col = np.shape(seg_stack)[2] - np.shape(fl_stack)[2]
         fl_stack = np.pad(fl_stack, ((0, 0),(0,0),(0, delta_col)), 'edge')
-        print('Padding fl stack')
+        information('Padding fl stack')
 
     time_table = params['time_table']
 
@@ -3774,7 +3780,7 @@ def find_cell_intensities(fov_id, peak_id, Cells, midline=False, channel_name='s
     return
 
 # find foci using a difference of gaussians method
-def foci_analysis(fov_id, peak_id, Cells):
+def foci_analysis(fov_id, peak_id, Cells, seg_method=None):
     '''Find foci in cells using a fluorescent image channel.
     This function works on a single peak and all the cells therein.'''
 

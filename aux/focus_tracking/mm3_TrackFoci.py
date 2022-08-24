@@ -11,6 +11,8 @@ import yaml
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 
 try:
     import cPickle as pickle
@@ -103,17 +105,67 @@ fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 # remove fovs if the user specified so
 if user_spec_fovs:
     fov_id_list[:] = [fov for fov in fov_id_list if fov in user_spec_fovs]
+
 ### foci analysis
+foci_ints = []
+## check intensity weighting threshold
+for cell in Cells.values():
+    try:
+        for h in cell.foci_h:
+            for dh in h:
+                foci_ints.append(dh)
+    except:
+        pass
+
+iw_thr = None
+
+if p['do_intensity_weighting']:
+    def gauss(x,mu,sig,a):
+        return a*np.exp(-np.power((x - mu)/sig, 2)/2)
+    def gauss2(x,mu1,sig1,a1,mu2,sig2,a2):
+        return gauss(x,mu1,sig1,a1)+gauss(x,mu2,sig2,a2)
+
+    vals, edges = np.histogram(foci_ints,bins='auto')
+
+    edges = edges[:-1]+np.diff(edges)/2
+
+    try:
+        g1, cov1 = curve_fit(gauss,edges,vals,p0=[2000,500,17000])
+        g2, cov2 = curve_fit(gauss2,edges,vals,p0=[2000,500,17000, 3000,200,500])
+    except:
+        mm3.information('Intensity weighting fit failed')
+
+    fig = plt.figure()
+    ax = plt.axes()
+    ax.plot(edges,vals,color='C0',lw=4)
+    ax.plot(edges,gauss(edges,*g2[:3]),color='C3')
+    ax.plot(edges,gauss(edges,*g2[3:]),color='C4')
+    pg1 = norm.cdf(edges,g2[0],g2[1])
+    pg2 = norm.cdf(edges,g2[3],g2[4])
+
+    peak_ind = np.zeros(len(edges))
+    for i,elem in enumerate(peak_ind):
+        if min(pg1[i],1-pg1[i]) >= min(pg2[i],1-pg2[i]):
+            peak_ind[i] = 1
+        else:
+            peak_ind[i] = 2
+    
+    p_d = np.diff(peak_ind)
+    p_d = np.append(0,p_d)
+    
+    iw_thr = edges[p_d == 1]
+    try:
+        ax.axvline(iw_thr)
+    except:
+        mm3.information('Setting intensity threshold failed')
+
+    plt.show()
 
 # create dictionary which organizes cells by fov and peak_id
 Cells_by_peak = mm3_plots.organize_cells_by_channel(Cells, specs)
 
-color = p['foci']['foci_plane']
-
-ncc = p['foci']['n_cc']
-
 ## get all replication cycles as a nested dictionary, indexed by FOV & peak
-rep_traces = mm3.extract_foci_dict(fov_id_list,Cells_by_peak)
+rep_traces = mm3.extract_foci_dict(fov_id_list,Cells_by_peak,iw_thr)
 
 ## do some pruning of traces that are obviously erroneous ids
 min_trace_length = p['foci']['min_c'] # minimum C period length in time steps

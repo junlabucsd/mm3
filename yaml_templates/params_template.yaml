@@ -207,3 +207,4 @@ foci:
   max_y_dist: 10 # max allowed change in absolute (channel) y position (pixels) for focus tracking
   min_c: 8 # lower bound for replication time (C period in time steps)
   max_c: 30 # upper bound for replication time
+  do_int_weighting: False

@@ -115,6 +115,44 @@ if __name__ == "__main__":
     # declare information variables
     analyzed_imgs = {} # for storing get_params pool results.
 
+    ## need to stack phase and fl plane if not exported from .nd2
+    if p["TIFF_source"] == "other":
+        mm3.information("Restacking TIFFs")
+        found_files = glob.glob(os.path.join(p["TIFF_dir"], "*.tif"))  # get all tiffs
+        # found_files = [filepath.split('/')[-1] for filepath in found_files] # remove pre-path
+        found_files = sorted(found_files)  # should sort by timepoint
+
+        string_c1 = re.compile("c1", re.IGNORECASE)
+        string_c2 = re.compile("c2", re.IGNORECASE)
+
+        ## should list number of planes in params file
+
+        ## if there is a second plane, stack and save them out
+        if string_c2:
+            found_files_c1 = [f for f in found_files if re.search(string_c1, f)]
+            found_files_c2 = [f for f in found_files if re.search(string_c2, f)]
+
+            for f1, f2 in zip(found_files_c1, found_files_c2):
+                mm3.information("Merging images " + str(f1) + " and " + str(f2))
+                # Last two axes are going to be your x and y
+                im1 = tiff.imread(f1)
+                im2 = tiff.imread(f2)
+                im_out = np.stack((im1, im2), axis=0)
+                name_out = f1.replace("C1", "")
+                # 'minisblack' necessary to ensure that it interprets image as black/white.
+                tiff.imwrite(name_out, im_out, photometric="minisblack")
+
+                ## should make a new directory rather than just deleting the old images
+                old_tiff_path = os.path.join(
+                    p["experiment_directory"], "TIFF_unstacked"
+                )
+                if not os.path.exists(old_tiff_path):
+                    os.makedirs(old_tiff_path)
+                os.rename(f1, f1.replace(p["image_directory"], "TIFF_unstacked"))
+                os.rename(f2, f2.replace(p["image_directory"], "TIFF_unstacked"))
+        else:
+            pass
+
     ### process TIFFs for metadata #################################################################
     if not p['compile']['do_metadata']:
         mm3.information("Loading image parameters dictionary.")
@@ -158,7 +196,7 @@ if __name__ == "__main__":
             mm3.information('Filtering TIFFs by FOV.')
             filtered_files = []
             for fov_id in user_spec_fovs:
-                string = re.compile('xy%02d' %fov_id,re.IGNORECASE)
+                string = re.compile('xy%02d' % fov_id,re.IGNORECASE)
                 filtered_files += [ifile for ifile in found_files if re.search(string,ifile)]
 
             found_files = filtered_files[:]

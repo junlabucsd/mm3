@@ -62,6 +62,8 @@ if __name__ == "__main__":
                         required=False, help='List of fields of view to analyze. Input "1", "1,2,3", etc. ')
     parser.add_argument('-c', '--cellfile', type=argparse.FileType('r'),
                         required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
+    parser.add_argument('-ch', '--channel', type=str,
+                        required=False, help='Image channel/layer to analyze. Defaults to sub_c2')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -71,6 +73,13 @@ if __name__ == "__main__":
     else:
         mm3.warning('No param file specified. Using 100X template.')
         param_file_path = 'yaml_templates/params_SJ110_100X.yaml'
+
+    if namespace.channel:
+        fl_channel = namespace.channel
+    else:
+        #default to sub_c2
+        fl_channel = 'sub_c2'
+
     p = mm3.init_mm3_helpers(param_file_path) # initialized the helper library
 
     if namespace.fov:
@@ -144,7 +153,7 @@ if __name__ == "__main__":
                 mm3.information('Processing FOV {}.'.format(fov_id))
                 for peak_id, Cells in Cells_by_peak[fov_id].items():
                     mm3.information('Processing peak {}.'.format(peak_id))
-                    mm3.find_cell_intensities(fov_id, peak_id, Cells, seg_method=seg_method,midline=False)
+                    mm3.find_cell_intensities(fov_id, peak_id, Cells, seg_method=seg_method,midline=False,channel_name=fl_channel)
 
     # Just the complete cells, those with mother and daugther
     cell_filename = os.path.basename(cell_file_path)
