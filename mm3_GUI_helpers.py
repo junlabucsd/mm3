@@ -220,8 +220,8 @@ class TrackItem(QGraphicsScene):
         self.items = []
 
         #these set the size of the kymograph display in pixels in phase_imgs_and_regions
-        self.y_scale = 1400
-        self.x_scale = 1500
+        self.y_scale = 1000
+        self.x_scale = 1400
 
         self.specs = specs
 
@@ -287,7 +287,7 @@ class TrackItem(QGraphicsScene):
         self.times_all = times_all
         self.abs_times = abs_times
 
-        img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+        img_dir = os.path.join(params['ana_dir'], 'kymograph')
         img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
         with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
             self.fl_kymo = tif.asarray()
@@ -326,15 +326,15 @@ class TrackItem(QGraphicsScene):
 
         if self.overlay_fl:
             try:
-                img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
                 img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
                 with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
                     self.fl_kymo = tif.asarray()
                 overlay = self.phase_img_and_regions()
                 self.addPixmap(overlay)
 
-            except:
-                pass
+            except BaseException as err:
+                print(err)
 
         self.label_traces()
 
@@ -370,7 +370,7 @@ class TrackItem(QGraphicsScene):
 
         if self.overlay_fl:
             try:
-                img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
                 img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
                 with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
                     self.fl_kymo = tif.asarray()
@@ -402,7 +402,7 @@ class TrackItem(QGraphicsScene):
 
         if self.overlay_fl:
             try:
-                img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+                img_dir = os.path.join(params['ana_dir'], 'kymograph')
                 img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
                 with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
                     self.fl_kymo = tif.asarray()
@@ -450,15 +450,15 @@ class TrackItem(QGraphicsScene):
 
         if self.overlay_fl:
             try:
-                img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+                img_dir = os.path.join(params['ana_dir'],'kymograph')
                 img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
                 with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
                     self.fl_kymo = tif.asarray()
                 overlay = self.phase_img_and_regions()
                 self.addPixmap(overlay)
 
-            except:
-                pass
+            except BaseException as err:
+                print(err)
 
         self.label_traces()
 
@@ -486,7 +486,7 @@ class TrackItem(QGraphicsScene):
         print('Peak '+str(self.peak_id))
 
         if self.overlay_fl:
-            img_dir = params['experiment_directory']+ params['analysis_directory'] + 'kymograph'
+            img_dir = os.path.join(params['ana_dir'],'kymograph')
             img_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (self.fov_id, self.peak_id, self.color)
 
             with tiff.TiffFile(os.path.join(img_dir, img_filename)) as tif:
@@ -531,10 +531,17 @@ class TrackItem(QGraphicsScene):
                 lengths = np.array(cell.lengths)*self.y_scale/self.y_px
                 cents = np.array(cell.centroids)[:,0]*self.y_scale/self.y_px
 
+                for i in range(len(cell.times)-1):
+                    eventItem = RepLine(QPoint(times[i],cents[i] - lengths[i]/2),QPoint(times[i+1],cents[i+1] - lengths[i+1]/2),color="yellow",alpha=.5)
+                    self.addItem(eventItem)
+                    eventItem = RepLine(QPoint(times[i],cents[i] + lengths[i]/2),QPoint(times[i+1],cents[i+1] + lengths[i+1]/2), color="yellow",alpha=.5)
+                    self.addItem(eventItem)
+
                 if cell.disp_l:
-                    for t, c, l in zip(times,cents,cell.disp_l):
+                    for t, c, l,h in zip(times,cents,cell.disp_l,cell.foci_h):
                         for i in range(len(l)):
-                            focus = QGraphicsEllipseItem(t-3,c+l[i]* self.y_scale/self.y_px-3,6,6)
+                            rad = h[i]/1000
+                            focus = QGraphicsEllipseItem(t-rad,c+l[i]* self.y_scale/self.y_px-rad,2*rad,2*rad)
                             penColor= QColor("gray")
                             penColor.setAlphaF(1)
                             pen.setColor(penColor)
@@ -548,12 +555,15 @@ class TrackItem(QGraphicsScene):
             x_pos = [t*self.x_scale/self.x_px for t in trace.times]
             y_pos = [p[1]*self.y_scale/self.y_px for p in trace.positions]
 
+            # intensities = [h for h in trace.intensity]
+
             painter = QPainter()
             points = [QPoint(t,y) for t,y in zip(x_pos,y_pos)]
             Color = QColor(np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
             trace_pts = []
             for i in range(len(points)-1):
                 eventItem = RepLine(points[i],points[i+1], color=Color)
+                ## draw circles linked by the line scaled by their intensity
                 self.addItem(eventItem)
                 trace_pts.append(eventItem)
             self.tracks[trace_id] = trace_pts
@@ -663,7 +673,7 @@ class TrackItem(QGraphicsScene):
             id_n = mm3.create_rep_id(0,self.init_y,self.init_t,self.peak_id,self.fov_id)
             cell_id_init = match_cells(self.init_y,self.init_t)
             if cell_id_init is not None:
-                trace_n = mm3.ReplicationTrace(id_n,0,self.init_y,self.init_t,cell_id_init)
+                trace_n = mm3.ReplicationTrace(id_n,None,self.init_y,self.init_t,None,cell_id_init)
                 cell_id_term = match_cells(self.term_y,self.term_t)
 
                 for t in range(self.init_t,self.term_t,1):
@@ -671,7 +681,7 @@ class TrackItem(QGraphicsScene):
                     cell_id_curr = match_cells(yp,t)
                     if cell_id_curr is None:
                         cell_id_curr = cell_id_init
-                    trace_n.process(None,yp,t,cell_id_curr)
+                    trace_n.process(None,yp,t,None,cell_id_curr)
 
                 trace_n.terminate(self.term_t)
                 self.Traces[self.fov_id][self.peak_id][id_n] = trace_n
