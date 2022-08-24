@@ -50,7 +50,10 @@ def organize_cells_by_channel(Cells, specs):
 
     # organize the cells
     for cell_id, Cell in Cells.items():
-        Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        try:
+            Cells_by_peak[Cell.fov][Cell.peak][cell_id] = Cell
+        except KeyError:
+            pass
 
     # remove peaks and that do not contain cells
     remove_fovs = []
@@ -84,6 +87,8 @@ if __name__ == "__main__":
                         required=True, help='Yaml file containing parameters.')
     parser.add_argument('-c', '--cellfile', type=str,
                         required=False, help='Path to Cell object dicionary to analyze. Defaults to complete_cells.pkl.')
+    parser.add_argument('-s', '--seg_method',type=str,
+                        required=False, help='Segmentation output to use for foci analysis (Otsu or U-net)')
     namespace = parser.parse_args()
 
     # Load the project parameters file
@@ -98,10 +103,16 @@ if __name__ == "__main__":
     # load cell file
     mm3.information('Loading cell data.')
     if namespace.cellfile:
-        cell_file_path = namespace.cellfile
+        cell_file_path = os.path.join(p['cell_dir'],namespace.cellfile)
     else:
         mm3.warning('No cell file specified. Using complete_cells.pkl.')
         cell_file_path = os.path.join(p['cell_dir'], 'complete_cells.pkl')
+
+    if namespace.seg_method:
+        seg_method = namespace.seg_method
+    else:
+        mm3.warning('Defaulting to U-net segmentation')
+        seg_method = 'seg_unet'
 
     with open(cell_file_path, 'rb') as cell_file:
         Cells = pickle.load(cell_file)
@@ -115,7 +126,7 @@ if __name__ == "__main__":
     # make list of FOVs to process (keys of channel_mask file)
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
-    # .mat file won't accept None values
+    #.mat file won't accept None values
     for cell_id, cell in six.iteritems(Cells):
         if cell.death is None:
             cell.death = np.nan
@@ -133,8 +144,9 @@ if __name__ == "__main__":
         for peak_id, Cells_of_peak in Cells_by_peak[fov_id].items():
             if (len(Cells_of_peak) == 0):
                 continue
+            mm3.information('running foci analysis')
 
-            mm3.foci_analysis(fov_id, peak_id, Cells_of_peak)
+            mm3.foci_analysis(fov_id, peak_id, Cells_of_peak, seg_method)
 
 
     # Output data to both dictionary and the .mat format used by the GUI
@@ -142,7 +154,10 @@ if __name__ == "__main__":
     with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.pkl'), 'wb') as cell_file:
         pickle.dump(Cells, cell_file, protocol=pickle.HIGHEST_PROTOCOL)
 
-    with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
-        sio.savemat(cell_file, Cells)
+    try:
+        with open(os.path.join(p['cell_dir'], cell_filename[:-4] + '_foci.mat'), 'wb') as cell_file:
+            sio.savemat(cell_file, Cells)
+    except:
+        mm3.information("Failed to save .mat file")
 
     mm3.information("Finished foci analysis.")

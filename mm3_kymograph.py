@@ -21,7 +21,7 @@ from functools import partial
 from skimage.measure import profile_line # used for ring an nucleoid analysis
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from skimage.external import tifffile as tiff
+import tifffile as tiff
 from skimage import exposure
 
 # user modules
