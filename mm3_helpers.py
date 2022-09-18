@@ -120,9 +120,6 @@ def init_mm3_helpers(param_file_path):
     else:
         params['use_jd'] = False
 
-    if not 'save_predictions' in params['segment'].keys():
-        params['segment']['unet']['save_predictions'] = False
-
     return params
 
 def julian_day_number():
@@ -2211,7 +2208,7 @@ def segment_cells_unet(ana_peak_ids, fov_id, pad_dict, unet_shape, model):
                              (0,pad_dict['bottom_trim']),
                              (0,pad_dict['right_trim'])),
                              mode='constant')
-
+                             
         if params['segment']['unet']['save_predictions']:
             pred_filename = params['experiment_name'] + '_xy%03d_p%04d_%s.tif' % (fov_id, peak_id, params['pred_img'])
             if not os.path.isdir(params['pred_dir']):
