@@ -116,9 +116,13 @@ if __name__ == "__main__":
     fov_id_list = sorted([fov_id for fov_id in specs.keys()])
 
     # .mat file won't accept None values
+    # for back-compatibility check if cell death set to None
     for cell_id, cell in six.iteritems(Cells):
-        if cell.death is None:
-            cell.death = np.nan
+        try:
+            if cell.death is None:
+                cell.death = np.nan
+        except:
+            pass
 
     ### foci analysis
     mm3.information("Starting foci analysis.")
