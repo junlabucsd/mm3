@@ -128,8 +128,11 @@ if __name__ == "__main__":
 
     #.mat file won't accept None values
     for cell_id, cell in six.iteritems(Cells):
-        if cell.death is None:
-            cell.death = np.nan
+        try:
+            if cell.death is None:
+                cell.death = np.nan
+        except:
+            pass
 
     ### foci analysis
     mm3.information("Starting foci analysis.")

@@ -3029,7 +3029,6 @@ class Cell():
         self.elong_rate = None
         self.septum_position = None
         self.width = None
-        self.death = None
 
     def grow(self, region, t):
         '''Append data from a region to this cell.
@@ -3058,12 +3057,6 @@ class Cell():
         self.orientations.append(ori)
 
         self.centroids.append(region.centroid)
-
-    def die(self, region, t):
-        '''
-        Annotate cell as dying from current t to next t.
-        '''
-        self.death = t
 
     def divide(self, daughter1, daughter2, t):
         '''Divide the cell and update stats.
@@ -3509,70 +3502,6 @@ def filter_cells_containing_val_in_attr(Cells, attr, val):
     return Filtered_Cells
 
 ### functions for additional cell centric analysis
-def compile_cell_info_df(Cells):
-
-    # count the number of rows that will be in the long dataframe
-    quant_fluor = False
-    long_df_row_number = 0
-    for cell in Cells.values():
-
-        # first time through, evaluate whether we quantified cells' fluorescence
-        if long_df_row_number == 0:
-            if len(cell.area_mean_fluorescence.keys()) != 0:
-                quant_fluor = True
-                fluorescence_channels = [k for k in cell.area_mean_fluorescence.keys()]
-
-        long_df_row_number += len(cell.times)
-
-    # initialize some arrays for filling with data
-    data = {
-        # ids can be up to 100 characters long
-        'id': np.chararray(long_df_row_number, itemsize=100),
-        'times': np.zeros(long_df_row_number, dtype='uint16'),
-        'lengths': np.zeros(long_df_row_number),
-        'volumes': np.zeros(long_df_row_number),
-        'areas': np.zeros(long_df_row_number),
-        'abs_times': np.zeros(long_df_row_number, dtype='uint32')
-    }
-
-    if quant_fluor:
-        for fluorescence_channel in fluorescence_channels:
-            data['{}_area_mean_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
-            data['{}_volume_mean_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
-            data['{}_total_fluorescence'.format(fluorescence_channel)] = np.zeros(long_df_row_number)
-
-    data = populate_focus_arrays(Cells, data, cell_quants=True)
-    long_df = pd.DataFrame(data=data)
-
-    wide_df_row_number = len(Cells)
-    data = {
-        # ids can be up to 100 characters long
-        'id': np.chararray(wide_df_row_number, itemsize=100),
-        'fov': np.zeros(wide_df_row_number, dtype='uint8'),
-        'peak': np.zeros(wide_df_row_number, dtype='uint16'),
-        'parent_id': np.chararray(wide_df_row_number, itemsize=100),
-        'child1_id': np.chararray(wide_df_row_number, itemsize=100),
-        'child2_id': np.chararray(wide_df_row_number, itemsize=100),
-        'division_time': np.zeros(wide_df_row_number),
-        'birth_label': np.zeros(wide_df_row_number, dtype='uint8'),
-        'birth_time': np.zeros(wide_df_row_number, dtype='uint16'),
-        'sb': np.zeros(wide_df_row_number),
-        'sd': np.zeros(wide_df_row_number),
-        'delta': np.zeros(wide_df_row_number),
-        'tau': np.zeros(wide_df_row_number),
-        'elong_rate': np.zeros(wide_df_row_number),
-        'septum_position': np.zeros(wide_df_row_number),
-        'death': np.zeros(wide_df_row_number),
-        'disappear': np.zeros(wide_df_row_number)
-    }
-    data = populate_focus_arrays(Cells, data, cell_quants=True, wide=True)
-    # data['parent_id'] = data['parent_id'].decode()
-    # data['child1_id'] = data['child1_id'].decode()
-    # data['child2_id'] = data['child2_id'].decode()
-    wide_df = pd.DataFrame(data=data)
-
-    return(wide_df,long_df)
-
 
 def find_all_cell_intensities(Cells,
                               specs, time_table, channel_name='sub_c2',
