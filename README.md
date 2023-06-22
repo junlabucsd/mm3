@@ -1,4 +1,4 @@
-## NOTE: MM3 is no longer actively maintained. Please see our [napari plug-in](https://github.com/junlabucsd/napari-mm3) for mother machine image analysis instead.
+## NOTE: this version of MM3 is no longer actively maintained. Please see our [napari plug-in](https://github.com/junlabucsd/napari-mm3) for mother machine image analysis instead.
 # mm3
 
 ### Segmentation and tracking software for mother machine experiments
