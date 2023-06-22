@@ -1,4 +1,6 @@
+## NOTE: MM3 is no longer actively maintained. Please see our [napari plug-in](https://github.com/junlabucsd/napari-mm3) for mother machine image analysis instead.
 # mm3
+
 ### Segmentation and tracking software for mother machine experiments
 
 mm3 is a image analysis pipeline for mother machine experiments. It takes as input raw timelapse images and produces as output cell objects containing information such as elongation rate, birth size, etc. There is support for fluorescent planes.
